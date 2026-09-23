@@ -220,7 +220,7 @@ function Win11UI:CreateWindow(config)
     self._normalPosition = UDim2.fromScale(0.5, 0.5)
 
     local gui = Instance.new("ScreenGui")
-    gui.Name = "Win11UI"
+    gui.Name = "AstrarServices_Win11"
     gui.ResetOnSpawn = false
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
@@ -1304,6 +1304,118 @@ Win11UI.CreateWindow = function(self, config)
     tween(window.Root, 0.28, {Size = finalSize})
 
     return window
+end
+
+
+
+--[[
+    Built-in demo / default window.
+    This makes the file usable with a single loadstring:
+
+        loadstring(game:HttpGet("YOUR_RAW_URL"))()
+
+    The library is still returned at the end so advanced scripts can also
+    capture it and build their own tabs.
+]]
+function Win11UI:CreateDefaultWindow()
+    -- Remove a previous instance if the script was executed again.
+    local parent = (gethui and gethui()) or game:GetService("CoreGui")
+    local old = parent:FindFirstChild("AstrarServices_Win11")
+    if old then
+        old:Destroy()
+    end
+
+    local Window = self:CreateWindow({
+        Title = "Muscle Legends - V3.2.1 Private",
+        Subtitle = "AstrarServices",
+        Size = UDim2.fromOffset(980, 650),
+    })
+
+    local function tab(title, icon, description)
+        local t = Window:AddTab({
+            Title = title,
+            Icon = icon,
+        })
+        if description then
+            t:SetDescription(description)
+        end
+        return t
+    end
+
+    local Farming = tab("Farming", "⚒", "Automation and farming controls")
+    local farm = Farming:AddSection("Farming")
+    farm:AddToggle("Auto Farm", false, function(value) end)
+    farm:AddToggle("Auto Strength", false, function(value) end)
+    farm:AddButton("Start Farming", function() end)
+    farm:AddSlider("Farm Speed", 0, 100, 50, function(value) end)
+
+    local Rebirth = tab("Rebirth", "↻", "Rebirth automation")
+    local rebirth = Rebirth:AddSection("Rebirth")
+    rebirth:AddToggle("Auto Rebirth", false, function(value) end)
+    rebirth:AddDropdown("Mode", {"Normal", "Fast", "Ultra"}, "Normal", function(value) end)
+    rebirth:AddButton("Rebirth Now", function() end)
+
+    local Pets = tab("Pets", "◆", "Pet management")
+    local pets = Pets:AddSection("Pets")
+    pets:AddToggle("Auto Open Eggs", false, function(value) end)
+    pets:AddToggle("Auto Equip Best", false, function(value) end)
+    pets:AddDropdown("Egg", {"Basic", "Rare", "Epic", "Legendary"}, "Basic", function(value) end)
+
+    local Player = tab("Player", "●", "Player utilities")
+    local player = Player:AddSection("Player")
+    player:AddSlider("Walk Speed", 16, 250, 16, function(value) end)
+    player:AddSlider("Jump Power", 50, 250, 50, function(value) end)
+    player:AddToggle("Infinite Jump", false, function(value) end)
+
+    local Killing = tab("Killing", "✦", "Combat utilities")
+    local killing = Killing:AddSection("Combat")
+    killing:AddToggle("Kill Aura", false, function(value) end)
+    killing:AddToggle("Auto Attack", false, function(value) end)
+    killing:AddDropdown("Target", {"Nearest", "Lowest HP", "Random"}, "Nearest", function(value) end)
+
+    local Stats = tab("Stats", "▣", "Live statistics and session information")
+    local stats = Stats:AddSection("Strength")
+    stats:AddLabel("Strength: 185,92T", "Current strength")
+    stats:AddButton("Gained This Session", function() end)
+    stats:AddButton("Projected Earnings (Real-Time Rate)", function() end)
+    stats:AddProgress("Strength Rate", 72, 100)
+    stats:AddLabel("+12.4T / hour", "Estimated real-time rate")
+    stats:AddDropdown("Select Player", {"Local Player", "Player 1", "Player 2"}, "Local Player", function(value) end)
+
+    local Tickets = tab("Tickets", "◇", "Tickets and rewards")
+    local tickets = Tickets:AddSection("Tickets")
+    tickets:AddToggle("Auto Claim", false, function(value) end)
+    tickets:AddButton("Claim Available", function() end)
+
+    local Perf = tab("Perf", "◈", "Performance options")
+    local perf = Perf:AddSection("Performance")
+    perf:AddToggle("Anti-Lag", false, function(value) end)
+    perf:AddToggle("Low Graphics", false, function(value) end)
+    perf:AddToggle("Reduce Effects", false, function(value) end)
+
+    local Misc = tab("Misc", "⋮", "Miscellaneous settings")
+    local misc = Misc:AddSection("Miscellaneous")
+    misc:AddToggle("Night Mode", false, function(value) end)
+    misc:AddKeybind("Toggle UI", Enum.KeyCode.RightShift, function(value) end)
+    misc:AddButton("Destroy UI", function()
+        if Window.Root then
+            Window.Root.Parent.Parent:Destroy()
+        end
+    end)
+
+    Window:SelectTab(Stats)
+    Window:Notify("AstrarServices", "UI loaded successfully.", 3)
+
+    return Window
+end
+
+-- Auto-create the screenshot-style interface when executed directly.
+local ok, defaultWindow = pcall(function()
+    return Win11UI:CreateDefaultWindow()
+end)
+
+if not ok then
+    warn("Win11UI failed to create the default window: " .. tostring(defaultWindow))
 end
 
 return Win11UI
