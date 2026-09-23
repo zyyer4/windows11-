@@ -1,5 +1,5 @@
 --[[
-    AstrarServices / Windows 11 Fluent Layout Shell
+    JohnnyFronny / Windows 11 Glass Layout Shell
     ------------------------------------------------
     Layout-only UI foundation.
 
@@ -14,6 +14,7 @@
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local GuiService = game:GetService("GuiService")
+local Players = game:GetService("Players")
 
 local UI = {}
 UI.__index = UI
@@ -37,7 +38,7 @@ local Theme = {
 }
 
 local Tabs = {
-    {Title = "Farming", Emoji = "⚒️", Description = "Automation and farming."},
+    {Title = "Farming", Emoji = "💪", Description = "Strength grinding and farming."},
     {Title = "Rebirth", Emoji = "🔄", Description = "Rebirth tools and settings."},
     {Title = "Pets", Emoji = "🐾", Description = "Pet management."},
     {Title = "Player", Emoji = "👤", Description = "Player settings."},
@@ -159,7 +160,7 @@ function UI:CreateWindow(config)
 
     local parent = (gethui and gethui()) or game:GetService("CoreGui")
 
-    local old = parent:FindFirstChild("AstrarServices_Win11")
+    local old = parent:FindFirstChild("JohnnyFronny_Win11")
     if old then
         old:Destroy()
     end
@@ -171,7 +172,7 @@ function UI:CreateWindow(config)
     self.IsMaximized = false
 
     local gui = Instance.new("ScreenGui")
-    gui.Name = "AstrarServices_Win11"
+    gui.Name = "JohnnyFronny_Win11"
     gui.ResetOnSpawn = false
     gui.IgnoreGuiInset = true
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -262,7 +263,7 @@ function UI:CreateWindow(config)
 
     local title = text(
         header,
-        config.Title or "♛ .johnnyfronny's script • V3.2.2",
+        config.Title or "♛ JohnnyFronny ♛",
         18,
         Theme.Text,
         Enum.Font.GothamBold
@@ -274,7 +275,7 @@ function UI:CreateWindow(config)
 
     local subtitle = text(
         header,
-        config.Subtitle or "Windows 11 • Private",
+        config.Subtitle or ("Logged in as : " .. ((Players.LocalPlayer and Players.LocalPlayer.Name) or "Unknown") .. " • V3.2.2"),
         12,
         Theme.SubText
     )
@@ -773,8 +774,8 @@ end
 -- ============================================================
 
 local Window = UI:CreateWindow({
-    Title = "♛ .johnnyfronny's script • V3.2.2",
-    Subtitle = "Windows 11 • Private",
+    Title = "♛ JohnnyFronny ♛",
+    Subtitle = "Logged in as : " .. ((Players.LocalPlayer and Players.LocalPlayer.Name) or "Unknown") .. " • V3.2.2",
     Size = UDim2.fromScale(0.70, 0.76),
     ContentTitle = "Stats",
     ContentSubtitle = "Select a tab to begin building your interface.",
