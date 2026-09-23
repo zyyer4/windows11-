@@ -13,6 +13,7 @@
 
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local GuiService = game:GetService("GuiService")
 
 local UI = {}
 UI.__index = UI
@@ -36,15 +37,15 @@ local Theme = {
 }
 
 local Tabs = {
-    {Title = "Farming", Emoji = "⚒️", Description = "Automation and farming."},
-    {Title = "Rebirth", Emoji = "🔄", Description = "Rebirth tools and settings."},
-    {Title = "Pets", Emoji = "🐾", Description = "Pet management."},
-    {Title = "Player", Emoji = "👤", Description = "Player settings."},
-    {Title = "Killing", Emoji = "⚔️", Description = "Combat tools."},
-    {Title = "Stats", Emoji = "📊", Description = "Statistics and session information."},
-    {Title = "Tickets", Emoji = "🎟️", Description = "Tickets and rewards."},
-    {Title = "Perf", Emoji = "💻", Description = "Performance settings."},
-    {Title = "Misc", Emoji = "⚙️", Description = "Miscellaneous settings."},
+    {Title = "Farming", Emoji = "⌁", Description = "Automation and farming."},
+    {Title = "Rebirth", Emoji = "↻", Description = "Rebirth tools and settings."},
+    {Title = "Pets", Emoji = "♢", Description = "Pet management."},
+    {Title = "Player", Emoji = "◉", Description = "Player settings."},
+    {Title = "Killing", Emoji = "⚔", Description = "Combat tools."},
+    {Title = "Stats", Emoji = "▥", Description = "Statistics and session information."},
+    {Title = "Tickets", Emoji = "▤", Description = "Tickets and rewards."},
+    {Title = "Perf", Emoji = "▣", Description = "Performance settings."},
+    {Title = "Misc", Emoji = "⚙", Description = "Miscellaneous settings."},
 }
 
 local function tween(object, duration, properties)
@@ -237,7 +238,7 @@ function UI:CreateWindow(config)
 
     local title = text(
         header,
-        config.Title or "Muscle Legends - V3.2.1 Private",
+        config.Title or "♛ .johnnyfronny's script • V3.2.2",
         18,
         Theme.Text,
         Enum.Font.GothamBold
@@ -249,7 +250,7 @@ function UI:CreateWindow(config)
 
     local subtitle = text(
         header,
-        config.Subtitle or "AstrarServices",
+        config.Subtitle or "Windows 11 • Private",
         12,
         Theme.SubText
     )
@@ -278,7 +279,7 @@ function UI:CreateWindow(config)
     local sidebar = Instance.new("Frame")
     sidebar.Name = "Sidebar"
     sidebar.BackgroundColor3 = Theme.Sidebar
-    sidebar.BackgroundTransparency = 0.18
+    sidebar.BackgroundTransparency = 0.28
     sidebar.BorderSizePixel = 0
     sidebar.Size = UDim2.new(0.24, 0, 1, 0)
     sidebar.Parent = body
@@ -367,6 +368,24 @@ function UI:CreateWindow(config)
         self:_filterTabs(search.Text)
     end)
 
+    -- Quality-of-life: RightShift toggles the shell without destroying it.
+    self.ToggleKey = Enum.KeyCode.RightShift
+    self._inputConnection = UserInputService.InputBegan:Connect(function(input, processed)
+        if processed then
+            return
+        end
+
+        if input.KeyCode == self.ToggleKey then
+            if self.IsMinimized then
+                self:Restore()
+            else
+                self:Minimize()
+            end
+        elseif input.KeyCode == Enum.KeyCode.Escape and not self.IsMinimized then
+            search:ReleaseFocus()
+        end
+    end)
+
     -- Close = destroy.
     closeButton.MouseButton1Click:Connect(function()
         self:Destroy()
@@ -426,11 +445,11 @@ function UI:Minimize()
 
     local open = Instance.new("TextButton")
     open.Name = "Open"
-    open.AnchorPoint = Vector2.new(0.5, 1)
-    open.Position = UDim2.fromScale(0.5, 0.96)
-    open.Size = UDim2.fromOffset(112, 36)
-    open.BackgroundColor3 = Color3.fromRGB(8, 10, 12)
-    open.BackgroundTransparency = 0.08
+    open.AnchorPoint = Vector2.new(0.5, 0)
+    open.Position = UDim2.fromScale(0.5, 0.045)
+    open.Size = UDim2.fromOffset(122, 38)
+    open.BackgroundColor3 = Color3.fromRGB(5, 7, 9)
+    open.BackgroundTransparency = 0.04
     open.BorderSizePixel = 0
     open.AutoButtonColor = false
     open.Text = "Open"
@@ -441,14 +460,32 @@ function UI:Minimize()
     corner(open, 18)
     stroke(open, Theme.Green, 0.25, 1)
     self.MinimizedButton = open
+    makeDraggable(open, open)
+
+    local openStroke = open:FindFirstChildOfClass("UIStroke")
+    if openStroke then
+        openStroke.Transparency = 0.12
+    end
 
     local indicator = Instance.new("Frame")
     indicator.BackgroundColor3 = Theme.Green
     indicator.BorderSizePixel = 0
     indicator.Position = UDim2.fromOffset(12, 13)
-    indicator.Size = UDim2.fromOffset(10, 10)
+    indicator.Size = UDim2.fromOffset(9, 9)
     indicator.Parent = open
     corner(indicator, 5)
+
+    local crown = Instance.new("TextLabel")
+    crown.BackgroundTransparency = 1
+    crown.Text = "♛"
+    crown.TextColor3 = Theme.Text
+    crown.TextSize = 13
+    crown.Font = Enum.Font.GothamBold
+    crown.TextXAlignment = Enum.TextXAlignment.Center
+    crown.TextYAlignment = Enum.TextYAlignment.Center
+    crown.Position = UDim2.fromOffset(27, 0)
+    crown.Size = UDim2.fromOffset(20, 38)
+    crown.Parent = open
 
     open.MouseButton1Click:Connect(function()
         self:Restore()
@@ -534,9 +571,9 @@ function UI:AddTab(config)
     icon.BackgroundTransparency = 0.02
     icon.BorderSizePixel = 0
     icon.Text = tab.Emoji
-    icon.TextSize = 15
+    icon.TextSize = 17
     icon.TextColor3 = Color3.fromRGB(255, 255, 255)
-    icon.Font = Enum.Font.GothamBold
+    icon.Font = Enum.Font.GothamSemibold
     icon.TextXAlignment = Enum.TextXAlignment.Center
     icon.TextYAlignment = Enum.TextYAlignment.Center
     icon.Position = UDim2.fromOffset(9, 8)
@@ -594,7 +631,7 @@ function UI:AddTab(config)
         local card = Instance.new("Frame")
         card.Name = "Section"
         card.BackgroundColor3 = Theme.Surface
-        card.BackgroundTransparency = 0.25
+        card.BackgroundTransparency = 0.34
         card.BorderSizePixel = 0
         card.Size = UDim2.new(1, 0, 0, 70)
         card.Parent = page
@@ -690,6 +727,11 @@ function UI:SetTitle(titleValue, subtitleValue)
 end
 
 function UI:Destroy()
+    if self._inputConnection then
+        self._inputConnection:Disconnect()
+        self._inputConnection = nil
+    end
+
     if self.Gui then
         self.Gui:Destroy()
     end
@@ -700,8 +742,8 @@ end
 -- ============================================================
 
 local Window = UI:CreateWindow({
-    Title = "Muscle Legends - V3.2.1 Private",
-    Subtitle = "AstrarServices",
+    Title = "♛ .johnnyfronny's script • V3.2.2",
+    Subtitle = "Windows 11 • Private",
     Size = UDim2.fromScale(0.70, 0.76),
     ContentTitle = "Stats",
     ContentSubtitle = "Select a tab to begin building your interface.",
