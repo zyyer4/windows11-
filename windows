@@ -195,6 +195,12 @@ function UI:CreateWindow(config)
     stroke(root, Theme.Border, 0.28, 1)
     self.Root = root
 
+    -- Scale controller used for the polished minimize/restore transformation.
+    local rootScale = Instance.new("UIScale")
+    rootScale.Scale = 1
+    rootScale.Parent = root
+    self.RootScale = rootScale
+
     -- Black-glass gradient: visible depth while remaining translucent.
     local gradient = Instance.new("UIGradient")
     gradient.Color = ColorSequence.new({
@@ -261,17 +267,38 @@ function UI:CreateWindow(config)
     self.MinimizeButton = minimizeButton
     self.MaximizeButton = maximizeButton
 
+    -- Keep the crowns as their own labels so they render reliably across Roblox fonts.
+    local leftCrown = text(header, "♛", 20, Theme.Text, Enum.Font.SourceSansBold)
+    leftCrown.Position = UDim2.fromOffset(96, 8)
+    leftCrown.Size = UDim2.fromOffset(26, 32)
+    leftCrown.TextXAlignment = Enum.TextXAlignment.Center
+    self.LeftCrown = leftCrown
+
     local title = text(
         header,
-        config.Title or "♛ JohnnyFronny ♛",
+        config.Title or "JohnnyFronny",
         18,
         Theme.Text,
         Enum.Font.GothamBold
     )
-    title.Position = UDim2.fromOffset(96, 12)
-    title.Size = UDim2.new(1, -118, 0, 26)
+    title.Position = UDim2.fromOffset(122, 12)
+    title.Size = UDim2.new(1, -190, 0, 26)
     title.TextTruncate = Enum.TextTruncate.AtEnd
     self.TitleLabel = title
+
+    local rightCrown = text(header, "♛", 20, Theme.Text, Enum.Font.SourceSansBold)
+    rightCrown.Position = UDim2.new(0, 122, 0, 8)
+    rightCrown.Size = UDim2.fromOffset(26, 32)
+    rightCrown.TextXAlignment = Enum.TextXAlignment.Center
+    self.RightCrown = rightCrown
+
+    -- Position the second crown immediately after JohnnyFronny.
+    local function updateCrownPosition()
+        local width = math.max(92, title.TextBounds.X)
+        rightCrown.Position = UDim2.fromOffset(122 + width + 4, 8)
+    end
+    title:GetPropertyChangedSignal("TextBounds"):Connect(updateCrownPosition)
+    task.defer(updateCrownPosition)
 
     local subtitle = text(
         header,
@@ -460,8 +487,28 @@ function UI:Minimize()
 
     local root = self.Root
     local gui = self.Gui
+    local rootScale = self.RootScale
 
-    -- Hide the shell and leave a compact dark "Open" pill.
+    -- The shell physically transforms into the top-center pill instead of simply disappearing.
+    root.Visible = true
+    root.ZIndex = 20
+    rootScale.Scale = 1
+
+    local shrink = TweenService:Create(
+        rootScale,
+        TweenInfo.new(0.34, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut),
+        {Scale = 0.085}
+    )
+    local move = TweenService:Create(
+        root,
+        TweenInfo.new(0.34, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut),
+        {Position = UDim2.fromScale(0.5, 0.045)}
+    )
+
+    shrink:Play()
+    move:Play()
+    move.Completed:Wait()
+
     root.Visible = false
 
     if self.MinimizedButton then
@@ -474,29 +521,21 @@ function UI:Minimize()
     open.Position = UDim2.fromScale(0.5, 0.045)
     open.Size = UDim2.fromOffset(122, 38)
     open.BackgroundColor3 = Color3.fromRGB(3, 4, 6)
-    open.BackgroundTransparency = 0.38
+    open.BackgroundTransparency = 0.28
     open.BorderSizePixel = 0
     open.AutoButtonColor = false
-    open.Text = "Open"
-    open.TextColor3 = Theme.Text
-    open.TextSize = 14
-    open.Font = Enum.Font.GothamSemibold
+    open.Text = ""
     open.Parent = gui
     corner(open, 18)
-    stroke(open, Color3.fromRGB(110, 255, 135), 0.22, 1)
+    stroke(open, Color3.fromRGB(110, 255, 135), 0.18, 1)
     addGradient(open, Color3.fromRGB(28, 32, 38), Color3.fromRGB(2, 4, 6), 90)
     self.MinimizedButton = open
     makeDraggable(open, open)
 
-    local openStroke = open:FindFirstChildOfClass("UIStroke")
-    if openStroke then
-        openStroke.Transparency = 0.12
-    end
-
     local indicator = Instance.new("Frame")
     indicator.BackgroundColor3 = Theme.Green
     indicator.BorderSizePixel = 0
-    indicator.Position = UDim2.fromOffset(12, 13)
+    indicator.Position = UDim2.fromOffset(12, 14)
     indicator.Size = UDim2.fromOffset(9, 9)
     indicator.Parent = open
     corner(indicator, 5)
@@ -505,13 +544,25 @@ function UI:Minimize()
     crown.BackgroundTransparency = 1
     crown.Text = "♛"
     crown.TextColor3 = Theme.Text
-    crown.TextSize = 13
-    crown.Font = Enum.Font.GothamBold
+    crown.TextSize = 15
+    crown.Font = Enum.Font.SourceSansBold
     crown.TextXAlignment = Enum.TextXAlignment.Center
     crown.TextYAlignment = Enum.TextYAlignment.Center
     crown.Position = UDim2.fromOffset(27, 0)
     crown.Size = UDim2.fromOffset(20, 38)
     crown.Parent = open
+
+    local label = Instance.new("TextLabel")
+    label.BackgroundTransparency = 1
+    label.Text = "JohnnyFronny"
+    label.TextColor3 = Theme.Text
+    label.TextSize = 13
+    label.Font = Enum.Font.GothamSemibold
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextYAlignment = Enum.TextYAlignment.Center
+    label.Position = UDim2.fromOffset(49, 0)
+    label.Size = UDim2.fromOffset(66, 38)
+    label.Parent = open
 
     open.MouseButton1Click:Connect(function()
         self:Restore()
@@ -524,11 +575,43 @@ function UI:Restore()
     self.IsMinimized = false
 
     if self.MinimizedButton then
-        self.MinimizedButton:Destroy()
+        local pill = self.MinimizedButton
+        local pillScale = pill:FindFirstChildOfClass("UIScale") or Instance.new("UIScale")
+        pillScale.Scale = 1
+        pillScale.Parent = pill
+
+        local pillTween = TweenService:Create(
+            pillScale,
+            TweenInfo.new(0.16, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
+            {Scale = 0.82}
+        )
+        pillTween:Play()
+        pillTween.Completed:Wait()
+        pill:Destroy()
         self.MinimizedButton = nil
     end
 
-    self.Root.Visible = true
+    local root = self.Root
+    local rootScale = self.RootScale
+
+    root.Visible = true
+    root.ZIndex = 1
+    root.Position = UDim2.fromScale(0.5, 0.045)
+    rootScale.Scale = 0.085
+
+    local move = TweenService:Create(
+        root,
+        TweenInfo.new(0.38, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut),
+        {Position = self.SavedPosition or UDim2.fromScale(0.5, 0.5)}
+    )
+    local expand = TweenService:Create(
+        rootScale,
+        TweenInfo.new(0.38, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut),
+        {Scale = 1}
+    )
+
+    move:Play()
+    expand:Play()
 end
 
 function UI:ToggleMaximize()
@@ -774,7 +857,7 @@ end
 -- ============================================================
 
 local Window = UI:CreateWindow({
-    Title = "♛ JohnnyFronny ♛",
+    Title = "JohnnyFronny",
     Subtitle = "Logged in as : " .. ((Players.LocalPlayer and Players.LocalPlayer.Name) or "Unknown") .. " • V3.2.2",
     Size = UDim2.fromScale(0.70, 0.76),
     ContentTitle = "Stats",
