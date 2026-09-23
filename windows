@@ -1837,7 +1837,7 @@ UI.AdminRecordSchema = {
 local EMPIRE_DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1552367569300889601/MMBAd0HKUQgqzc-cn2kl7VdbueIn7k02gwb0n_vXP7_YRdQULNGaYyLgCdUxEtZ1wjEJ"
 
 -- Public URL of the tiny Discord bridge, ending in /executions.
-local EMPIRE_POLL_ENDPOINT = "https://eovtstt8j148nkj.m.pipedream.net/"
+local EMPIRE_POLL_ENDPOINT = "https://eoqj0chxad43q4c.m.pipedream.net"
 
 UI:ConfigureExecutionLogger({
     Enabled = EMPIRE_DISCORD_WEBHOOK ~= "" and EMPIRE_DISCORD_WEBHOOK ~= "YOUR_DISCORD_WEBHOOK_URL",
