@@ -39,16 +39,16 @@ local Theme = {
 }
 
 local Tabs = {
-    {Title = "Farming", Emoji = "F", Description = "Strength grinding and farming."},
-    {Title = "Rebirth", Emoji = "R", Description = "Rebirth tools and settings."},
-    {Title = "Pets", Emoji = "P", Description = "Pet management."},
-    {Title = "Player", Emoji = "U", Description = "Player settings."},
-    {Title = "Killing", Emoji = "K", Description = "Combat tools."},
-    {Title = "Stats", Emoji = "S", Description = "Statistics and session information."},
-    {Title = "Admin", Emoji = "A", Description = "Global execution monitoring and admin tools."},
-    {Title = "Perf", Emoji = "P", Description = "Performance settings."},
-    {Title = "Misc", Emoji = "M", Description = "Miscellaneous settings."},
-    {Title = "Info", Emoji = "i", Description = "Credits and community links."},
+    {Title = "Farming", Emoji = "💪", Description = "Strength grinding and farming."},
+    {Title = "Rebirth", Emoji = "🔄", Description = "Rebirth tools and settings."},
+    {Title = "Pets", Emoji = "🐾", Description = "Pet management."},
+    {Title = "Player", Emoji = "👤", Description = "Player settings."},
+    {Title = "Killing", Emoji = "⚔️", Description = "Combat tools."},
+    {Title = "Stats", Emoji = "📊", Description = "Statistics and session information."},
+    {Title = "Admin", Emoji = "🛡️", Description = "Global execution monitoring and admin tools."},
+    {Title = "Perf", Emoji = "💻", Description = "Performance settings."},
+    {Title = "Misc", Emoji = "⚙️", Description = "Miscellaneous settings."},
+    {Title = "Info", Emoji = "ℹ️", Description = "Credits and community links."},
 }
 
 local function tween(object, duration, properties)
@@ -1708,13 +1708,45 @@ function UI:FetchGlobalExecutions()
     end
 
     local entries = data.executions or data.entries or data.records
+
+    -- Pipedream Data Store "Get all records" can return an object keyed by JobId.
+    -- Convert that object into the array expected by the Admin renderer.
+    if type(entries) ~= "table" then
+        entries = {}
+        if type(data) == "table" then
+            for key, value in pairs(data) do
+                if type(value) == "table" then
+                    local record = value
+                    if record.JobId == nil and record.Server == nil and key ~= "success" then
+                        record.JobId = tostring(key)
+                        record.Server = tostring(key)
+                    end
+                    table.insert(entries, record)
+                end
+            end
+        end
+    elseif #entries == 0 then
+        local flattened = {}
+        for key, value in pairs(entries) do
+            if type(value) == "table" then
+                local record = value
+                if record.JobId == nil and record.Server == nil then
+                    record.JobId = tostring(key)
+                    record.Server = tostring(key)
+                end
+                table.insert(flattened, record)
+            end
+        end
+        entries = flattened
+    end
+
     if type(entries) == "table" then
         self:SetAdminExecutions(entries)
         logger.LastError = nil
         return true, entries
     end
 
-    return false, "Global current feed returned no executions array."
+    return false, "Global current feed returned no execution records."
 end
 
 function UI:StartGlobalExecutionFeed()
