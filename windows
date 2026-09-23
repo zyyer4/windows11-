@@ -902,18 +902,6 @@ function UI:AddTab(config)
     page.Parent = self.Pages
     tab.Page = page
 
-    padding(page, 18, 10, 18, 18)
-
-    local pageLayout = Instance.new("UIListLayout")
-    pageLayout.Name = "FeatureLayout"
-    pageLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    pageLayout.Padding = UDim.new(0, 7)
-    pageLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    pageLayout.Parent = page
-
-    pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        page.CanvasSize = UDim2.fromOffset(0, pageLayout.AbsoluteContentSize.Y + 28)
-    end)
 
     -- Fluent-style foundation for future content.
     function tab:AddSection(titleValue)
@@ -2124,34 +2112,31 @@ local function _JohnnyGetFeatureContent(tab)
     local page = tab.Page
     if not page then return nil end
 
-    -- Fluent-inspired element host: every element lives in one vertically
-    -- laid-out container. This avoids Roblox's default (0,0) stacking and
-    -- gives the page a single reliable content height to scroll.
     local content = Instance.new("Frame")
     content.Name = "FeatureContent"
     content.BackgroundTransparency = 1
     content.BorderSizePixel = 0
-    content.Position = UDim2.fromOffset(18, 10)
-    content.Size = UDim2.new(1, -36, 0, 0)
+    content.Position = UDim2.fromOffset(0, 0)
+    content.Size = UDim2.new(1, 0, 0, 0)
     content.AutomaticSize = Enum.AutomaticSize.Y
     content.Parent = page
 
-    local contentPadding = Instance.new("UIPadding")
-    contentPadding.PaddingBottom = UDim.new(0, 18)
-    contentPadding.Parent = content
+    local pad = Instance.new("UIPadding")
+    pad.PaddingTop = UDim.new(0, 10)
+    pad.PaddingLeft = UDim.new(0, 16)
+    pad.PaddingRight = UDim.new(0, 16)
+    pad.PaddingBottom = UDim.new(0, 18)
+    pad.Parent = content
 
     local layout = Instance.new("UIListLayout")
-    layout.Name = "FluentElementLayout"
+    layout.Name = "FeatureSectionLayout"
     layout.SortOrder = Enum.SortOrder.LayoutOrder
-    layout.Padding = UDim.new(0, 7)
-    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    layout.Padding = UDim.new(0, 8)
     layout.Parent = content
 
     local function syncCanvas()
-        local height = layout.AbsoluteContentSize.Y + 28
-        page.CanvasSize = UDim2.fromOffset(0, height)
+        page.CanvasSize = UDim2.fromOffset(0, math.max(0, content.AbsoluteSize.Y + 12))
     end
-
     layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(syncCanvas)
     content:GetPropertyChangedSignal("AbsoluteSize"):Connect(syncCanvas)
     task.defer(syncCanvas)
@@ -2160,11 +2145,144 @@ local function _JohnnyGetFeatureContent(tab)
     return content
 end
 
-local function _JohnnyAddLabel(tab, value)
+local function _JohnnySectionParent(tab)
+    local section = tab._JohnnyCurrentSection
+    if section and section.Body and section.Body.Parent and section.Body.Visible then
+        return section.Body
+    end
+    return _JohnnyGetFeatureContent(tab)
+end
+
+local function _JohnnyMakeSection(tab, titleValue)
     local parent = _JohnnyGetFeatureContent(tab)
     if not parent then return nil end
 
-    local label = text(parent, tostring(value or ""), 13, Theme.Text, Enum.Font.Gotham)
+    local section = Instance.new("Frame")
+    section.Name = "Section_" .. tostring(titleValue or "Section"):gsub("%W", "_")
+    section.Size = UDim2.new(1, 0, 0, 44)
+    section.BackgroundColor3 = Theme.Surface
+    section.BackgroundTransparency = 0.14
+    section.BorderSizePixel = 0
+    section.Parent = parent
+    corner(section, 11)
+    stroke(section, Theme.Border, 0.58)
+
+    local header = Instance.new("TextButton")
+    header.Name = "Header"
+    header.BackgroundTransparency = 1
+    header.BorderSizePixel = 0
+    header.AutoButtonColor = false
+    header.Text = ""
+    header.Size = UDim2.new(1, 0, 0, 44)
+    header.Parent = section
+
+    local title = text(header, tostring(titleValue or "Section"), 14, Theme.Text, Enum.Font.GothamSemibold)
+    title.Position = UDim2.fromOffset(14, 0)
+    title.Size = UDim2.new(1, -54, 1, 0)
+
+    local arrow = text(header, "⌃", 18, Theme.SubText, Enum.Font.GothamBold)
+    arrow.TextXAlignment = Enum.TextXAlignment.Center
+    arrow.Position = UDim2.new(1, -42, 0, 0)
+    arrow.Size = UDim2.fromOffset(30, 44)
+
+    local body = Instance.new("Frame")
+    body.Name = "Body"
+    body.BackgroundTransparency = 1
+    body.BorderSizePixel = 0
+    body.Position = UDim2.fromOffset(0, 44)
+    body.Size = UDim2.new(1, 0, 0, 0)
+    body.Parent = section
+
+    local bodyPad = Instance.new("UIPadding")
+    bodyPad.PaddingTop = UDim.new(0, 7)
+    bodyPad.PaddingLeft = UDim.new(0, 9)
+    bodyPad.PaddingRight = UDim.new(0, 9)
+    bodyPad.PaddingBottom = UDim.new(0, 9)
+    bodyPad.Parent = body
+
+    local bodyLayout = Instance.new("UIListLayout")
+    bodyLayout.Name = "ElementLayout"
+    bodyLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    bodyLayout.Padding = UDim.new(0, 6)
+    bodyLayout.Parent = body
+
+    local expanded = true
+    local function syncSection()
+        if expanded then
+            local h = bodyLayout.AbsoluteContentSize.Y + 16
+            body.Size = UDim2.new(1, 0, 0, h)
+            section.Size = UDim2.new(1, 0, 0, 44 + h)
+            arrow.Text = "⌃"
+        else
+            body.Size = UDim2.new(1, 0, 0, 0)
+            section.Size = UDim2.new(1, 0, 0, 44)
+            arrow.Text = "⌄"
+        end
+    end
+    bodyLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(syncSection)
+    header.MouseButton1Click:Connect(function()
+        expanded = not expanded
+        body.Visible = expanded
+        syncSection()
+    end)
+
+    local result = {
+        Tab = tab,
+        Window = tab.Window,
+        Frame = section,
+        Title = title,
+        Header = header,
+        Body = body,
+    }
+    tab._JohnnyCurrentSection = result
+    task.defer(syncSection)
+    return result
+end
+
+local function _JohnnyLooksLikeSection(value)
+    if type(value) ~= "string" or value == "" then return false end
+    local known = {
+        ["Settings"] = true,
+        ["Essenttals:"] = true,
+        ["Rebirth Options"] = true,
+        ["Auto Exercises"] = true,
+        ["Fast Tools"] = true,
+        ["Gym Teleports"] = true,
+        ["Rebirthing:"] = true,
+        ["Stats:"] = true,
+        ["Misc:"] = true,
+        ["Time:"] = true,
+    }
+    if known[value] then return true end
+    if value:sub(-1) == ":" then return true end
+    if value:match("^Fast Farm %(") then return true end
+    return false
+end
+
+local function _JohnnyAddLabel(tab, value)
+    local valueText = tostring(value or "")
+    if _JohnnyLooksLikeSection(valueText) then
+        local section = _JohnnyMakeSection(tab, valueText:gsub(":$", ""))
+        if section then
+            section.Title.TextSize = 14
+        end
+        return section and section.Title or nil
+    end
+
+    local parent = _JohnnySectionParent(tab)
+    if not parent then return nil end
+
+    if valueText == "" then
+        local spacer = Instance.new("Frame")
+        spacer.Name = "Spacer"
+        spacer.BackgroundTransparency = 1
+        spacer.BorderSizePixel = 0
+        spacer.Size = UDim2.new(1, 0, 0, 6)
+        spacer.Parent = parent
+        return spacer
+    end
+
+    local label = text(parent, valueText, 13, Theme.SubText, Enum.Font.Gotham)
     label.Size = UDim2.new(1, 0, 0, 28)
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.TextWrapped = true
@@ -2172,14 +2290,14 @@ local function _JohnnyAddLabel(tab, value)
 end
 
 local function _JohnnyAddButton(tab, labelText, callback)
-    local parent = _JohnnyGetFeatureContent(tab)
+    local parent = _JohnnySectionParent(tab)
     if not parent then return nil end
 
     local button = Instance.new("TextButton")
     button.Name = "JohnnyButton"
     button.Size = UDim2.new(1, 0, 0, 40)
-    button.BackgroundColor3 = Theme.Surface
-    button.BackgroundTransparency = 0.12
+    button.BackgroundColor3 = Theme.Surface2
+    button.BackgroundTransparency = 0.05
     button.BorderSizePixel = 0
     button.AutoButtonColor = false
     button.Text = tostring(labelText or "Button")
@@ -2188,13 +2306,13 @@ local function _JohnnyAddButton(tab, labelText, callback)
     button.Font = Enum.Font.GothamSemibold
     button.Parent = parent
     corner(button, 9)
-    stroke(button, Theme.Border, 0.62)
+    stroke(button, Theme.Border, 0.58)
 
     button.MouseEnter:Connect(function()
         tween(button, 0.10, {BackgroundColor3 = Theme.SurfaceHover})
     end)
     button.MouseLeave:Connect(function()
-        tween(button, 0.10, {BackgroundColor3 = Theme.Surface})
+        tween(button, 0.10, {BackgroundColor3 = Theme.Surface2})
     end)
     button.MouseButton1Click:Connect(function()
         if type(callback) == "function" then
@@ -2202,27 +2320,26 @@ local function _JohnnyAddButton(tab, labelText, callback)
             if not ok then warn("[Johnny] button error: " .. tostring(err)) end
         end
     end)
-
     return button
 end
 
 local function _JohnnyAddSwitch(tab, labelText, callback)
-    local parent = _JohnnyGetFeatureContent(tab)
+    local parent = _JohnnySectionParent(tab)
     if not parent then return nil end
 
     local row = Instance.new("Frame")
     row.Name = "JohnnyToggle"
     row.Size = UDim2.new(1, 0, 0, 44)
-    row.BackgroundColor3 = Theme.Surface
-    row.BackgroundTransparency = 0.12
+    row.BackgroundColor3 = Theme.Surface2
+    row.BackgroundTransparency = 0.05
     row.BorderSizePixel = 0
     row.Parent = parent
     corner(row, 9)
-    stroke(row, Theme.Border, 0.62)
+    stroke(row, Theme.Border, 0.58)
 
     local label = text(row, tostring(labelText or "Switch"), 12, Theme.Text, Enum.Font.GothamMedium)
     label.Position = UDim2.fromOffset(13, 0)
-    label.Size = UDim2.new(1, -82, 1, 0)
+    label.Size = UDim2.new(1, -84, 1, 0)
     label.TextXAlignment = Enum.TextXAlignment.Left
 
     local toggle = Instance.new("TextButton")
@@ -2240,7 +2357,6 @@ local function _JohnnyAddSwitch(tab, labelText, callback)
 
     local state = false
     local switch = {}
-
     local function apply(newState, fire)
         state = newState and true or false
         toggle.Text = state and "ON" or "OFF"
@@ -2250,39 +2366,28 @@ local function _JohnnyAddSwitch(tab, labelText, callback)
             if not ok then warn("[Johnny] toggle error: " .. tostring(err)) end
         end
     end
-
-    function switch:Set(newState)
-        apply(newState, true)
-    end
-    function switch:Get()
-        return state
-    end
-
+    function switch:Set(newState) apply(newState, true) end
+    function switch:Get() return state end
     switch.Button = toggle
     switch.Frame = row
-
-    toggle.MouseButton1Click:Connect(function()
-        apply(not state, true)
-    end)
-
+    toggle.MouseButton1Click:Connect(function() apply(not state, true) end)
     return switch
 end
 
 local function _JohnnyAddTextBox(tab, labelText, callback, options)
-    local parent = _JohnnyGetFeatureContent(tab)
+    local parent = _JohnnySectionParent(tab)
     if not parent then return nil end
-
     options = options or {}
 
     local holder = Instance.new("Frame")
     holder.Name = "JohnnyInput"
     holder.Size = UDim2.new(1, 0, 0, 54)
-    holder.BackgroundColor3 = Theme.Surface
-    holder.BackgroundTransparency = 0.12
+    holder.BackgroundColor3 = Theme.Surface2
+    holder.BackgroundTransparency = 0.05
     holder.BorderSizePixel = 0
     holder.Parent = parent
     corner(holder, 9)
-    stroke(holder, Theme.Border, 0.62)
+    stroke(holder, Theme.Border, 0.58)
 
     local label = text(holder, tostring(labelText or ""), 11, Theme.SubText, Enum.Font.GothamSemibold)
     label.Position = UDim2.fromOffset(13, 4)
@@ -2306,19 +2411,18 @@ local function _JohnnyAddTextBox(tab, labelText, callback, options)
     box.Parent = holder
     corner(box, 8)
     stroke(box, Theme.Border, 0.60)
-
     box.FocusLost:Connect(function()
         if type(callback) == "function" then
             local ok, err = pcall(callback, box.Text)
             if not ok then warn("[Johnny] input error: " .. tostring(err)) end
         end
     end)
-
     return box
 end
 
 function _JohnnyInstallTabCompat(tab)
     if not tab or not tab.Page then return end
+    tab.AddSection = function(self, titleValue) return _JohnnyMakeSection(self, titleValue) end
     tab.AddLabel = function(self, value) return _JohnnyAddLabel(self, value) end
     tab.AddButton = function(self, labelText, callback) return _JohnnyAddButton(self, labelText, callback) end
     tab.AddSwitch = function(self, labelText, callback) return _JohnnyAddSwitch(self, labelText, callback) end
@@ -2342,9 +2446,16 @@ end
 
 local muscleEvent = Player:FindFirstChild("muscleEvent")
 local leaderstats = Player:FindFirstChild("leaderstats")
-local rebirthsStat = leaderstats and leaderstats:FindFirstChild("Rebirths")
-local strengthStat = leaderstats and leaderstats:FindFirstChild("Strength")
-local durabilityStat = Player:FindFirstChild("Durability")
+local function _JohnnyFallbackNumberValue(name)
+    local v = Instance.new("NumberValue")
+    v.Name = name
+    v.Value = 0
+    return v
+end
+
+local rebirthsStat = (leaderstats and leaderstats:FindFirstChild("Rebirths")) or _JohnnyFallbackNumberValue("Rebirths")
+local strengthStat = (leaderstats and leaderstats:FindFirstChild("Strength")) or _JohnnyFallbackNumberValue("Strength")
+local durabilityStat = Player:FindFirstChild("Durability") or _JohnnyFallbackNumberValue("Durability")
 
 local rEvents = ReplicatedStorage:FindFirstChild("rEvents")
 local equipPetEvent = rEvents and rEvents:FindFirstChild("equipPetEvent")
@@ -2490,7 +2601,15 @@ local FarmingTab = createdTabs.Farming
 local FastRebTab = createdTabs.Rebirth
 local RebirthTab = createdTabs.Rebirth
 local ToolsTab = createdTabs.Misc
+local StatsTab = createdTabs.Stats
+local PetsTab = createdTabs.Pets
+local PerfTab = createdTabs.Perf
+local KillingTab = createdTabs.Killing
 local openCompactMode
+
+-- Keep utility pages populated instead of leaving them blank.
+KillingTab:AddLabel("Combat:").TextSize = 14
+KillingTab:AddLabel("No separate combat automation was included in the V13 feature pack.")
 
 --========================================================--
 -- FAST FARM TAB / FARMING SECTION
@@ -2500,10 +2619,10 @@ local openCompactMode
 -- FARMING UI
 --========================================================--
 
-FarmingTab:AddLabel("Time:").TextSize = 20
+StatsTab:AddLabel("Time:").TextSize = 20
 
 local stopwatchLabel =
-    FarmingTab:AddLabel(
+    StatsTab:AddLabel(
         "0d 0h 0m 0s - Fast Rep Inactive"
     )
 
@@ -2517,22 +2636,22 @@ stopwatchLabel.TextColor3 =
     )
 
 local projectedStrengthLabel =
-    FarmingTab:AddLabel(
+    StatsTab:AddLabel(
         "Strength Pace: 0 /Hour | 0 /Day | 0 /Week"
     )
 
 local projectedDurabilityLabel =
-    FarmingTab:AddLabel(
+    StatsTab:AddLabel(
         "Durability Pace: 0 /Hour | 0 /Day | 0 /Week"
     )
 
 local averageStrengthLabel =
-    FarmingTab:AddLabel(
+    StatsTab:AddLabel(
         "Average Strength Pace: 0 /Hour | 0 /Day | 0 /Week"
     )
 
 local averageDurabilityLabel =
-    FarmingTab:AddLabel(
+    StatsTab:AddLabel(
         "Average Durability Pace: 0 /Hour | 0 /Day | 0 /Week"
     )
 
@@ -2541,17 +2660,17 @@ projectedDurabilityLabel.TextSize = 17
 averageStrengthLabel.TextSize = 17
 averageDurabilityLabel.TextSize = 17
 
-FarmingTab:AddLabel("").TextSize = 10
+StatsTab:AddLabel("").TextSize = 10
 
-FarmingTab:AddLabel("Stats:").TextSize = 20
+StatsTab:AddLabel("Stats:").TextSize = 20
 
 local strengthLabel =
-    FarmingTab:AddLabel(
+    StatsTab:AddLabel(
         "Strength: 0 | Gained: 0"
     )
 
 local durabilityLabel =
-    FarmingTab:AddLabel(
+    StatsTab:AddLabel(
         "Durability: 0 | Gained: 0"
     )
 
@@ -2960,6 +3079,8 @@ local pauseDuration = 1
 local pingPaused = false
 local lastKnownPing = 0
 
+FarmingTab:AddLabel("Ping Adjuster:").TextSize = 14
+
 local pingStatusLabel =
     FarmingTab:AddLabel(
         "Ping: -- ms | Status: Ready"
@@ -3144,25 +3265,6 @@ local function waitForPingRecovery()
         )
     end
 end
-
-local pingAdjusterSwitch =
-    FarmingTab:AddSwitch(
-        "Ping Adjuster",
-        function(state)
-
-            pingAdjusterEnabled =
-                state
-
-            if not state then
-
-                pingPaused = false
-
-                updatePingStatus(
-                    "Disabled"
-                )
-            end
-        end
-    )
 
 local pingAdjusterSwitch =
     FarmingTab:AddSwitch(
@@ -3642,15 +3744,6 @@ FarmingTab:AddButton(
 )
 
 --========================================================--
--- FARMING ANTI LAG
---========================================================--
-
-FarmingTab:AddButton(
-    "Anti Lag",
-    activateAntiLag
-)
-
---========================================================--
 -- INDUSTRIAL GYM SQUAT
 --========================================================--
 
@@ -3703,22 +3796,6 @@ FarmingTab:AddButton(
         task.wait(0.2)
 
         pressE()
-    end
-)
-
-
---========================================================--
--- EQUIP SWIFT SAMURAI
---========================================================--
-
-FarmingTab:AddButton(
-    "Equip Swift Samurai",
-    function()
-
-        equipPetsByName(
-            "Swift Samurai"
-        )
-
     end
 )
 
@@ -4431,6 +4508,62 @@ local function managePets(petName)
 
 end
 
+local function unequipAllPets()
+    local petsFolder = Player:FindFirstChild("petsFolder")
+    if not petsFolder or not equipPetEvent then
+        sendNotification("Pets", "Pet event or pets folder is unavailable.")
+        return
+    end
+
+    local count = 0
+    for _, folder in ipairs(petsFolder:GetChildren()) do
+        if folder:IsA("Folder") then
+            for _, pet in ipairs(folder:GetChildren()) do
+                pcall(function()
+                    equipPetEvent:FireServer("unequipPet", pet)
+                    count += 1
+                end)
+            end
+        end
+    end
+    sendNotification("Pets", "Unequip request sent for " .. tostring(count) .. " pet(s).")
+end
+
+local function equipAllNamedPets(petName)
+    local uniquePets = getUniquePetsFolder()
+    if not uniquePets or not equipPetEvent then
+        sendNotification("Pets", "Pet event or Unique pets folder is unavailable.")
+        return
+    end
+
+    -- Manual pet selection is independent of the Fast Rebirth protected-pet rule.
+    -- Clear the current equipped set first so the selected pet can fill the slots.
+    unequipAllPets()
+    task.wait(0.10)
+
+    local count = 0
+    for _, pet in ipairs(uniquePets:GetChildren()) do
+        if pet.Name == petName then
+            pcall(function()
+                equipPetEvent:FireServer("equipPet", pet)
+                count += 1
+            end)
+            task.wait(0.025)
+        end
+    end
+    sendNotification("Pets", "Equip request sent for " .. tostring(count) .. " " .. petName .. ".")
+end
+
+-- Dedicated Pets page: one clear section, no duplicate farming pet controls.
+PetsTab:AddLabel("Pet Management:").TextSize = 14
+PetsTab:AddLabel("Select one pet type to clear the current set and equip every matching copy.")
+PetsTab:AddButton("Equip All Swift Samurai", function() equipAllNamedPets("Swift Samurai") end)
+PetsTab:AddButton("Equip All Mighty Monster", function() equipAllNamedPets("Mighty Monster") end)
+PetsTab:AddButton("Equip All Wild Wizard", function() equipAllNamedPets("Wild Wizard") end)
+PetsTab:AddButton("Equip All Tribal Overlord", function() equipAllNamedPets("Tribal Overlord") end)
+PetsTab:AddButton("Unequip All Pets", unequipAllPets)
+PetsTab:AddLabel("These controls target every matching pet instance in petsFolder.Unique.")
+
 --========================================================--
 -- FAST REBIRTH LOGIC
 --========================================================--
@@ -4733,6 +4866,9 @@ local function activateAntiLag()
     end
 end
 
+PerfTab:AddLabel("Performance:").TextSize = 14
+PerfTab:AddButton("Anti Lag", activateAntiLag)
+PerfTab:AddLabel("Performance controls are kept in this tab so Anti Lag is not duplicated elsewhere.")
 
 FastRebTab:AddButton(
     "Anti Lag",
