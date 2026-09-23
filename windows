@@ -1713,7 +1713,6 @@ function UI:BuildDiscordEmbed(record)
     local statLines = {}
     for key, value in pairs(record.Stats) do
         table.insert(statLines, tostring(key) .. ": " .. tostring(value))
-        end
     end
     table.sort(statLines)
 
