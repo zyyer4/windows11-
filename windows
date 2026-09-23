@@ -1323,7 +1323,7 @@ if AdminTab then
     refresh.BackgroundTransparency = 0.05
     refresh.BorderSizePixel = 0
     refresh.AutoButtonColor = false
-    refresh.Text = "R"
+    refresh.Text = "🔄"
     refresh.TextColor3 = Theme.Text
     refresh.TextSize = 17
     refresh.Font = Enum.Font.GothamBold
@@ -1412,7 +1412,8 @@ if AdminTab then
             emptyTitle.Size = UDim2.new(1, -28, 0, 20)
             emptyTitle.TextXAlignment = Enum.TextXAlignment.Center
 
-            local emptyNote = text(empty, "No current global executions were returned by the Discord bridge.", 10, Theme.Muted, Enum.Font.Gotham)
+            local emptyMessage = UI.ExecutionLogger.LastError and ("Feed: " .. tostring(UI.ExecutionLogger.LastError)) or "No current global executions were returned by Pipedream."
+            local emptyNote = text(empty, emptyMessage, 10, Theme.Muted, Enum.Font.Gotham)
             emptyNote.Position = UDim2.fromOffset(14, 44)
             emptyNote.Size = UDim2.new(1, -28, 0, 18)
             emptyNote.TextXAlignment = Enum.TextXAlignment.Center
@@ -1530,7 +1531,7 @@ if AdminTab then
 
     refresh.MouseButton1Click:Connect(function()
         if adminUnlocked then
-            refresh.Text = "..."
+            refresh.Text = "⟳"
             task.spawn(function()
                 local ok = false
                 if UI.ExecutionLogger.PollEndpoint ~= "" then
@@ -1539,7 +1540,7 @@ if AdminTab then
                 if not ok then
                     renderExecutions()
                 end
-                refresh.Text = "R"
+                refresh.Text = "🔄"
             end)
         end
     end)
@@ -1734,10 +1735,15 @@ function UI:SendExecutionLog(record)
             })
         end)
         if ok then
-            sentAny = true
             logger.LastResponse = response
+            local statusCode = type(response) == "table" and (response.StatusCode or response.status_code or response.Code or response.code) or nil
+            if statusCode and tonumber(statusCode) and tonumber(statusCode) >= 400 then
+                lastError = "Pipedream POST returned HTTP " .. tostring(statusCode)
+            else
+                sentAny = true
+            end
         else
-            lastError = tostring(response)
+            lastError = "Pipedream POST failed: " .. tostring(response)
         end
     end
 
@@ -1793,6 +1799,12 @@ function UI:FetchGlobalExecutions()
 
     if not ok then
         logger.LastError = tostring(response)
+        return false, logger.LastError
+    end
+
+    local statusCode = type(response) == "table" and (response.StatusCode or response.status_code or response.Code or response.code) or nil
+    if statusCode and tonumber(statusCode) and tonumber(statusCode) >= 400 then
+        logger.LastError = "Global feed returned HTTP " .. tostring(statusCode)
         return false, logger.LastError
     end
 
