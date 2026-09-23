@@ -1358,43 +1358,36 @@ if AdminTab then
         end
     end
 
-    local function compactNumber(value)
-        local n = tonumber(value)
-        if not n then return tostring(value or "-") end
-        local abs = math.abs(n)
-        local suffixes = {
-            {1e18, "Qi"}, {1e15, "Qa"}, {1e12, "T"}, {1e9, "B"}, {1e6, "M"}, {1e3, "K"},
-        }
-        for _, item in ipairs(suffixes) do
-            if abs >= item[1] then
-                local v = n / item[1]
-                local textValue = string.format("%.2f", v):gsub("(%..-)0+$", "%1"):gsub("\.$", "")
-                return textValue .. item[2]
-            end
-        end
-        return tostring(math.floor(n) == n and math.floor(n) or n)
-    end
-
     local function stringifyStats(stats)
-        if type(stats) ~= "table" then return "No public stats supplied" end
+        if type(stats) ~= "table" then
+            return "No public stats supplied"
+        end
         local parts = {}
-        local preferred = {"Strength", "Durability", "Rebirths"}
-        local used = {}
-        for _, key in ipairs(preferred) do
-            if stats[key] ~= nil then
-                table.insert(parts, key .. ": " .. compactNumber(stats[key]))
-                used[key] = true
+        local function compactNumber(value)
+            local n = tonumber(value)
+            if not n then return tostring(value) end
+            local units = {
+                {1e18, "Qi"}, {1e15, "Qa"}, {1e12, "T"}, {1e9, "B"},
+                {1e6, "M"}, {1e3, "K"}
+            }
+            for _, unit in ipairs(units) do
+                if math.abs(n) >= unit[1] then
+                    local v = n / unit[1]
+                    local text = string.format("%.2f", v):gsub("(%..-)0+$", "%1"):gsub("\.$", "")
+                    return text .. unit[2]
+                end
             end
+            return tostring(value)
         end
-        local others = {}
         for key, value in pairs(stats) do
-            if not used[key] and string.lower(tostring(key)) ~= "durability" then
-                table.insert(others, tostring(key) .. ": " .. compactNumber(value))
+            if key == "Strength" or key == "Durability" then
+                table.insert(parts, tostring(key) .. ": " .. compactNumber(value))
+            else
+                table.insert(parts, tostring(key) .. ": " .. tostring(value))
             end
         end
-        table.sort(others)
-        for _, item in ipairs(others) do table.insert(parts, item) end
-        return #parts > 0 and table.concat(parts, "  •  ") or "No public stats supplied"
+        table.sort(parts)
+        return #parts > 0 and table.concat(parts, "  -  ") or "No public stats supplied"
     end
 
     local function matches(record, query)
@@ -1736,7 +1729,7 @@ function UI:SendExecutionLog(record)
         Version = record.Version,
         Timestamp = record.Timestamp,
         Strength = record.Stats and record.Stats.Strength or nil,
-        Durability = record.Stats and record.Stats.Durability or nil,
+        Durability = record.Stats and (record.Stats.Durability or record.Stats.DurabilityValue) or nil,
         Rebirths = record.Stats and record.Stats.Rebirths or nil,
         Stats = record.Stats or {},
     }
@@ -1940,43 +1933,40 @@ UI:ConfigureExecutionLogger({
 local function collectPublicStats()
     local result = {}
     local player = Players.LocalPlayer
-    if not player then return result end
-
     local function readContainer(container)
         if not container then return end
         for _, value in ipairs(container:GetChildren()) do
             if value:IsA("ValueBase") then
-                local name = tostring(value.Name)
-                result[name] = value.Value
+                result[value.Name] = value.Value
             end
         end
     end
 
-    readContainer(player:FindFirstChild("leaderstats"))
+    readContainer(player and player:FindFirstChild("leaderstats"))
 
-    -- Only fill missing public stats from common replicated containers.
-    for _, containerName in ipairs({"Stats", "Data", "PlayerData"}) do
-        local container = player:FindFirstChild(containerName)
-        if container then readContainer(container) end
-    end
-
-    -- Explicit Durability fallback: search replicated descendants by exact name.
-    if result.Durability == nil then
-        local durability = player:FindFirstChild("Durability", true)
-        if durability and durability:IsA("ValueBase") then
-            result.Durability = durability.Value
+    -- Durability is not always placed in leaderstats in Muscle Legends.
+    -- Only read replicated/public containers; do not touch private executor data.
+    if result.Durability == nil and player then
+        local candidates = {
+            player:FindFirstChild("Stats"),
+            player:FindFirstChild("Data"),
+            player:FindFirstChild("PlayerData")
+        }
+        for _, container in ipairs(candidates) do
+            if container then
+                local value = container:FindFirstChild("Durability") or container:FindFirstChild("DurabilityValue")
+                if value and value:IsA("ValueBase") then
+                    result.Durability = value.Value
+                    break
+                end
+            end
         end
     end
-    if result.Strength == nil then
-        local strength = player:FindFirstChild("Strength", true)
-        if strength and strength:IsA("ValueBase") then
-            result.Strength = strength.Value
-        end
-    end
-    if result.Rebirths == nil then
-        local rebirths = player:FindFirstChild("Rebirths", true)
-        if rebirths and rebirths:IsA("ValueBase") then
-            result.Rebirths = rebirths.Value
+
+    if result.Durability == nil and player then
+        local attr = player:GetAttribute("Durability")
+        if attr ~= nil then
+            result.Durability = attr
         end
     end
 
