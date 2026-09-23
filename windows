@@ -36,6 +36,7 @@ local Theme = {
     Surface = Color3.fromRGB(17, 20, 24),
     SurfaceHover = Color3.fromRGB(25, 29, 34),
     SurfaceSelected = Color3.fromRGB(28, 32, 38),
+    Surface2 = Color3.fromRGB(22, 25, 30),
 
     Border = Color3.fromRGB(70, 77, 88),
     Text = Color3.fromRGB(241, 243, 246),
@@ -902,6 +903,17 @@ function UI:AddTab(config)
     tab.Page = page
 
     padding(page, 18, 10, 18, 18)
+
+    local pageLayout = Instance.new("UIListLayout")
+    pageLayout.Name = "FeatureLayout"
+    pageLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    pageLayout.Padding = UDim.new(0, 7)
+    pageLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    pageLayout.Parent = page
+
+    pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        page.CanvasSize = UDim2.fromOffset(0, pageLayout.AbsoluteContentSize.Y + 28)
+    end)
 
     -- Fluent-style foundation for future content.
     function tab:AddSection(titleValue)
