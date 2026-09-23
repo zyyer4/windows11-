@@ -15,6 +15,7 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
 
 local UI = {}
 UI.__index = UI
@@ -44,7 +45,7 @@ local Tabs = {
     {Title = "Player", Emoji = "👤", Description = "Player settings."},
     {Title = "Killing", Emoji = "⚔️", Description = "Combat tools."},
     {Title = "Stats", Emoji = "📊", Description = "Statistics and session information."},
-    {Title = "Tickets", Emoji = "🎟️", Description = "Tickets and rewards."},
+    {Title = "Admin", Emoji = "🛡️", Description = "Private local admin tools and current-server viewer information."},
     {Title = "Perf", Emoji = "💻", Description = "Performance settings."},
     {Title = "Misc", Emoji = "⚙️", Description = "Miscellaneous settings."},
     {Title = "Info", Emoji = "i", Description = "Credits and community links."},
@@ -1035,7 +1036,7 @@ for _, info in ipairs(Tabs) do
             Player = Color3.fromRGB(71, 205, 150),
             Killing = Color3.fromRGB(255, 82, 82),
             Stats = Color3.fromRGB(86, 145, 255),
-            Tickets = Color3.fromRGB(255, 211, 71),
+            Admin = Color3.fromRGB(255, 196, 70),
             Perf = Color3.fromRGB(115, 121, 132),
             Misc = Color3.fromRGB(169, 176, 188),
             Info = Color3.fromRGB(95, 177, 255),
@@ -1151,7 +1152,550 @@ if InfoTab then
     end
 
     socialButton(credits, 18, "YouTube", "JohnnyFronnyYT", Color3.fromRGB(255, 70, 70), "")
-    socialButton(credits, 198, "Discord", "JohnnyFronnyyt", Color3.fromRGB(88, 101, 242), "")
+    socialButton(credits, 198, "Discord", "JohnnyFronny", Color3.fromRGB(88, 101, 242), "")
 end
+
+
+-- ============================================================
+-- ADMIN PAGE
+-- ============================================================
+-- Backend-ready admin dashboard. The UI accepts execution records from
+-- a trusted server/backend through UI:SetAdminExecutions(entries).
+-- It intentionally does not collect hardware IDs or precise location.
+local AdminTab = createdTabs.Admin
+if AdminTab then
+    local adminPage = AdminTab.Page
+    local ADMIN_PASSWORD = "yader45"
+    local adminUnlocked = false
+    local adminExecutions = {}
+    local filteredExecutions = {}
+
+    local gate = Instance.new("Frame")
+    gate.Name = "AdminGate"
+    gate.BackgroundColor3 = Theme.Surface
+    gate.BackgroundTransparency = 0.18
+    gate.BorderSizePixel = 0
+    gate.Size = UDim2.new(1, 0, 0, 190)
+    gate.Parent = adminPage
+    corner(gate, 13)
+    stroke(gate, Theme.Border, 0.64)
+
+    local gateTitle = text(gate, "Admin Access", 17, Theme.Text, Enum.Font.GothamBold)
+    gateTitle.Position = UDim2.fromOffset(18, 15)
+    gateTitle.Size = UDim2.new(1, -36, 0, 26)
+
+    local gateDesc = text(gate, "Enter the admin password to unlock the Empire execution dashboard.", 12, Theme.SubText, Enum.Font.Gotham)
+    gateDesc.Position = UDim2.fromOffset(18, 43)
+    gateDesc.Size = UDim2.new(1, -36, 0, 20)
+
+    local passwordBox = Instance.new("TextBox")
+    passwordBox.Name = "PasswordBox"
+    passwordBox.BackgroundColor3 = Theme.WindowTop
+    passwordBox.BackgroundTransparency = 0.10
+    passwordBox.BorderSizePixel = 0
+    passwordBox.ClearTextOnFocus = false
+    passwordBox.PlaceholderText = "Admin password"
+    passwordBox.PlaceholderColor3 = Theme.Muted
+    passwordBox.Text = ""
+    passwordBox.TextColor3 = Theme.Text
+    passwordBox.TextSize = 13
+    passwordBox.Font = Enum.Font.Gotham
+    passwordBox.TextXAlignment = Enum.TextXAlignment.Left
+    passwordBox.Position = UDim2.fromOffset(18, 76)
+    passwordBox.Size = UDim2.new(1, -140, 0, 40)
+    passwordBox.Parent = gate
+    corner(passwordBox, 9)
+    stroke(passwordBox, Theme.Border, 0.70)
+    padding(passwordBox, 12, 0, 12, 0)
+
+    local unlock = Instance.new("TextButton")
+    unlock.Name = "Unlock"
+    unlock.BackgroundColor3 = Color3.fromRGB(255, 196, 70)
+    unlock.BackgroundTransparency = 0.05
+    unlock.BorderSizePixel = 0
+    unlock.AutoButtonColor = false
+    unlock.Text = "Unlock"
+    unlock.TextColor3 = Color3.fromRGB(20, 17, 8)
+    unlock.TextSize = 12
+    unlock.Font = Enum.Font.GothamBold
+    unlock.Position = UDim2.new(1, -108, 0, 76)
+    unlock.Size = UDim2.fromOffset(90, 40)
+    unlock.Parent = gate
+    corner(unlock, 9)
+
+    local status = text(gate, "Locked", 11, Theme.Muted, Enum.Font.GothamMedium)
+    status.Position = UDim2.fromOffset(18, 127)
+    status.Size = UDim2.new(1, -36, 0, 20)
+
+    local dashboard = Instance.new("Frame")
+    dashboard.Name = "ExecutionDashboard"
+    dashboard.BackgroundColor3 = Theme.Surface
+    dashboard.BackgroundTransparency = 0.18
+    dashboard.BorderSizePixel = 0
+    dashboard.Size = UDim2.new(1, 0, 0, 470)
+    dashboard.Visible = false
+    dashboard.Parent = adminPage
+    corner(dashboard, 13)
+    stroke(dashboard, Theme.Border, 0.64)
+
+    local dashTitle = text(dashboard, "Global Execution Log", 17, Theme.Text, Enum.Font.GothamBold)
+    dashTitle.Position = UDim2.fromOffset(18, 14)
+    dashTitle.Size = UDim2.new(1, -160, 0, 25)
+
+    local dashNote = text(dashboard, "Backend-ready • username, UserId, game, server, version and public stats", 10, Theme.SubText, Enum.Font.Gotham)
+    dashNote.Position = UDim2.fromOffset(18, 39)
+    dashNote.Size = UDim2.new(1, -36, 0, 18)
+
+    local countBadge = text(dashboard, "0 RECORDS", 9, Theme.Green, Enum.Font.GothamBold)
+    countBadge.BackgroundColor3 = Theme.WindowTop
+    countBadge.BackgroundTransparency = 0.10
+    countBadge.TextXAlignment = Enum.TextXAlignment.Center
+    countBadge.Position = UDim2.new(1, -112, 0, 17)
+    countBadge.Size = UDim2.fromOffset(94, 24)
+    corner(countBadge, 8)
+
+    local searchBox = Instance.new("TextBox")
+    searchBox.Name = "ExecutionSearch"
+    searchBox.BackgroundColor3 = Theme.WindowTop
+    searchBox.BackgroundTransparency = 0.10
+    searchBox.BorderSizePixel = 0
+    searchBox.ClearTextOnFocus = false
+    searchBox.PlaceholderText = "Search username, UserId, game or server..."
+    searchBox.PlaceholderColor3 = Theme.Muted
+    searchBox.Text = ""
+    searchBox.TextColor3 = Theme.Text
+    searchBox.TextSize = 11
+    searchBox.Font = Enum.Font.Gotham
+    searchBox.TextXAlignment = Enum.TextXAlignment.Left
+    searchBox.Position = UDim2.fromOffset(18, 67)
+    searchBox.Size = UDim2.new(1, -124, 0, 34)
+    searchBox.Parent = dashboard
+    corner(searchBox, 8)
+    stroke(searchBox, Theme.Border, 0.75)
+    padding(searchBox, 11, 0, 11, 0)
+
+    local refresh = Instance.new("TextButton")
+    refresh.Name = "Refresh"
+    refresh.BackgroundColor3 = Theme.WindowTop
+    refresh.BackgroundTransparency = 0.05
+    refresh.BorderSizePixel = 0
+    refresh.AutoButtonColor = false
+    refresh.Text = "↻"
+    refresh.TextColor3 = Theme.Text
+    refresh.TextSize = 17
+    refresh.Font = Enum.Font.GothamBold
+    refresh.Position = UDim2.new(1, -94, 0, 67)
+    refresh.Size = UDim2.fromOffset(76, 34)
+    refresh.Parent = dashboard
+    corner(refresh, 8)
+    stroke(refresh, Theme.Border, 0.72)
+
+    local list = Instance.new("ScrollingFrame")
+    list.Name = "ExecutionList"
+    list.BackgroundTransparency = 1
+    list.BorderSizePixel = 0
+    list.Position = UDim2.fromOffset(14, 112)
+    list.Size = UDim2.new(1, -28, 1, -126)
+    list.CanvasSize = UDim2.new()
+    list.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    list.ScrollBarThickness = 3
+    list.ScrollBarImageColor3 = Theme.Border
+    list.Parent = dashboard
+
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 7)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = list
+
+    local function clearList()
+        for _, child in ipairs(list:GetChildren()) do
+            if child:IsA("Frame") then
+                child:Destroy()
+            end
+        end
+    end
+
+    local function stringifyStats(stats)
+        if type(stats) ~= "table" then
+            return "No public stats supplied"
+        end
+        local parts = {}
+        for key, value in pairs(stats) do
+            table.insert(parts, tostring(key) .. ": " .. tostring(value))
+        end
+        table.sort(parts)
+        return #parts > 0 and table.concat(parts, "  •  ") or "No public stats supplied"
+    end
+
+    local function matches(record, query)
+        if query == "" then return true end
+        local haystack = table.concat({
+            tostring(record.Username or ""),
+            tostring(record.DisplayName or ""),
+            tostring(record.UserId or ""),
+            tostring(record.Game or ""),
+            tostring(record.PlaceId or ""),
+            tostring(record.Server or ""),
+            tostring(record.JobId or ""),
+            tostring(record.Version or ""),
+        }, " "):lower()
+        return string.find(haystack, query:lower(), 1, true) ~= nil
+    end
+
+    local function renderExecutions()
+        if not adminUnlocked then return end
+        clearList()
+        local query = searchBox.Text or ""
+        filteredExecutions = {}
+        for _, record in ipairs(adminExecutions) do
+            if matches(record, query) then
+                table.insert(filteredExecutions, record)
+            end
+        end
+
+        countBadge.Text = tostring(#filteredExecutions) .. " RECORDS"
+
+        if #filteredExecutions == 0 then
+            local empty = Instance.new("Frame")
+            empty.BackgroundColor3 = Theme.WindowTop
+            empty.BackgroundTransparency = 0.20
+            empty.BorderSizePixel = 0
+            empty.Size = UDim2.new(1, -2, 0, 92)
+            empty.Parent = list
+            corner(empty, 10)
+
+            local emptyTitle = text(empty, "No executions yet", 13, Theme.Text, Enum.Font.GothamSemibold)
+            emptyTitle.Position = UDim2.fromOffset(14, 18)
+            emptyTitle.Size = UDim2.new(1, -28, 0, 20)
+            emptyTitle.TextXAlignment = Enum.TextXAlignment.Center
+
+            local emptyNote = text(empty, "Feed records with UI:SetAdminExecutions(entries)", 10, Theme.Muted, Enum.Font.Gotham)
+            emptyNote.Position = UDim2.fromOffset(14, 44)
+            emptyNote.Size = UDim2.new(1, -28, 0, 18)
+            emptyNote.TextXAlignment = Enum.TextXAlignment.Center
+            return
+        end
+
+        for index, record in ipairs(filteredExecutions) do
+            local row = Instance.new("Frame")
+            row.Name = "Execution_" .. index
+            row.BackgroundColor3 = Theme.WindowTop
+            row.BackgroundTransparency = 0.14
+            row.BorderSizePixel = 0
+            row.Size = UDim2.new(1, -2, 0, 86)
+            row.Parent = list
+            corner(row, 9)
+
+            local user = text(row, tostring(record.Username or "Unknown"), 12, Theme.Text, Enum.Font.GothamSemibold)
+            user.Position = UDim2.fromOffset(12, 8)
+            user.Size = UDim2.new(0.42, 0, 0, 18)
+
+            local display = record.DisplayName and ("Display: " .. tostring(record.DisplayName)) or ""
+            local uid = record.UserId and ("UserId: " .. tostring(record.UserId)) or ""
+            local identity = text(row, display .. ((display ~= "" and uid ~= "") and "  •  " or "") .. uid, 9, Theme.SubText, Enum.Font.Gotham)
+            identity.Position = UDim2.fromOffset(12, 29)
+            identity.Size = UDim2.new(0.62, 0, 0, 15)
+            identity.TextTruncate = Enum.TextTruncate.AtEnd
+
+            local gameInfo = text(row, tostring(record.Game or "Unknown game") .. "  •  Place " .. tostring(record.PlaceId or "?"), 9, Theme.SubText, Enum.Font.Gotham)
+            gameInfo.Position = UDim2.new(0.44, 0, 8, 0)
+            gameInfo.Size = UDim2.new(0.54, -12, 0, 18)
+            gameInfo.TextXAlignment = Enum.TextXAlignment.Right
+            gameInfo.TextTruncate = Enum.TextTruncate.AtEnd
+
+            local server = text(row, "Server: " .. tostring(record.Server or record.JobId or "Unknown"), 9, Theme.Muted, Enum.Font.Gotham)
+            server.Position = UDim2.fromOffset(12, 48)
+            server.Size = UDim2.new(0.58, 0, 0, 15)
+            server.TextTruncate = Enum.TextTruncate.AtEnd
+
+            local version = text(row, "V" .. tostring(record.Version or "3.2.2") .. "  •  " .. tostring(record.Timestamp or ""), 9, Theme.Muted, Enum.Font.Gotham)
+            version.Position = UDim2.new(0.42, 0, 48, 0)
+            version.Size = UDim2.new(0.56, -12, 0, 15)
+            version.TextXAlignment = Enum.TextXAlignment.Right
+            version.TextTruncate = Enum.TextTruncate.AtEnd
+
+            local stats = text(row, stringifyStats(record.Stats), 9, Theme.Muted, Enum.Font.Gotham)
+            stats.Position = UDim2.fromOffset(12, 67)
+            stats.Size = UDim2.new(1, -24, 0, 14)
+            stats.TextTruncate = Enum.TextTruncate.AtEnd
+        end
+    end
+
+    function UI:SetAdminExecutions(entries)
+        if type(entries) ~= "table" then
+            entries = {}
+        end
+        adminExecutions = {}
+        for _, record in ipairs(entries) do
+            if type(record) == "table" then
+                table.insert(adminExecutions, record)
+            end
+        end
+        if adminUnlocked then
+            renderExecutions()
+        end
+    end
+
+    function UI:AddAdminExecution(record)
+        if type(record) ~= "table" then return end
+        table.insert(adminExecutions, 1, record)
+        if adminUnlocked then
+            renderExecutions()
+        end
+    end
+
+    local function unlockAdmin()
+        if passwordBox.Text == ADMIN_PASSWORD then
+            adminUnlocked = true
+            status.Text = "Unlocked • admin dashboard active"
+            status.TextColor3 = Theme.Green
+            gate.Visible = false
+            dashboard.Visible = true
+            renderExecutions()
+        else
+            status.Text = "Incorrect password"
+            status.TextColor3 = Theme.Red
+            task.delay(0.8, function()
+                if status.Parent then
+                    status.Text = "Locked"
+                    status.TextColor3 = Theme.Muted
+                end
+            end)
+        end
+    end
+
+    unlock.MouseButton1Click:Connect(unlockAdmin)
+    passwordBox.FocusLost:Connect(function(enterPressed)
+        if enterPressed then unlockAdmin() end
+    end)
+
+    searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+        if adminUnlocked then renderExecutions() end
+    end)
+
+    refresh.MouseButton1Click:Connect(function()
+        if adminUnlocked then renderExecutions() end
+    end)
+end
+
+-- ============================================================
+-- BACKEND EXECUTION LOGGER
+-- ============================================================
+-- This is a backend-facing interface. The client sends only the execution
+-- record to an endpoint that YOU control. The backend is responsible for
+-- persistence and posting the Discord embed with its own webhook secret.
+-- Do not put a Discord webhook URL in this client file.
+--
+-- Expected backend request:
+--   POST <Endpoint>
+--   Content-Type: application/json
+--   {
+--      "event": "empire.execution",
+--      "record": { ... }
+--   }
+--
+-- Expected backend response is optional. A JSON response may contain:
+--   {"ok":true}
+--
+-- Discord embed contract generated by UI:BuildDiscordEmbed(record):
+--   {
+--      title = "🏢 Empire • Script Executed",
+--      description = "Username executed Empire",
+--      color = 0xFFC44A,
+--      fields = {...},
+--      footer = {text = "Empire V3.2.2"},
+--      timestamp = "<ISO-8601 UTC>"
+--   }
+
+UI.ExecutionLogger = {
+    Enabled = false,
+    Endpoint = "",
+    Timeout = 8,
+    LastError = nil,
+    LastResponse = nil,
+}
+
+local function findRequestFunction()
+    local candidates = {
+        rawget(getgenv and getgenv() or _G, "request"),
+        rawget(getgenv and getgenv() or _G, "http_request"),
+        rawget(getgenv and getgenv() or _G, "http") and rawget(getgenv and getgenv() or _G, "http").request,
+        rawget(getgenv and getgenv() or _G, "syn") and rawget(getgenv and getgenv() or _G, "syn").request,
+    }
+    for _, fn in ipairs(candidates) do
+        if type(fn) == "function" then
+            return fn
+        end
+    end
+    return nil
+end
+
+local function safeJson(value)
+    local ok, encoded = pcall(function()
+        return HttpService:JSONEncode(value)
+    end)
+    return ok and encoded or nil
+end
+
+local function isoTimestamp()
+    return os.date("!%Y-%m-%dT%H:%M:%SZ")
+end
+
+local function normaliseRecord(record)
+    record = type(record) == "table" and record or {}
+    local localPlayer = Players.LocalPlayer
+
+    local out = {
+        Username = record.Username or (localPlayer and localPlayer.Name) or "Unknown",
+        DisplayName = record.DisplayName or (localPlayer and localPlayer.DisplayName) or "Unknown",
+        UserId = tonumber(record.UserId) or (localPlayer and localPlayer.UserId) or 0,
+        Game = record.Game or "Unknown",
+        PlaceId = tonumber(record.PlaceId) or game.PlaceId,
+        Server = record.Server or record.JobId or game.JobId or "Unknown",
+        JobId = record.JobId or game.JobId or "Unknown",
+        Version = record.Version or "3.2.2",
+        Timestamp = record.Timestamp or isoTimestamp(),
+        Stats = type(record.Stats) == "table" and record.Stats or {},
+    }
+    return out
+end
+
+function UI:ConfigureExecutionLogger(config)
+    config = type(config) == "table" and config or {}
+    self.ExecutionLogger.Endpoint = tostring(config.Endpoint or self.ExecutionLogger.Endpoint or "")
+    self.ExecutionLogger.Enabled = config.Enabled == true
+    self.ExecutionLogger.Timeout = tonumber(config.Timeout) or 8
+    self.ExecutionLogger.LastError = nil
+    return self.ExecutionLogger
+end
+
+function UI:BuildBackendPayload(record)
+    record = normaliseRecord(record)
+    return {
+        event = "empire.execution",
+        source = "Empire",
+        version = record.Version,
+        timestamp = record.Timestamp,
+        record = record,
+    }
+end
+
+function UI:BuildDiscordEmbed(record)
+    record = normaliseRecord(record)
+
+    local statLines = {}
+    for key, value in pairs(record.Stats) do
+        table.insert(statLines, tostring(key) .. ": " .. tostring(value))
+    end
+    table.sort(statLines)
+
+    local fields = {
+        {
+            name = "Player",
+            value = string.format("%s (@%s)", tostring(record.DisplayName), tostring(record.Username)),
+            inline = true,
+        },
+        {
+            name = "UserId",
+            value = tostring(record.UserId),
+            inline = true,
+        },
+        {
+            name = "Game",
+            value = string.format("%s\nPlaceId: `%s`", tostring(record.Game), tostring(record.PlaceId)),
+            inline = true,
+        },
+        {
+            name = "Server",
+            value = "`" .. tostring(record.JobId or record.Server) .. "`",
+            inline = false,
+        },
+    }
+
+    if #statLines > 0 then
+        table.insert(fields, {
+            name = "Public Stats",
+            value = table.concat(statLines, "\n"):sub(1, 1024),
+            inline = false,
+        })
+    end
+
+    return {
+        title = "🏢 Empire • Script Executed",
+        description = string.format("**%s** executed Empire.", tostring(record.Username)),
+        color = 16761930,
+        fields = fields,
+        footer = {text = "Empire V" .. tostring(record.Version)},
+        timestamp = record.Timestamp,
+    }
+end
+
+function UI:BuildDiscordWebhookPayload(record)
+    return {
+        username = "Empire Logger",
+        embeds = {self:BuildDiscordEmbed(record)},
+    }
+end
+
+function UI:SendExecutionLog(record)
+    local logger = self.ExecutionLogger
+    if not logger.Enabled or logger.Endpoint == "" then
+        return false, "Execution logger is disabled or has no backend endpoint."
+    end
+
+    local requestFn = findRequestFunction()
+    if not requestFn then
+        return false, "No executor HTTP request function is available."
+    end
+
+    local payload = self:BuildBackendPayload(record)
+    local body = safeJson(payload)
+    if not body then
+        return false, "Unable to JSON-encode execution payload."
+    end
+
+    local ok, response = pcall(function()
+        return requestFn({
+            Url = logger.Endpoint,
+            Method = "POST",
+            Headers = {
+                ["Content-Type"] = "application/json",
+            },
+            Body = body,
+        })
+    end)
+
+    if not ok then
+        logger.LastError = tostring(response)
+        return false, logger.LastError
+    end
+
+    logger.LastResponse = response
+    logger.LastError = nil
+    return true, response
+end
+
+-- Convenience helper: add to the local Admin dashboard and optionally send
+-- the same record to your backend. The backend should then persist it and
+-- post BuildDiscordWebhookPayload(record) to Discord using its secret.
+function UI:LogExecution(record)
+    record = normaliseRecord(record)
+    self:AddAdminExecution(record)
+    if self.ExecutionLogger.Enabled then
+        task.spawn(function()
+            self:SendExecutionLog(record)
+        end)
+    end
+    return record
+end
+
+-- Expose a small, non-sensitive schema for a trusted backend to feed into
+-- the dashboard. Example record fields:
+-- Username, DisplayName, UserId, Game, PlaceId, Server/JobId,
+-- Version, Timestamp, Stats.
+UI.AdminRecordSchema = {
+    "Username", "DisplayName", "UserId", "Game", "PlaceId",
+    "Server", "JobId", "Version", "Timestamp", "Stats"
+}
 
 return UI
