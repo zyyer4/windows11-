@@ -39,15 +39,15 @@ local Theme = {
 }
 
 local Tabs = {
-    {Title = "Farming", Emoji = "💪", Description = "Strength grinding and farming."},
-    {Title = "Rebirth", Emoji = "🔄", Description = "Rebirth tools and settings."},
-    {Title = "Pets", Emoji = "🐾", Description = "Pet management."},
-    {Title = "Player", Emoji = "👤", Description = "Player settings."},
-    {Title = "Killing", Emoji = "⚔️", Description = "Combat tools."},
-    {Title = "Stats", Emoji = "📊", Description = "Statistics and session information."},
-    {Title = "Admin", Emoji = "🛡️", Description = "Private local admin tools and current-server viewer information."},
-    {Title = "Perf", Emoji = "💻", Description = "Performance settings."},
-    {Title = "Misc", Emoji = "⚙️", Description = "Miscellaneous settings."},
+    {Title = "Farming", Emoji = "F", Description = "Strength grinding and farming."},
+    {Title = "Rebirth", Emoji = "R", Description = "Rebirth tools and settings."},
+    {Title = "Pets", Emoji = "P", Description = "Pet management."},
+    {Title = "Player", Emoji = "U", Description = "Player settings."},
+    {Title = "Killing", Emoji = "K", Description = "Combat tools."},
+    {Title = "Stats", Emoji = "S", Description = "Statistics and session information."},
+    {Title = "Admin", Emoji = "A", Description = "Global execution monitoring and admin tools."},
+    {Title = "Perf", Emoji = "P", Description = "Performance settings."},
+    {Title = "Misc", Emoji = "M", Description = "Miscellaneous settings."},
     {Title = "Info", Emoji = "i", Description = "Credits and community links."},
 }
 
@@ -327,7 +327,7 @@ function UI:CreateWindow(config)
 
     -- Emoji overlay: Roblox supports emoji text, but glyph availability can vary;
     -- the vector mark underneath keeps the branding visible if the emoji font is missing.
-    local leftBuildingEmoji = text(header, "🏢", 23, Theme.Text, Enum.Font.Gotham)
+    local leftBuildingEmoji = text(header, "", 23, Theme.Text, Enum.Font.Gotham)
     leftBuildingEmoji.Position = UDim2.fromOffset(87, 8)
     leftBuildingEmoji.Size = UDim2.fromOffset(32, 32)
     leftBuildingEmoji.TextXAlignment = Enum.TextXAlignment.Center
@@ -350,7 +350,7 @@ function UI:CreateWindow(config)
     local rightBuilding = makeBuildingMark(header, 0, 10, 0.82)
     self.RightBrandMark = rightBuilding
 
-    local rightBuildingEmoji = text(header, "🏢", 20, Theme.Text, Enum.Font.Gotham)
+    local rightBuildingEmoji = text(header, "", 20, Theme.Text, Enum.Font.Gotham)
     rightBuildingEmoji.Position = UDim2.fromOffset(0, 10)
     rightBuildingEmoji.Size = UDim2.fromOffset(28, 28)
     rightBuildingEmoji.TextXAlignment = Enum.TextXAlignment.Center
@@ -368,7 +368,7 @@ function UI:CreateWindow(config)
 
     local subtitle = text(
         header,
-        config.Subtitle or ("Logged in as : " .. ((Players.LocalPlayer and Players.LocalPlayer.Name) or "Unknown") .. "  •  V3.2.2"),
+        config.Subtitle or ("Logged in as : " .. ((Players.LocalPlayer and Players.LocalPlayer.Name) or "Unknown") .. "  -  V3.2.2"),
         12,
         Theme.SubText
     )
@@ -672,14 +672,14 @@ function UI:Minimize()
 
     makePillBuilding(open)
 
-    local pillEmoji = text(open, "🏢", 20, Theme.Text, Enum.Font.Gotham)
+    local pillEmoji = text(open, "", 20, Theme.Text, Enum.Font.Gotham)
     pillEmoji.Position = UDim2.fromOffset(32, 7)
     pillEmoji.Size = UDim2.fromOffset(32, 30)
     pillEmoji.TextXAlignment = Enum.TextXAlignment.Center
     pillEmoji.TextYAlignment = Enum.TextYAlignment.Center
     pillEmoji.ZIndex = 3
 
-    local rightPillEmoji = text(open, "🏢", 20, Theme.Text, Enum.Font.Gotham)
+    local rightPillEmoji = text(open, "", 20, Theme.Text, Enum.Font.Gotham)
     rightPillEmoji.Position = UDim2.fromOffset(149, 7)
     rightPillEmoji.Size = UDim2.fromOffset(30, 30)
     rightPillEmoji.TextXAlignment = Enum.TextXAlignment.Center
@@ -814,7 +814,7 @@ function UI:AddTab(config)
     local tab = {
         Window = self,
         Title = config.Title or ("Tab " .. tostring(#self.Tabs + 1)),
-        Emoji = config.Emoji or "•",
+        Emoji = config.Emoji or "-",
         Description = config.Description or "",
         Accent = config.Accent or Theme.Green,
     }
@@ -1000,6 +1000,7 @@ function UI:SetTitle(titleValue, subtitleValue)
 end
 
 function UI:Destroy()
+    self:StopGlobalExecutionFeed()
     if self._inputConnection then
         self._inputConnection:Disconnect()
         self._inputConnection = nil
@@ -1016,7 +1017,7 @@ end
 
 local Window = UI:CreateWindow({
     Title = "Empire",
-    Subtitle = "Logged in as : " .. ((Players.LocalPlayer and Players.LocalPlayer.Name) or "Unknown") .. " • V3.2.2",
+    Subtitle = "Logged in as : " .. ((Players.LocalPlayer and Players.LocalPlayer.Name) or "Unknown") .. " - V3.2.2",
     Size = UDim2.fromScale(0.70, 0.76),
     ContentTitle = "Stats",
     ContentSubtitle = "Select a tab to begin building your interface.",
@@ -1099,17 +1100,20 @@ if InfoTab then
         corner(icon, 9)
 
         if labelText == "YouTube" then
-            local triangle = Instance.new("TextLabel")
-            triangle.BackgroundTransparency = 1
-            triangle.Text = "▶"
-            triangle.TextColor3 = Color3.fromRGB(255,255,255)
-            triangle.TextSize = 15
-            triangle.Font = Enum.Font.GothamBold
-            triangle.TextXAlignment = Enum.TextXAlignment.Center
-            triangle.TextYAlignment = Enum.TextYAlignment.Center
-            triangle.Position = UDim2.fromOffset(8, 7)
-            triangle.Size = UDim2.fromOffset(16, 18)
-            triangle.Parent = icon
+            local play = Instance.new("Frame")
+            play.BackgroundColor3 = Color3.fromRGB(255,255,255)
+            play.BorderSizePixel = 0
+            play.Position = UDim2.fromOffset(11, 8)
+            play.Size = UDim2.fromOffset(12, 16)
+            play.Parent = icon
+            corner(play, 2)
+            local cut = Instance.new("Frame")
+            cut.BackgroundColor3 = accent
+            cut.BorderSizePixel = 0
+            cut.Position = UDim2.fromOffset(11, 11)
+            cut.Size = UDim2.fromOffset(7, 10)
+            cut.Rotation = 45
+            cut.Parent = icon
         else
             -- Simple Discord-like glyph built from reliable UI primitives.
             local head = Instance.new("Frame")
@@ -1238,11 +1242,11 @@ if AdminTab then
     corner(dashboard, 13)
     stroke(dashboard, Theme.Border, 0.64)
 
-    local dashTitle = text(dashboard, "Global Execution Log", 17, Theme.Text, Enum.Font.GothamBold)
+    local dashTitle = text(dashboard, "Global Current Executions", 17, Theme.Text, Enum.Font.GothamBold)
     dashTitle.Position = UDim2.fromOffset(18, 14)
     dashTitle.Size = UDim2.new(1, -160, 0, 25)
 
-    local dashNote = text(dashboard, "Backend-ready • username, UserId, game, server, version and public stats", 10, Theme.SubText, Enum.Font.Gotham)
+    local dashNote = text(dashboard, "Backend-ready - username, UserId, game, server, version and public stats", 10, Theme.SubText, Enum.Font.Gotham)
     dashNote.Position = UDim2.fromOffset(18, 39)
     dashNote.Size = UDim2.new(1, -36, 0, 18)
 
@@ -1280,7 +1284,7 @@ if AdminTab then
     refresh.BackgroundTransparency = 0.05
     refresh.BorderSizePixel = 0
     refresh.AutoButtonColor = false
-    refresh.Text = "↻"
+    refresh.Text = "R"
     refresh.TextColor3 = Theme.Text
     refresh.TextSize = 17
     refresh.Font = Enum.Font.GothamBold
@@ -1324,7 +1328,7 @@ if AdminTab then
             table.insert(parts, tostring(key) .. ": " .. tostring(value))
         end
         table.sort(parts)
-        return #parts > 0 and table.concat(parts, "  •  ") or "No public stats supplied"
+        return #parts > 0 and table.concat(parts, "  -  ") or "No public stats supplied"
     end
 
     local function matches(record, query)
@@ -1369,7 +1373,7 @@ if AdminTab then
             emptyTitle.Size = UDim2.new(1, -28, 0, 20)
             emptyTitle.TextXAlignment = Enum.TextXAlignment.Center
 
-            local emptyNote = text(empty, "Feed records with UI:SetAdminExecutions(entries)", 10, Theme.Muted, Enum.Font.Gotham)
+            local emptyNote = text(empty, "No current global executions were returned by the Discord bridge.", 10, Theme.Muted, Enum.Font.Gotham)
             emptyNote.Position = UDim2.fromOffset(14, 44)
             emptyNote.Size = UDim2.new(1, -28, 0, 18)
             emptyNote.TextXAlignment = Enum.TextXAlignment.Center
@@ -1392,12 +1396,12 @@ if AdminTab then
 
             local display = record.DisplayName and ("Display: " .. tostring(record.DisplayName)) or ""
             local uid = record.UserId and ("UserId: " .. tostring(record.UserId)) or ""
-            local identity = text(row, display .. ((display ~= "" and uid ~= "") and "  •  " or "") .. uid, 9, Theme.SubText, Enum.Font.Gotham)
+            local identity = text(row, display .. ((display ~= "" and uid ~= "") and "  -  " or "") .. uid, 9, Theme.SubText, Enum.Font.Gotham)
             identity.Position = UDim2.fromOffset(12, 29)
             identity.Size = UDim2.new(0.62, 0, 0, 15)
             identity.TextTruncate = Enum.TextTruncate.AtEnd
 
-            local gameInfo = text(row, tostring(record.Game or "Unknown game") .. "  •  Place " .. tostring(record.PlaceId or "?"), 9, Theme.SubText, Enum.Font.Gotham)
+            local gameInfo = text(row, tostring(record.Game or "Unknown game") .. "  -  Place " .. tostring(record.PlaceId or "?"), 9, Theme.SubText, Enum.Font.Gotham)
             gameInfo.Position = UDim2.new(0.44, 0, 8, 0)
             gameInfo.Size = UDim2.new(0.54, -12, 0, 18)
             gameInfo.TextXAlignment = Enum.TextXAlignment.Right
@@ -1408,7 +1412,7 @@ if AdminTab then
             server.Size = UDim2.new(0.58, 0, 0, 15)
             server.TextTruncate = Enum.TextTruncate.AtEnd
 
-            local version = text(row, "V" .. tostring(record.Version or "3.2.2") .. "  •  " .. tostring(record.Timestamp or ""), 9, Theme.Muted, Enum.Font.Gotham)
+            local version = text(row, "V" .. tostring(record.Version or "3.2.2") .. "  -  " .. tostring(record.Timestamp or ""), 9, Theme.Muted, Enum.Font.Gotham)
             version.Position = UDim2.new(0.42, 0, 48, 0)
             version.Size = UDim2.new(0.56, -12, 0, 15)
             version.TextXAlignment = Enum.TextXAlignment.Right
@@ -1447,7 +1451,7 @@ if AdminTab then
     local function unlockAdmin()
         if passwordBox.Text == ADMIN_PASSWORD then
             adminUnlocked = true
-            status.Text = "Unlocked • admin dashboard active"
+            status.Text = "Unlocked - admin dashboard active"
             status.TextColor3 = Theme.Green
             gate.Visible = false
             dashboard.Visible = true
@@ -1474,43 +1478,39 @@ if AdminTab then
     end)
 
     refresh.MouseButton1Click:Connect(function()
-        if adminUnlocked then renderExecutions() end
+        if adminUnlocked then
+            refresh.Text = "..."
+            task.spawn(function()
+                local ok = false
+                if UI.ExecutionLogger.PollEndpoint ~= "" then
+                    ok = UI:FetchGlobalExecutions()
+                end
+                if not ok then
+                    renderExecutions()
+                end
+                refresh.Text = "R"
+            end)
+        end
     end)
 end
 
 -- ============================================================
--- BACKEND EXECUTION LOGGER
+-- DISCORD EXECUTION LOGGER + GLOBAL CURRENT FEED
 -- ============================================================
--- This is a backend-facing interface. The client sends only the execution
--- record to an endpoint that YOU control. The backend is responsible for
--- persistence and posting the Discord embed with its own webhook secret.
--- Do not put a Discord webhook URL in this client file.
+-- Discord webhook = execution reporting.
+-- Tiny Discord bridge = reads the same channel for the Admin tab.
+-- No database is used.
 --
--- Expected backend request:
---   POST <Endpoint>
---   Content-Type: application/json
---   {
---      "event": "empire.execution",
---      "record": { ... }
---   }
---
--- Expected backend response is optional. A JSON response may contain:
---   {"ok":true}
---
--- Discord embed contract generated by UI:BuildDiscordEmbed(record):
---   {
---      title = "🏢 Empire • Script Executed",
---      description = "Username executed Empire",
---      color = 0xFFC44A,
---      fields = {...},
---      footer = {text = "Empire V3.2.2"},
---      timestamp = "<ISO-8601 UTC>"
---   }
+-- IMPORTANT: replace the two placeholder URLs below with your own values.
+-- The Discord webhook is used only to POST the execution embed.
+-- The bridge URL is the public URL of the tiny Discord bot's /executions endpoint.
 
 UI.ExecutionLogger = {
     Enabled = false,
-    Endpoint = "",
+    Webhook = "",
+    PollEndpoint = "",
     Timeout = 8,
+    PollInterval = 8,
     LastError = nil,
     LastResponse = nil,
 }
@@ -1545,7 +1545,7 @@ local function normaliseRecord(record)
     record = type(record) == "table" and record or {}
     local localPlayer = Players.LocalPlayer
 
-    local out = {
+    return {
         Username = record.Username or (localPlayer and localPlayer.Name) or "Unknown",
         DisplayName = record.DisplayName or (localPlayer and localPlayer.DisplayName) or "Unknown",
         UserId = tonumber(record.UserId) or (localPlayer and localPlayer.UserId) or 0,
@@ -1553,31 +1553,22 @@ local function normaliseRecord(record)
         PlaceId = tonumber(record.PlaceId) or game.PlaceId,
         Server = record.Server or record.JobId or game.JobId or "Unknown",
         JobId = record.JobId or game.JobId or "Unknown",
+        Executor = record.Executor or "Unknown",
         Version = record.Version or "3.2.2",
         Timestamp = record.Timestamp or isoTimestamp(),
         Stats = type(record.Stats) == "table" and record.Stats or {},
     }
-    return out
 end
 
 function UI:ConfigureExecutionLogger(config)
     config = type(config) == "table" and config or {}
-    self.ExecutionLogger.Endpoint = tostring(config.Endpoint or self.ExecutionLogger.Endpoint or "")
+    self.ExecutionLogger.Webhook = tostring(config.Webhook or self.ExecutionLogger.Webhook or "")
+    self.ExecutionLogger.PollEndpoint = tostring(config.PollEndpoint or self.ExecutionLogger.PollEndpoint or "")
     self.ExecutionLogger.Enabled = config.Enabled == true
     self.ExecutionLogger.Timeout = tonumber(config.Timeout) or 8
+    self.ExecutionLogger.PollInterval = tonumber(config.PollInterval) or 8
     self.ExecutionLogger.LastError = nil
     return self.ExecutionLogger
-end
-
-function UI:BuildBackendPayload(record)
-    record = normaliseRecord(record)
-    return {
-        event = "empire.execution",
-        source = "Empire",
-        version = record.Version,
-        timestamp = record.Timestamp,
-        record = record,
-    }
 end
 
 function UI:BuildDiscordEmbed(record)
@@ -1606,9 +1597,14 @@ function UI:BuildDiscordEmbed(record)
             inline = true,
         },
         {
-            name = "Server",
+            name = "Server / JobId",
             value = "`" .. tostring(record.JobId or record.Server) .. "`",
             inline = false,
+        },
+        {
+            name = "Executor",
+            value = tostring(record.Executor),
+            inline = true,
         },
     }
 
@@ -1621,7 +1617,7 @@ function UI:BuildDiscordEmbed(record)
     end
 
     return {
-        title = "🏢 Empire • Script Executed",
+        title = "EMPIRE | SCRIPT EXECUTED",
         description = string.format("**%s** executed Empire.", tostring(record.Username)),
         color = 16761930,
         fields = fields,
@@ -1639,8 +1635,8 @@ end
 
 function UI:SendExecutionLog(record)
     local logger = self.ExecutionLogger
-    if not logger.Enabled or logger.Endpoint == "" then
-        return false, "Execution logger is disabled or has no backend endpoint."
+    if not logger.Enabled or logger.Webhook == "" then
+        return false, "Discord execution logger is disabled or has no webhook."
     end
 
     local requestFn = findRequestFunction()
@@ -1648,15 +1644,14 @@ function UI:SendExecutionLog(record)
         return false, "No executor HTTP request function is available."
     end
 
-    local payload = self:BuildBackendPayload(record)
-    local body = safeJson(payload)
+    local body = safeJson(self:BuildDiscordWebhookPayload(record))
     if not body then
-        return false, "Unable to JSON-encode execution payload."
+        return false, "Unable to JSON-encode Discord payload."
     end
 
     local ok, response = pcall(function()
         return requestFn({
-            Url = logger.Endpoint,
+            Url = logger.Webhook,
             Method = "POST",
             Headers = {
                 ["Content-Type"] = "application/json",
@@ -1675,12 +1670,70 @@ function UI:SendExecutionLog(record)
     return true, response
 end
 
--- Convenience helper: add to the local Admin dashboard and optionally send
--- the same record to your backend. The backend should then persist it and
--- post BuildDiscordWebhookPayload(record) to Discord using its secret.
+function UI:FetchGlobalExecutions()
+    local logger = self.ExecutionLogger
+    if not logger.Enabled or logger.PollEndpoint == "" then
+        return false, "Global current feed is disabled or has no bridge endpoint."
+    end
+
+    local requestFn = findRequestFunction()
+    if not requestFn then
+        return false, "No executor HTTP request function is available."
+    end
+
+    local ok, response = pcall(function()
+        return requestFn({
+            Url = logger.PollEndpoint,
+            Method = "GET",
+            Headers = { ["Accept"] = "application/json" },
+        })
+    end)
+
+    if not ok then
+        logger.LastError = tostring(response)
+        return false, logger.LastError
+    end
+
+    local body = type(response) == "table" and (response.Body or response.body) or response
+    if type(body) ~= "string" then
+        return false, "Global current feed returned no response body."
+    end
+
+    local decodedOk, data = pcall(function()
+        return HttpService:JSONDecode(body)
+    end)
+    if not decodedOk or type(data) ~= "table" then
+        logger.LastError = "Global current feed returned invalid JSON."
+        return false, logger.LastError
+    end
+
+    local entries = data.executions or data.entries or data.records
+    if type(entries) == "table" then
+        self:SetAdminExecutions(entries)
+        logger.LastError = nil
+        return true, entries
+    end
+
+    return false, "Global current feed returned no executions array."
+end
+
+function UI:StartGlobalExecutionFeed()
+    if self._globalFeedRunning then return end
+    self._globalFeedRunning = true
+    task.spawn(function()
+        while self._globalFeedRunning and self.Gui and self.Gui.Parent do
+            pcall(function() self:FetchGlobalExecutions() end)
+            task.wait(self.ExecutionLogger.PollInterval or 8)
+        end
+    end)
+end
+
+function UI:StopGlobalExecutionFeed()
+    self._globalFeedRunning = false
+end
+
 function UI:LogExecution(record)
     record = normaliseRecord(record)
-    self:AddAdminExecution(record)
     if self.ExecutionLogger.Enabled then
         task.spawn(function()
             self:SendExecutionLog(record)
@@ -1689,13 +1742,72 @@ function UI:LogExecution(record)
     return record
 end
 
--- Expose a small, non-sensitive schema for a trusted backend to feed into
--- the dashboard. Example record fields:
--- Username, DisplayName, UserId, Game, PlaceId, Server/JobId,
--- Version, Timestamp, Stats.
 UI.AdminRecordSchema = {
     "Username", "DisplayName", "UserId", "Game", "PlaceId",
-    "Server", "JobId", "Version", "Timestamp", "Stats"
+    "Server", "JobId", "Executor", "Version", "Timestamp", "Stats"
 }
+
+-- ============================================================
+-- AUTO GLOBAL CURRENT TELEMETRY
+-- ============================================================
+-- Discord webhook: paste your webhook URL here.
+local EMPIRE_DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1552367569300889601/MMBAd0HKUQgqzc-cn2kl7VdbueIn7k02gwb0n_vXP7_YRdQULNGaYyLgCdUxEtZ1wjEJ"
+
+-- Public URL of the tiny Discord bridge, ending in /executions.
+local EMPIRE_POLL_ENDPOINT = "https://eovtstt8j148nkj.m.pipedream.net/"
+
+UI:ConfigureExecutionLogger({
+    Enabled = EMPIRE_DISCORD_WEBHOOK ~= "" and EMPIRE_DISCORD_WEBHOOK ~= "YOUR_DISCORD_WEBHOOK_URL",
+    Webhook = EMPIRE_DISCORD_WEBHOOK,
+    PollEndpoint = EMPIRE_POLL_ENDPOINT,
+    PollInterval = 8,
+})
+
+local function collectPublicStats()
+    local result = {}
+    local player = Players.LocalPlayer
+    local leaderstats = player and player:FindFirstChild("leaderstats")
+    if leaderstats then
+        for _, value in ipairs(leaderstats:GetChildren()) do
+            if value:IsA("ValueBase") then
+                result[value.Name] = value.Value
+            end
+        end
+    end
+    return result
+end
+
+if UI.ExecutionLogger.Enabled then
+    local player = Players.LocalPlayer
+    local gameName = "Roblox"
+    pcall(function()
+        local info = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
+        if info and info.Name then
+            gameName = info.Name
+        end
+    end)
+
+    local executor = "Unknown"
+    pcall(function()
+        if type(identifyexecutor) == "function" then
+            executor = identifyexecutor()
+        end
+    end)
+
+    UI:LogExecution({
+        Username = player and player.Name or "Unknown",
+        DisplayName = player and player.DisplayName or "Unknown",
+        UserId = player and player.UserId or 0,
+        Game = gameName,
+        PlaceId = game.PlaceId,
+        JobId = game.JobId,
+        Executor = tostring(executor),
+        Stats = collectPublicStats(),
+    })
+
+    if EMPIRE_POLL_ENDPOINT ~= "" and not string.find(EMPIRE_POLL_ENDPOINT, "YOUR%-PUBLIC%-BRIDGE%-DOMAIN", 1, false) then
+        UI:StartGlobalExecutionFeed()
+    end
+end
 
 return UI
