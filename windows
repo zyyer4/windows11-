@@ -15,6 +15,15 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
+local Player = Players.LocalPlayer
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Lighting = game:GetService("Lighting")
+local RunService = game:GetService("RunService")
+local TeleportService = game:GetService("TeleportService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local VirtualUser = game:GetService("VirtualUser")
+local Stats = game:GetService("Stats")
+local MarketplaceService = game:GetService("MarketplaceService")
 local HttpService = game:GetService("HttpService")
 
 local UI = {}
@@ -5755,18 +5764,7 @@ openCompactMode = function(modeName)
     destroyMainUiForCompactMode()
 end
 
--- The Elerium main UI buttons are registered only after the custom UI
--- function exists. This removes the old forward-reference/timing problem.
-FarmingTab:AddButton("Fast Farm Mode", function()
-    openCompactMode("Fast Farm")
-end)
-
-FastRebTab:AddButton("Fast Reb Mode", function()
-    openCompactMode("Fast Rebirth")
-end)
-
--- The Elerium main UI buttons are registered only after the custom UI
--- function exists. This removes the old forward-reference/timing problem.
+-- Compact mode buttons are registered after the custom UI function exists.
 FarmingTab:AddButton("Fast Farm Mode", function()
     openCompactMode("Fast Farm")
 end)
