@@ -1358,81 +1358,61 @@ if AdminTab then
         end
     end
 
-    local function formatCompactNumber(value)
+    local function abbreviateNumber(value)
         local n = tonumber(value)
         if not n then return tostring(value) end
-        local abs = math.abs(n)
-        local suffixes = {
-            {1e30, "No"}, {1e27, "Oc"}, {1e24, "Sp"}, {1e21, "Sx"},
-            {1e18, "Qi"}, {1e15, "Qa"}, {1e12, "T"}, {1e9, "B"},
-            {1e6, "M"}, {1e3, "K"},
-        }
-        for _, item in ipairs(suffixes) do
-            if abs >= item[1] then
-                local scaled = n / item[1]
-                local textValue
-                if math.abs(scaled) >= 100 then
-                    textValue = string.format("%.0f", scaled)
-                elseif math.abs(scaled) >= 10 then
-                    textValue = string.format("%.1f", scaled)
-                else
-                    textValue = string.format("%.2f", scaled)
+        local units = {"", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No"}
+        local index = 1
+        while math.abs(n) >= 1000 and index < #units do
+            n = n / 1000
+            index = index + 1
+        end
+        if index == 1 then
+            return tostring(math.floor(n + 0.5))
+        end
+        local formatted = string.format("%.2f", n):gsub("0+$", ""):gsub("\.$", "")
+        return formatted .. units[index]
+    end
+
+    local function stringifyStats(stats)
+        if type(stats) ~= "table" then
+            return "No public stats supplied"
+        end
+        local parts = {}
+        local preferred = {"Strength", "Durability", "Rebirths"}
+        local used = {}
+        for _, key in ipairs(preferred) do
+            if stats[key] ~= nil then
+                local value = stats[key]
+                if key == "Strength" or key == "Durability" then
+                    value = abbreviateNumber(value)
                 end
-                textValue = textValue:gsub("%.00$", ""):gsub("(%..-)0$", "%1")
-                return textValue .. item[2]
+                table.insert(parts, key .. ": " .. tostring(value))
+                used[key] = true
             end
         end
-        if math.abs(n - math.floor(n)) < 0.000001 then
-            return string.format("%d", n)
-        end
-        return string.format("%.2f", n):gsub("(%..-)0$", "%1")
-    end
-
-    local function prettyStatName(name)
-        local aliases = {
-            Strength = "Strength",
-            Rebirths = "Rebirths",
-            Durability = "Durability",
-            Kills = "Kills",
-            Coins = "Coins",
-            Gems = "Gems",
-        }
-        return aliases[name] or tostring(name):gsub("(%l)(%u)", "%1 %2")
-    end
-
-    local function collectDisplayStats(record)
-        local result = {}
-        local source = type(record.Stats) == "table" and record.Stats or {}
-        for key, value in pairs(source) do
-            if tostring(key):lower() ~= "durability" and value ~= nil then
-                result[tostring(key)] = value
+        local extra = {}
+        for key, value in pairs(stats) do
+            if not used[key] then
+                table.insert(extra, tostring(key) .. ": " .. tostring(value))
             end
         end
-        -- Pipedream stores the important stats at the top level too.
-        if record.Strength ~= nil and result.Strength == nil then result.Strength = record.Strength end
-        if record.Rebirths ~= nil and result.Rebirths == nil then result.Rebirths = record.Rebirths end
-        if record.Kills ~= nil and result.Kills == nil then result.Kills = record.Kills end
-        if record.Coins ~= nil and result.Coins == nil then result.Coins = record.Coins end
-        if record.Gems ~= nil and result.Gems == nil then result.Gems = record.Gems end
-        return result
-    end
-
-    local function formatStatValue(key, value)
-        if tonumber(value) then
-            return formatCompactNumber(value)
-        end
-        return tostring(value)
+        table.sort(extra)
+        for _, line in ipairs(extra) do table.insert(parts, line) end
+        return #parts > 0 and table.concat(parts, "  -  ") or "No public stats supplied"
     end
 
     local function matches(record, query)
         if query == "" then return true end
         local haystack = table.concat({
-            tostring(record.Username or ""), tostring(record.DisplayName or ""),
-            tostring(record.UserId or ""), tostring(record.Game or ""),
-            tostring(record.PlaceId or ""), tostring(record.Server or ""),
-            tostring(record.JobId or ""), tostring(record.Version or ""),
-            tostring(record.Timestamp or ""), tostring(record.Strength or ""),
-            tostring(record.Rebirths or ""), tostring(record.Kills or ""),
+            tostring(record.Username or ""),
+            tostring(record.DisplayName or ""),
+            tostring(record.UserId or ""),
+            tostring(record.Game or ""),
+            tostring(record.PlaceId or ""),
+            tostring(record.Server or ""),
+            tostring(record.JobId or ""),
+            tostring(record.Version or ""),
         }, " "):lower()
         return string.find(haystack, query:lower(), 1, true) ~= nil
     end
@@ -1443,10 +1423,12 @@ if AdminTab then
         local query = searchBox.Text or ""
         filteredExecutions = {}
         for _, record in ipairs(adminExecutions) do
-            if matches(record, query) then table.insert(filteredExecutions, record) end
+            if matches(record, query) then
+                table.insert(filteredExecutions, record)
+            end
         end
 
-        countBadge.Text = tostring(#filteredExecutions) .. " CURRENT"
+        countBadge.Text = tostring(#filteredExecutions) .. " RECORDS"
 
         if #filteredExecutions == 0 then
             local empty = Instance.new("Frame")
@@ -1456,11 +1438,13 @@ if AdminTab then
             empty.Size = UDim2.new(1, -2, 0, 92)
             empty.Parent = list
             corner(empty, 10)
-            local emptyTitle = text(empty, "No current executions", 13, Theme.Text, Enum.Font.GothamSemibold)
+
+            local emptyTitle = text(empty, "No executions yet", 13, Theme.Text, Enum.Font.GothamSemibold)
             emptyTitle.Position = UDim2.fromOffset(14, 18)
             emptyTitle.Size = UDim2.new(1, -28, 0, 20)
             emptyTitle.TextXAlignment = Enum.TextXAlignment.Center
-            local emptyMessage = UI.ExecutionLogger.LastError and ("Feed: " .. tostring(UI.ExecutionLogger.LastError)) or "No current global executions were returned."
+
+            local emptyMessage = UI.ExecutionLogger.LastError and ("Feed: " .. tostring(UI.ExecutionLogger.LastError)) or "No current global executions were returned by Pipedream."
             local emptyNote = text(empty, emptyMessage, 10, Theme.Muted, Enum.Font.Gotham)
             emptyNote.Position = UDim2.fromOffset(14, 44)
             emptyNote.Size = UDim2.new(1, -28, 0, 18)
@@ -1472,77 +1456,44 @@ if AdminTab then
             local row = Instance.new("Frame")
             row.Name = "Execution_" .. index
             row.BackgroundColor3 = Theme.WindowTop
-            row.BackgroundTransparency = 0.10
+            row.BackgroundTransparency = 0.14
             row.BorderSizePixel = 0
-            row.Size = UDim2.new(1, -2, 0, 132)
+            row.Size = UDim2.new(1, -2, 0, 86)
             row.Parent = list
-            corner(row, 10)
-            stroke(row, Theme.Border, 0.82)
+            corner(row, 9)
 
-            local user = text(row, tostring(record.Username or "Unknown"), 13, Theme.Text, Enum.Font.GothamBold)
-            user.Position = UDim2.fromOffset(14, 9)
-            user.Size = UDim2.new(0.46, 0, 0, 20)
+            local user = text(row, tostring(record.Username or "Unknown"), 12, Theme.Text, Enum.Font.GothamSemibold)
+            user.Position = UDim2.fromOffset(12, 8)
+            user.Size = UDim2.new(0.42, 0, 0, 18)
 
-            local display = tostring(record.DisplayName or "")
-            local uid = record.UserId and tostring(record.UserId) or "?"
-            local identity = text(row, display .. "  •  UID " .. uid, 9, Theme.SubText, Enum.Font.Gotham)
-            identity.Position = UDim2.fromOffset(14, 31)
-            identity.Size = UDim2.new(0.55, 0, 0, 16)
+            local display = record.DisplayName and ("Display: " .. tostring(record.DisplayName)) or ""
+            local uid = record.UserId and ("UserId: " .. tostring(record.UserId)) or ""
+            local identity = text(row, display .. ((display ~= "" and uid ~= "") and "  -  " or "") .. uid, 9, Theme.SubText, Enum.Font.Gotham)
+            identity.Position = UDim2.fromOffset(12, 29)
+            identity.Size = UDim2.new(0.62, 0, 0, 15)
             identity.TextTruncate = Enum.TextTruncate.AtEnd
 
-            local gameInfo = text(row, tostring(record.Game or "Unknown game"), 10, Theme.Text, Enum.Font.GothamSemibold)
-            gameInfo.Position = UDim2.new(0.48, 0, 9, 0)
-            gameInfo.Size = UDim2.new(0.50, -14, 0, 18)
+            local gameInfo = text(row, tostring(record.Game or "Unknown game") .. "  -  Place " .. tostring(record.PlaceId or "?"), 9, Theme.SubText, Enum.Font.Gotham)
+            gameInfo.Position = UDim2.new(0.44, 0, 8, 0)
+            gameInfo.Size = UDim2.new(0.54, -12, 0, 18)
             gameInfo.TextXAlignment = Enum.TextXAlignment.Right
             gameInfo.TextTruncate = Enum.TextTruncate.AtEnd
 
-            local place = text(row, "Place " .. tostring(record.PlaceId or "?"), 9, Theme.Muted, Enum.Font.Gotham)
-            place.Position = UDim2.new(0.48, 0, 30, 0)
-            place.Size = UDim2.new(0.50, -14, 0, 16)
-            place.TextXAlignment = Enum.TextXAlignment.Right
-
-            local statsPanel = Instance.new("Frame")
-            statsPanel.BackgroundColor3 = Theme.Surface
-            statsPanel.BackgroundTransparency = 0.22
-            statsPanel.BorderSizePixel = 0
-            statsPanel.Position = UDim2.fromOffset(12, 54)
-            statsPanel.Size = UDim2.new(1, -24, 0, 38)
-            statsPanel.Parent = row
-            corner(statsPanel, 8)
-
-            local stats = collectDisplayStats(record)
-            local statKeys = {}
-            for key in pairs(stats) do table.insert(statKeys, key) end
-            table.sort(statKeys, function(a,b)
-                if a == "Strength" then return true end
-                if b == "Strength" then return false end
-                if a == "Rebirths" then return true end
-                if b == "Rebirths" then return false end
-                return a < b
-            end)
-
-            local shown = math.min(#statKeys, 4)
-            for statIndex = 1, shown do
-                local key = statKeys[statIndex]
-                local chip = text(statsPanel, prettyStatName(key) .. "  " .. formatStatValue(key, stats[key]), 9, Theme.Text, Enum.Font.GothamMedium)
-                chip.Position = UDim2.new((statIndex - 1) / shown, 7, 0, 0)
-                chip.Size = UDim2.new(1 / shown, -10, 1, 0)
-                chip.TextXAlignment = Enum.TextXAlignment.Center
-                chip.TextTruncate = Enum.TextTruncate.AtEnd
-            end
-
-            local server = text(row, "Server: " .. tostring(record.Server or record.JobId or "Unknown"), 8, Theme.Muted, Enum.Font.Gotham)
-            server.Position = UDim2.fromOffset(14, 99)
-            server.Size = UDim2.new(0.52, -14, 0, 15)
+            local server = text(row, "Server: " .. tostring(record.Server or record.JobId or "Unknown"), 9, Theme.Muted, Enum.Font.Gotham)
+            server.Position = UDim2.fromOffset(12, 48)
+            server.Size = UDim2.new(0.58, 0, 0, 15)
             server.TextTruncate = Enum.TextTruncate.AtEnd
 
-            local when = tostring(record.Timestamp or "Unknown time")
-            local version = "V" .. tostring(record.Version or "3.2.2")
-            local timeText = text(row, "🕒 " .. when .. "  •  " .. version, 8, Theme.Muted, Enum.Font.Gotham)
-            timeText.Position = UDim2.new(0.48, 0, 99, 0)
-            timeText.Size = UDim2.new(0.50, -14, 0, 15)
-            timeText.TextXAlignment = Enum.TextXAlignment.Right
-            timeText.TextTruncate = Enum.TextTruncate.AtEnd
+            local version = text(row, "V" .. tostring(record.Version or "3.2.2") .. "  -  " .. tostring(record.Timestamp or ""), 9, Theme.Muted, Enum.Font.Gotham)
+            version.Position = UDim2.new(0.42, 0, 48, 0)
+            version.Size = UDim2.new(0.56, -12, 0, 15)
+            version.TextXAlignment = Enum.TextXAlignment.Right
+            version.TextTruncate = Enum.TextTruncate.AtEnd
+
+            local stats = text(row, stringifyStats(record.Stats), 9, Theme.Muted, Enum.Font.Gotham)
+            stats.Position = UDim2.fromOffset(12, 67)
+            stats.Size = UDim2.new(1, -24, 0, 14)
+            stats.TextTruncate = Enum.TextTruncate.AtEnd
         end
     end
 
@@ -1709,9 +1660,7 @@ function UI:BuildDiscordEmbed(record)
 
     local statLines = {}
     for key, value in pairs(record.Stats) do
-        if tostring(key):lower() ~= "durability" then
-            table.insert(statLines, tostring(key) .. ": " .. tostring(value))
-        end
+        table.insert(statLines, tostring(key) .. ": " .. tostring(value))
     end
     table.sort(statLines)
 
@@ -1792,6 +1741,7 @@ function UI:SendExecutionLog(record)
         Version = record.Version,
         Timestamp = record.Timestamp,
         Strength = record.Stats and record.Stats.Strength or nil,
+        Durability = record.Stats and record.Stats.Durability or nil,
         Rebirths = record.Stats and record.Stats.Rebirths or nil,
         Stats = record.Stats or {},
     }
@@ -1929,10 +1879,6 @@ function UI:FetchGlobalExecutions()
                     record.JobId = tostring(key)
                     record.Server = tostring(key)
                 end
-                record.Stats = type(record.Stats) == "table" and record.Stats or {}
-                if record.Strength ~= nil then record.Stats.Strength = record.Strength end
-                if record.Rebirths ~= nil then record.Stats.Rebirths = record.Rebirths end
-                if record.Kills ~= nil then record.Stats.Kills = record.Kills end
                 table.insert(flattened, record)
             end
         end
@@ -2007,6 +1953,36 @@ local function collectPublicStats()
             end
         end
     end
+
+    -- Explicitly include Durability if the game exposes it outside leaderstats.
+    if result.Durability == nil and player then
+        local aliases = {"Durability", "durability", "Defense", "defense"}
+        for _, alias in ipairs(aliases) do
+            local attr = player:GetAttribute(alias)
+            if attr ~= nil then
+                result.Durability = attr
+                break
+            end
+        end
+    end
+
+    if result.Durability == nil and player then
+        local containers = {"Stats", "Data", "PlayerData"}
+        for _, containerName in ipairs(containers) do
+            local container = player:FindFirstChild(containerName)
+            if container then
+                for _, alias in ipairs(aliases) do
+                    local value = container:FindFirstChild(alias)
+                    if value and value:IsA("ValueBase") then
+                        result.Durability = value.Value
+                        break
+                    end
+                end
+            end
+            if result.Durability ~= nil then break end
+        end
+    end
+
     return result
 end
 
