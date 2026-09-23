@@ -2097,23 +2097,124 @@ end
 
 
 
+-- ==========================================================
+-- JOHNNY V13 FEATURE PACK — Windows 11 API COMPATIBILITY
+-- ==========================================================
+-- The v13 feature pack was written for Elerium-style tab objects.
+-- The Windows 11 shell uses Page-based tab objects, so provide the
+-- small API bridge here instead of replacing the shell.
+
+local function _JohnnyAddLabel(tab, value)
+    local label = text(tab.Page, tostring(value or ""), 13, Theme.Text, Enum.Font.Gotham)
+    label.Size = UDim2.new(1, -24, 0, 26)
+    label.Position = UDim2.fromOffset(12, 0)
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    return label
+end
+
+local function _JohnnyAddButton(tab, labelText, callback)
+    local button = Instance.new("TextButton")
+    button.Name = "JohnnyButton"
+    button.Size = UDim2.new(1, -24, 0, 34)
+    button.BackgroundColor3 = Theme.Surface
+    button.BorderSizePixel = 0
+    button.AutoButtonColor = false
+    button.Text = tostring(labelText or "Button")
+    button.TextColor3 = Theme.Text
+    button.TextSize = 12
+    button.Font = Enum.Font.GothamSemibold
+    button.Parent = tab.Page
+    corner(button, 8)
+    button.MouseEnter:Connect(function() tween(button, 0.10, {BackgroundColor3 = Theme.SurfaceHover}) end)
+    button.MouseLeave:Connect(function() tween(button, 0.10, {BackgroundColor3 = Theme.Surface}) end)
+    button.MouseButton1Click:Connect(function()
+        if type(callback) == "function" then pcall(callback) end
+    end)
+    return button
+end
+
+local function _JohnnyAddSwitch(tab, labelText, callback)
+    local state = false
+    local button = _JohnnyAddButton(tab, tostring(labelText or "Switch") .. ": OFF", function()
+        state = not state
+        button.Text = tostring(labelText or "Switch") .. (state and ": ON" or ": OFF")
+        if type(callback) == "function" then pcall(callback, state) end
+    end)
+    local api = {}
+    function api:Set(value)
+        state = value and true or false
+        button.Text = tostring(labelText or "Switch") .. (state and ": ON" or ": OFF")
+        if type(callback) == "function" then pcall(callback, state) end
+    end
+    function api:Get() return state end
+    return api
+end
+
+local function _JohnnyAddTextBox(tab, labelText, callback, options)
+    local holder = Instance.new("Frame")
+    holder.Size = UDim2.new(1, -24, 0, 54)
+    holder.BackgroundTransparency = 1
+    holder.Parent = tab.Page
+
+    local label = text(holder, tostring(labelText or ""), 11, Theme.SubText, Enum.Font.GothamSemibold)
+    label.Size = UDim2.new(0.42, 0, 1, 0)
+    label.TextXAlignment = Enum.TextXAlignment.Left
+
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(0.55, 0, 0, 34)
+    box.Position = UDim2.new(0.45, 0, 0.5, -17)
+    box.BackgroundColor3 = Theme.Surface
+    box.BorderSizePixel = 0
+    box.ClearTextOnFocus = false
+    box.Text = ""
+    box.PlaceholderText = (options and options.placeholder) or ""
+    box.TextColor3 = Theme.Text
+    box.PlaceholderColor3 = Theme.Muted
+    box.TextSize = 12
+    box.Font = Enum.Font.Gotham
+    box.Parent = holder
+    corner(box, 8)
+    box.FocusLost:Connect(function()
+        if type(callback) == "function" then pcall(callback, box.Text) end
+    end)
+    return box
+end
+
+function _JohnnyInstallTabCompat(tab)
+    if not tab or not tab.Page then return end
+    tab.AddLabel = function(self, value) return _JohnnyAddLabel(self, value) end
+    tab.AddButton = function(self, labelText, callback) return _JohnnyAddButton(self, labelText, callback) end
+    tab.AddSwitch = function(self, labelText, callback) return _JohnnyAddSwitch(self, labelText, callback) end
+    tab.AddTextBox = function(self, labelText, callback, options) return _JohnnyAddTextBox(self, labelText, callback, options) end
+end
+
+for _, _tab in pairs(createdTabs) do
+    _JohnnyInstallTabCompat(_tab)
+end
+
+-- The original v13 Info code called :Show(), which does not exist on
+-- the Windows 11 tab object. It is intentionally not used here.
+
 -- ============================================================
 -- JOHNNY V13 FEATURE PACK — existing Windows 11 shell preserved
 -- ============================================================
 
 -- COMMON REFERENCES
 --========================================================--
+-- Never block the Windows 11 shell on a game object that may not exist.
+-- The old v13 pack used indefinite WaitForChild calls here, which could
+-- leave only the shell/Admin page visible forever.
 
-local muscleEvent = Player:WaitForChild("muscleEvent")
-local leaderstats = Player:WaitForChild("leaderstats")
-local rebirthsStat = leaderstats:WaitForChild("Rebirths")
-local strengthStat = leaderstats:WaitForChild("Strength")
-local durabilityStat = Player:WaitForChild("Durability")
+local muscleEvent = Player:FindFirstChild("muscleEvent")
+local leaderstats = Player:FindFirstChild("leaderstats")
+local rebirthsStat = leaderstats and leaderstats:FindFirstChild("Rebirths")
+local strengthStat = leaderstats and leaderstats:FindFirstChild("Strength")
+local durabilityStat = Player:FindFirstChild("Durability")
 
-local rEvents = ReplicatedStorage:WaitForChild("rEvents")
-local equipPetEvent = rEvents:WaitForChild("equipPetEvent")
-local rebirthRemote = rEvents:WaitForChild("rebirthRemote")
-local changeSpeedSizeRemote = rEvents:WaitForChild("changeSpeedSizeRemote")
+local rEvents = ReplicatedStorage:FindFirstChild("rEvents")
+local equipPetEvent = rEvents and rEvents:FindFirstChild("equipPetEvent")
+local rebirthRemote = rEvents and rEvents:FindFirstChild("rebirthRemote")
+local changeSpeedSizeRemote = rEvents and rEvents:FindFirstChild("changeSpeedSizeRemote")
 
 --========================================================--
 -- GLOBAL STATE
