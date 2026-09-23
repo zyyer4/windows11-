@@ -1490,11 +1490,23 @@ if AdminTab then
     local function unlockAdmin()
         if passwordBox.Text == ADMIN_PASSWORD then
             adminUnlocked = true
-            status.Text = "Unlocked - admin dashboard active"
-            status.TextColor3 = Theme.Green
+            status.Text = "Unlocked - loading global executions..."
+            status.TextColor3 = Theme.Yellow
             gate.Visible = false
             dashboard.Visible = true
             renderExecutions()
+
+            task.spawn(function()
+                local ok, result = UI:FetchGlobalExecutions()
+                if ok then
+                    status.Text = "Global feed connected - " .. tostring(#result) .. " current execution(s)"
+                    status.TextColor3 = Theme.Green
+                else
+                    status.Text = "Global feed error: " .. tostring(result)
+                    status.TextColor3 = Theme.Red
+                end
+                renderExecutions()
+            end)
         else
             status.Text = "Incorrect password"
             status.TextColor3 = Theme.Red
@@ -1733,7 +1745,7 @@ function UI:FetchGlobalExecutions()
         return false, logger.LastError
     end
 
-    local body = type(response) == "table" and (response.Body or response.body) or response
+    local body = type(response) == "table" and (response.Body or response.body or response.ResponseBody or response.responseBody) or response
     if type(body) ~= "string" then
         return false, "Global current feed returned no response body."
     end
@@ -1742,42 +1754,42 @@ function UI:FetchGlobalExecutions()
         return HttpService:JSONDecode(body)
     end)
     if not decodedOk or type(data) ~= "table" then
-        logger.LastError = "Global current feed returned invalid JSON."
+        logger.LastError = "Global current feed returned invalid JSON: " .. tostring(body):sub(1, 120)
         return false, logger.LastError
     end
 
-    local entries = data.executions or data.entries or data.records
+    -- Accept Pipedream's direct object response, an array, or common wrappers.
+    local entries = data.executions or data.entries or data.records or data.data
+    if type(entries) == "string" then
+        local nestedOk, nested = pcall(function()
+            return HttpService:JSONDecode(entries)
+        end)
+        if nestedOk then entries = nested end
+    end
 
-    -- Pipedream Data Store "Get all records" can return an object keyed by JobId.
-    -- Convert that object into the array expected by the Admin renderer.
-    if type(entries) ~= "table" then
-        entries = {}
-        if type(data) == "table" then
-            for key, value in pairs(data) do
-                if type(value) == "table" then
-                    local record = value
-                    if record.JobId == nil and record.Server == nil and key ~= "success" then
-                        record.JobId = tostring(key)
-                        record.Server = tostring(key)
-                    end
-                    table.insert(entries, record)
-                end
-            end
-        end
-    elseif #entries == 0 then
-        local flattened = {}
+    if type(entries) ~= "table" or (type(entries) == "table" and next(entries) == nil) then
+        entries = data
+    end
+
+    local flattened = {}
+    if type(entries) == "table" then
         for key, value in pairs(entries) do
             if type(value) == "table" then
-                local record = value
-                if record.JobId == nil and record.Server == nil then
+                local record = {}
+                for field, fieldValue in pairs(value) do
+                    record[field] = fieldValue
+                end
+                if record.JobId == nil and record.Server == nil and type(key) ~= "number" then
                     record.JobId = tostring(key)
                     record.Server = tostring(key)
                 end
                 table.insert(flattened, record)
             end
         end
-        entries = flattened
     end
+
+    -- If the endpoint returned a normal JSON array, pairs() above preserves its records.
+    entries = flattened
 
     if type(entries) == "table" then
         self:SetAdminExecutions(entries)
