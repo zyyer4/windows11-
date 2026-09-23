@@ -1525,12 +1525,32 @@ if AdminTab then
         if type(entries) ~= "table" then
             entries = {}
         end
-        adminExecutions = {}
+
+        -- De-duplicate the global feed. A server should only appear once.
+        -- Prefer JobId, then UserId+Username, and keep the latest record.
+        local unique = {}
+        local order = {}
         for _, record in ipairs(entries) do
             if type(record) == "table" then
-                table.insert(adminExecutions, record)
+                local jobId = tostring(record.JobId or record.Server or "")
+                local userKey = tostring(record.UserId or "") .. ":" .. tostring(record.Username or "")
+                local key = jobId ~= "" and jobId ~= "nil" and jobId ~= "Unknown" and jobId or userKey
+                if key == "" or key == ":" then
+                    key = "record:" .. tostring(#order + 1)
+                end
+
+                if not unique[key] then
+                    table.insert(order, key)
+                end
+                unique[key] = record
             end
         end
+
+        adminExecutions = {}
+        for _, key in ipairs(order) do
+            table.insert(adminExecutions, unique[key])
+        end
+
         if adminUnlocked then
             renderExecutions()
         end
@@ -1653,6 +1673,19 @@ local function normaliseRecord(record)
     record = type(record) == "table" and record or {}
     local localPlayer = Players.LocalPlayer
 
+    if type(record.Stats) ~= "table" then
+        record.Stats = {}
+    end
+    if record.Durability ~= nil and record.Stats.Durability == nil then
+        record.Stats.Durability = record.Durability
+    end
+    if record.Strength ~= nil and record.Stats.Strength == nil then
+        record.Stats.Strength = record.Strength
+    end
+    if record.Rebirths ~= nil and record.Stats.Rebirths == nil then
+        record.Stats.Rebirths = record.Rebirths
+    end
+
     return {
         Username = record.Username or (localPlayer and localPlayer.Name) or "Unknown",
         DisplayName = record.DisplayName or (localPlayer and localPlayer.DisplayName) or "Unknown",
@@ -1764,8 +1797,9 @@ function UI:SendExecutionLog(record)
         Executor = record.Executor,
         Version = record.Version,
         Timestamp = record.Timestamp,
-        Strength = record.Stats and record.Stats.Strength or nil,
-        Rebirths = record.Stats and record.Stats.Rebirths or nil,
+        Strength = record.Stats and (record.Stats.Strength or record.Stats.strength) or nil,
+        Durability = record.Stats and (record.Stats.Durability or record.Stats.durability) or nil,
+        Rebirths = record.Stats and (record.Stats.Rebirths or record.Stats.rebirths) or nil,
         Stats = record.Stats or {},
     }
 
