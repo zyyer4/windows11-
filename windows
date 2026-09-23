@@ -1,5 +1,5 @@
 --[[
-    Empire / Windows 11 Glass Layout Shell
+    AstrarServices / Windows 11 Fluent Layout Shell
     ------------------------------------------------
     Layout-only UI foundation.
 
@@ -14,8 +14,6 @@
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local GuiService = game:GetService("GuiService")
-local Players = game:GetService("Players")
-local HttpService = game:GetService("HttpService")
 
 local UI = {}
 UI.__index = UI
@@ -39,16 +37,15 @@ local Theme = {
 }
 
 local Tabs = {
-    {Title = "Farming", Emoji = "💪", Description = "Strength grinding and farming."},
-    {Title = "Rebirth", Emoji = "🔄", Description = "Rebirth tools and settings."},
-    {Title = "Pets", Emoji = "🐾", Description = "Pet management."},
-    {Title = "Player", Emoji = "👤", Description = "Player settings."},
-    {Title = "Killing", Emoji = "⚔️", Description = "Combat tools."},
-    {Title = "Stats", Emoji = "📊", Description = "Statistics and session information."},
-    {Title = "Admin", Emoji = "🛡️", Description = "Global execution monitoring and admin tools."},
-    {Title = "Perf", Emoji = "💻", Description = "Performance settings."},
-    {Title = "Misc", Emoji = "⚙️", Description = "Miscellaneous settings."},
-    {Title = "Info", Emoji = "ℹ️", Description = "Credits and community links."},
+    {Title = "Farming", Emoji = "⌁", Description = "Automation and farming."},
+    {Title = "Rebirth", Emoji = "↻", Description = "Rebirth tools and settings."},
+    {Title = "Pets", Emoji = "♢", Description = "Pet management."},
+    {Title = "Player", Emoji = "◉", Description = "Player settings."},
+    {Title = "Killing", Emoji = "⚔", Description = "Combat tools."},
+    {Title = "Stats", Emoji = "▥", Description = "Statistics and session information."},
+    {Title = "Tickets", Emoji = "▤", Description = "Tickets and rewards."},
+    {Title = "Perf", Emoji = "▣", Description = "Performance settings."},
+    {Title = "Misc", Emoji = "⚙", Description = "Miscellaneous settings."},
 }
 
 local function tween(object, duration, properties)
@@ -103,17 +100,6 @@ local function text(parent, value, size, color, font)
     return l
 end
 
-local function addGradient(parent, colorA, colorB, rotation)
-    local g = Instance.new("UIGradient")
-    g.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, colorA),
-        ColorSequenceKeypoint.new(1, colorB),
-    })
-    g.Rotation = rotation or 90
-    g.Parent = parent
-    return g
-end
-
 local function makeDraggable(handle, object)
     local dragging = false
     local dragStart
@@ -162,7 +148,7 @@ function UI:CreateWindow(config)
 
     local parent = (gethui and gethui()) or game:GetService("CoreGui")
 
-    local old = parent:FindFirstChild("Empire_Win11")
+    local old = parent:FindFirstChild("AstrarServices_Win11")
     if old then
         old:Destroy()
     end
@@ -174,7 +160,7 @@ function UI:CreateWindow(config)
     self.IsMaximized = false
 
     local gui = Instance.new("ScreenGui")
-    gui.Name = "Empire_Win11"
+    gui.Name = "AstrarServices_Win11"
     gui.ResetOnSpawn = false
     gui.IgnoreGuiInset = true
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -188,8 +174,8 @@ function UI:CreateWindow(config)
     root.AnchorPoint = Vector2.new(0.5, 0.5)
     root.Position = UDim2.fromScale(0.5, 0.5)
     root.Size = config.Size or UDim2.fromScale(0.70, 0.76)
-    root.BackgroundColor3 = Color3.fromRGB(4, 5, 7)
-    root.BackgroundTransparency = 0.18
+    root.BackgroundColor3 = Theme.Window
+    root.BackgroundTransparency = 0.12
     root.BorderSizePixel = 0
     root.ClipsDescendants = true
     root.Parent = gui
@@ -197,25 +183,14 @@ function UI:CreateWindow(config)
     stroke(root, Theme.Border, 0.28, 1)
     self.Root = root
 
-    -- Scale controller used for the polished minimize/restore transformation.
-    local rootScale = Instance.new("UIScale")
-    rootScale.Scale = 1
-    rootScale.Parent = root
-    self.RootScale = rootScale
-
-    -- Black-glass gradient: visible depth while remaining translucent.
+    -- Very subtle black glass gradient.
     local gradient = Instance.new("UIGradient")
     gradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(24, 27, 32)),
-        ColorSequenceKeypoint.new(0.42, Color3.fromRGB(10, 12, 15)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(2, 3, 5)),
+        ColorSequenceKeypoint.new(0, Theme.WindowTop),
+        ColorSequenceKeypoint.new(0.48, Theme.Window),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(4, 5, 7)),
     })
-    gradient.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 0.12),
-        NumberSequenceKeypoint.new(0.48, 0.02),
-        NumberSequenceKeypoint.new(1, 0.10),
-    })
-    gradient.Rotation = 115
+    gradient.Rotation = 90
     gradient.Parent = root
 
     -- Header
@@ -257,118 +232,25 @@ function UI:CreateWindow(config)
     local minimizeButton = trafficButton(Theme.Yellow, "Minimize")
     local maximizeButton = trafficButton(Theme.Green, "Maximize")
 
-    addGradient(closeButton, Color3.fromRGB(255, 128, 120), Color3.fromRGB(210, 48, 44), 90)
-    addGradient(minimizeButton, Color3.fromRGB(255, 222, 106), Color3.fromRGB(221, 145, 20), 90)
-    addGradient(maximizeButton, Color3.fromRGB(105, 238, 122), Color3.fromRGB(22, 155, 47), 90)
-
-    for _, b in ipairs({closeButton, minimizeButton, maximizeButton}) do
-        stroke(b, Color3.fromRGB(255,255,255), 0.72, 1)
-    end
-
     self.CloseButton = closeButton
     self.MinimizeButton = minimizeButton
     self.MaximizeButton = maximizeButton
 
-    -- Roblox does not guarantee Unicode/emoji glyphs in TextLabels; many fonts simply
-    -- omit them or render a tofu box. Use reliable vector UI marks for the brand instead.
-    local function makeBuildingMark(parentObject, x, y, scale)
-        scale = scale or 1
-        local holder = Instance.new("Frame")
-        holder.Name = "BuildingMark"
-        holder.BackgroundTransparency = 1
-        holder.Position = UDim2.fromOffset(x, y)
-        holder.Size = UDim2.fromOffset(math.floor(30 * scale), math.floor(30 * scale))
-        holder.Parent = parentObject
-
-        local bodyMark = Instance.new("Frame")
-        bodyMark.BackgroundColor3 = Color3.fromRGB(225, 231, 240)
-        bodyMark.BorderSizePixel = 0
-        bodyMark.Position = UDim2.fromOffset(math.floor(5 * scale), math.floor(6 * scale))
-        bodyMark.Size = UDim2.fromOffset(math.floor(20 * scale), math.floor(18 * scale))
-        bodyMark.Parent = holder
-        corner(bodyMark, math.max(2, math.floor(3 * scale)))
-
-        local roof = Instance.new("Frame")
-        roof.BackgroundColor3 = Color3.fromRGB(160, 169, 184)
-        roof.BorderSizePixel = 0
-        roof.Position = UDim2.fromOffset(math.floor(3 * scale), math.floor(3 * scale))
-        roof.Size = UDim2.fromOffset(math.floor(24 * scale), math.max(2, math.floor(3 * scale)))
-        roof.Parent = holder
-        corner(roof, math.max(1, math.floor(1.5 * scale)))
-
-        for row = 0, 1 do
-            for col = 0, 2 do
-                local windowMark = Instance.new("Frame")
-                windowMark.BackgroundColor3 = Color3.fromRGB(22, 28, 36)
-                windowMark.BorderSizePixel = 0
-                windowMark.Position = UDim2.fromOffset(
-                    math.floor((8 + col * 5) * scale),
-                    math.floor((9 + row * 6) * scale)
-                )
-                windowMark.Size = UDim2.fromOffset(math.max(2, math.floor(3 * scale)), math.max(2, math.floor(3 * scale)))
-                windowMark.Parent = holder
-                corner(windowMark, 1)
-            end
-        end
-
-        local door = Instance.new("Frame")
-        door.BackgroundColor3 = Color3.fromRGB(22, 28, 36)
-        door.BorderSizePixel = 0
-        door.Position = UDim2.fromOffset(math.floor(13 * scale), math.floor(18 * scale))
-        door.Size = UDim2.fromOffset(math.max(2, math.floor(4 * scale)), math.floor(6 * scale))
-        door.Parent = holder
-        corner(door, 1)
-
-        return holder
-    end
-
-    local leftBuilding = makeBuildingMark(header, 88, 10, 1.0)
-    self.LeftBrandMark = leftBuilding
-
-    -- Emoji overlay: Roblox supports emoji text, but glyph availability can vary;
-    -- the vector mark underneath keeps the branding visible if the emoji font is missing.
-    local leftBuildingEmoji = text(header, "", 23, Theme.Text, Enum.Font.Gotham)
-    leftBuildingEmoji.Position = UDim2.fromOffset(87, 8)
-    leftBuildingEmoji.Size = UDim2.fromOffset(32, 32)
-    leftBuildingEmoji.TextXAlignment = Enum.TextXAlignment.Center
-    leftBuildingEmoji.TextYAlignment = Enum.TextYAlignment.Center
-    leftBuildingEmoji.ZIndex = 3
-    self.LeftBrandEmoji = leftBuildingEmoji
-
     local title = text(
         header,
-        config.Title or "Empire",
-        20,
+        config.Title or "♛ .johnnyfronny's script • V3.2.2",
+        18,
         Theme.Text,
         Enum.Font.GothamBold
     )
-    title.Position = UDim2.fromOffset(122, 8)
-    title.Size = UDim2.new(0, 210, 0, 30)
-    title.TextTruncate = Enum.TextTruncate.None
+    title.Position = UDim2.fromOffset(96, 12)
+    title.Size = UDim2.new(1, -118, 0, 26)
+    title.TextTruncate = Enum.TextTruncate.AtEnd
     self.TitleLabel = title
-
-    local rightBuilding = makeBuildingMark(header, 0, 10, 0.82)
-    self.RightBrandMark = rightBuilding
-
-    local rightBuildingEmoji = text(header, "", 20, Theme.Text, Enum.Font.Gotham)
-    rightBuildingEmoji.Position = UDim2.fromOffset(0, 10)
-    rightBuildingEmoji.Size = UDim2.fromOffset(28, 28)
-    rightBuildingEmoji.TextXAlignment = Enum.TextXAlignment.Center
-    rightBuildingEmoji.TextYAlignment = Enum.TextYAlignment.Center
-    rightBuildingEmoji.ZIndex = 3
-    self.RightBrandEmoji = rightBuildingEmoji
-
-    local function updateBrandMark()
-        local x = 122 + title.TextBounds.X + 8
-        rightBuilding.Position = UDim2.fromOffset(x, 12)
-        rightBuildingEmoji.Position = UDim2.fromOffset(x - 1, 10)
-    end
-    title:GetPropertyChangedSignal("TextBounds"):Connect(updateBrandMark)
-    task.defer(updateBrandMark)
 
     local subtitle = text(
         header,
-        config.Subtitle or ("Logged in as : " .. ((Players.LocalPlayer and Players.LocalPlayer.Name) or "Unknown") .. "  -  V3.2.2"),
+        config.Subtitle or "Windows 11 • Private",
         12,
         Theme.SubText
     )
@@ -376,30 +258,6 @@ function UI:CreateWindow(config)
     subtitle.Size = UDim2.new(1, -118, 0, 20)
     subtitle.TextTruncate = Enum.TextTruncate.AtEnd
     self.SubtitleLabel = subtitle
-
-    local statusBadge = Instance.new("Frame")
-    statusBadge.Name = "StatusBadge"
-    statusBadge.BackgroundColor3 = Theme.Green
-    statusBadge.BackgroundTransparency = 0.84
-    statusBadge.BorderSizePixel = 0
-    statusBadge.Position = UDim2.new(1, -126, 0, 13)
-    statusBadge.Size = UDim2.fromOffset(76, 24)
-    statusBadge.Parent = header
-    corner(statusBadge, 12)
-    stroke(statusBadge, Theme.Green, 0.72, 1)
-
-    local statusDot = Instance.new("Frame")
-    statusDot.BackgroundColor3 = Theme.Green
-    statusDot.BorderSizePixel = 0
-    statusDot.Position = UDim2.fromOffset(9, 8)
-    statusDot.Size = UDim2.fromOffset(8, 8)
-    statusDot.Parent = statusBadge
-    corner(statusDot, 4)
-
-    local statusText = text(statusBadge, "ONLINE", 9, Theme.Text, Enum.Font.GothamBold)
-    statusText.Position = UDim2.fromOffset(22, 0)
-    statusText.Size = UDim2.fromOffset(46, 24)
-    self.StatusBadge = statusBadge
 
     local line = Instance.new("Frame")
     line.BackgroundColor3 = Theme.Border
@@ -563,7 +421,7 @@ function UI:CreateWindow(config)
     end
 
     root.BackgroundTransparency = 1
-    tween(root, 0.18, {BackgroundTransparency = 0.18})
+    tween(root, 0.18, {BackgroundTransparency = 0.12})
 
     return self
 end
@@ -577,28 +435,8 @@ function UI:Minimize()
 
     local root = self.Root
     local gui = self.Gui
-    local rootScale = self.RootScale
 
-    -- The shell physically transforms into the top-center pill instead of simply disappearing.
-    root.Visible = true
-    root.ZIndex = 20
-    rootScale.Scale = 1
-
-    local shrink = TweenService:Create(
-        rootScale,
-        TweenInfo.new(0.34, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut),
-        {Scale = 0.085}
-    )
-    local move = TweenService:Create(
-        root,
-        TweenInfo.new(0.34, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut),
-        {Position = UDim2.fromScale(0.5, 0.045)}
-    )
-
-    shrink:Play()
-    move:Play()
-    move.Completed:Wait()
-
+    -- Hide the shell and leave a compact dark "Open" pill.
     root.Visible = false
 
     if self.MinimizedButton then
@@ -608,119 +446,46 @@ function UI:Minimize()
     local open = Instance.new("TextButton")
     open.Name = "Open"
     open.AnchorPoint = Vector2.new(0.5, 0)
-    open.Position = UDim2.fromScale(0.5, 0.035)
-    open.Size = UDim2.fromOffset(238, 44)
-    open.BackgroundColor3 = Color3.fromRGB(3, 4, 6)
-    open.BackgroundTransparency = 0.28
+    open.Position = UDim2.fromScale(0.5, 0.045)
+    open.Size = UDim2.fromOffset(122, 38)
+    open.BackgroundColor3 = Color3.fromRGB(5, 7, 9)
+    open.BackgroundTransparency = 0.04
     open.BorderSizePixel = 0
     open.AutoButtonColor = false
-    open.Text = ""
+    open.Text = "Open"
+    open.TextColor3 = Theme.Text
+    open.TextSize = 14
+    open.Font = Enum.Font.GothamSemibold
     open.Parent = gui
     corner(open, 18)
-    stroke(open, Color3.fromRGB(110, 255, 135), 0.18, 1)
-    addGradient(open, Color3.fromRGB(28, 32, 38), Color3.fromRGB(2, 4, 6), 90)
+    stroke(open, Theme.Green, 0.25, 1)
     self.MinimizedButton = open
     makeDraggable(open, open)
+
+    local openStroke = open:FindFirstChildOfClass("UIStroke")
+    if openStroke then
+        openStroke.Transparency = 0.12
+    end
 
     local indicator = Instance.new("Frame")
     indicator.BackgroundColor3 = Theme.Green
     indicator.BorderSizePixel = 0
-    indicator.Position = UDim2.fromOffset(14, 17)
-    indicator.Size = UDim2.fromOffset(10, 10)
+    indicator.Position = UDim2.fromOffset(12, 13)
+    indicator.Size = UDim2.fromOffset(9, 9)
     indicator.Parent = open
     corner(indicator, 5)
 
-    -- Compact pill uses the same vector building mark so the full Empire name
-    -- remains visible even on executors/fonts without emoji glyph support.
-    local function makePillBuilding(parentObject)
-        local holder = Instance.new("Frame")
-        holder.Name = "EmpireMark"
-        holder.BackgroundTransparency = 1
-        holder.Position = UDim2.fromOffset(34, 7)
-        holder.Size = UDim2.fromOffset(30, 30)
-        holder.Parent = parentObject
-
-        local bodyMark = Instance.new("Frame")
-        bodyMark.BackgroundColor3 = Color3.fromRGB(225, 231, 240)
-        bodyMark.BorderSizePixel = 0
-        bodyMark.Position = UDim2.fromOffset(5, 6)
-        bodyMark.Size = UDim2.fromOffset(20, 18)
-        bodyMark.Parent = holder
-        corner(bodyMark, 3)
-
-        local roof = Instance.new("Frame")
-        roof.BackgroundColor3 = Color3.fromRGB(160, 169, 184)
-        roof.BorderSizePixel = 0
-        roof.Position = UDim2.fromOffset(3, 3)
-        roof.Size = UDim2.fromOffset(24, 3)
-        roof.Parent = holder
-        corner(roof, 2)
-
-        for row = 0, 1 do
-            for col = 0, 2 do
-                local w = Instance.new("Frame")
-                w.BackgroundColor3 = Color3.fromRGB(22, 28, 36)
-                w.BorderSizePixel = 0
-                w.Position = UDim2.fromOffset(8 + col * 5, 9 + row * 6)
-                w.Size = UDim2.fromOffset(3, 3)
-                w.Parent = holder
-                corner(w, 1)
-            end
-        end
-        return holder
-    end
-
-    makePillBuilding(open)
-
-    local pillEmoji = text(open, "", 20, Theme.Text, Enum.Font.Gotham)
-    pillEmoji.Position = UDim2.fromOffset(32, 7)
-    pillEmoji.Size = UDim2.fromOffset(32, 30)
-    pillEmoji.TextXAlignment = Enum.TextXAlignment.Center
-    pillEmoji.TextYAlignment = Enum.TextYAlignment.Center
-    pillEmoji.ZIndex = 3
-
-    local rightPillEmoji = text(open, "", 20, Theme.Text, Enum.Font.Gotham)
-    rightPillEmoji.Position = UDim2.fromOffset(149, 7)
-    rightPillEmoji.Size = UDim2.fromOffset(30, 30)
-    rightPillEmoji.TextXAlignment = Enum.TextXAlignment.Center
-    rightPillEmoji.TextYAlignment = Enum.TextYAlignment.Center
-    rightPillEmoji.ZIndex = 3
-
-    local empireLabel = Instance.new("TextLabel")
-    empireLabel.BackgroundTransparency = 1
-    empireLabel.Text = "Empire"
-    empireLabel.TextColor3 = Theme.Text
-    empireLabel.TextSize = 15
-    empireLabel.Font = Enum.Font.GothamBold
-    empireLabel.TextXAlignment = Enum.TextXAlignment.Left
-    empireLabel.TextYAlignment = Enum.TextYAlignment.Center
-    empireLabel.Position = UDim2.fromOffset(68, 4)
-    empireLabel.Size = UDim2.fromOffset(82, 20)
-    empireLabel.Parent = open
-
-    local versionLabel = Instance.new("TextLabel")
-    versionLabel.BackgroundTransparency = 1
-    versionLabel.Text = "V3.2.2"
-    versionLabel.TextColor3 = Theme.SubText
-    versionLabel.TextSize = 10
-    versionLabel.Font = Enum.Font.GothamMedium
-    versionLabel.TextXAlignment = Enum.TextXAlignment.Left
-    versionLabel.TextYAlignment = Enum.TextYAlignment.Center
-    versionLabel.Position = UDim2.fromOffset(69, 23)
-    versionLabel.Size = UDim2.fromOffset(65, 15)
-    versionLabel.Parent = open
-
-    local openHint = Instance.new("TextLabel")
-    openHint.BackgroundTransparency = 1
-    openHint.Text = "RESTORE"
-    openHint.TextColor3 = Theme.Muted
-    openHint.TextSize = 10
-    openHint.Font = Enum.Font.Gotham
-    openHint.TextXAlignment = Enum.TextXAlignment.Right
-    openHint.TextYAlignment = Enum.TextYAlignment.Center
-    openHint.Position = UDim2.fromOffset(181, 0)
-    openHint.Size = UDim2.fromOffset(48, 44)
-    openHint.Parent = open
+    local crown = Instance.new("TextLabel")
+    crown.BackgroundTransparency = 1
+    crown.Text = "♛"
+    crown.TextColor3 = Theme.Text
+    crown.TextSize = 13
+    crown.Font = Enum.Font.GothamBold
+    crown.TextXAlignment = Enum.TextXAlignment.Center
+    crown.TextYAlignment = Enum.TextYAlignment.Center
+    crown.Position = UDim2.fromOffset(27, 0)
+    crown.Size = UDim2.fromOffset(20, 38)
+    crown.Parent = open
 
     open.MouseButton1Click:Connect(function()
         self:Restore()
@@ -733,43 +498,11 @@ function UI:Restore()
     self.IsMinimized = false
 
     if self.MinimizedButton then
-        local pill = self.MinimizedButton
-        local pillScale = pill:FindFirstChildOfClass("UIScale") or Instance.new("UIScale")
-        pillScale.Scale = 1
-        pillScale.Parent = pill
-
-        local pillTween = TweenService:Create(
-            pillScale,
-            TweenInfo.new(0.16, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
-            {Scale = 0.82}
-        )
-        pillTween:Play()
-        pillTween.Completed:Wait()
-        pill:Destroy()
+        self.MinimizedButton:Destroy()
         self.MinimizedButton = nil
     end
 
-    local root = self.Root
-    local rootScale = self.RootScale
-
-    root.Visible = true
-    root.ZIndex = 1
-    root.Position = UDim2.fromScale(0.5, 0.045)
-    rootScale.Scale = 0.085
-
-    local move = TweenService:Create(
-        root,
-        TweenInfo.new(0.38, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut),
-        {Position = self.SavedPosition or UDim2.fromScale(0.5, 0.5)}
-    )
-    local expand = TweenService:Create(
-        rootScale,
-        TweenInfo.new(0.38, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut),
-        {Scale = 1}
-    )
-
-    move:Play()
-    expand:Play()
+    self.Root.Visible = true
 end
 
 function UI:ToggleMaximize()
@@ -809,12 +542,15 @@ function UI:_filterTabs(query)
 end
 
 function UI:AddTab(config)
+    if type(config) == "string" then
+        config = {Title = config}
+    end
     config = config or {}
 
     local tab = {
         Window = self,
         Title = config.Title or ("Tab " .. tostring(#self.Tabs + 1)),
-        Emoji = config.Emoji or "-",
+        Emoji = config.Emoji or "•",
         Description = config.Description or "",
         Accent = config.Accent or Theme.Green,
     }
@@ -847,12 +583,6 @@ function UI:AddTab(config)
     icon.Size = UDim2.fromOffset(27, 27)
     icon.Parent = button
     corner(icon, 7)
-    addGradient(
-        icon,
-        tab.Accent:Lerp(Color3.fromRGB(255,255,255), 0.12),
-        tab.Accent:Lerp(Color3.fromRGB(0,0,0), 0.20),
-        135
-    )
     tab.Icon = icon
 
     local tabLabel = text(
@@ -893,6 +623,119 @@ function UI:AddTab(config)
     tab.Page = page
 
     padding(page, 18, 10, 18, 18)
+
+    local pageLayout = Instance.new("UIListLayout")
+    pageLayout.Padding = UDim.new(0, 7)
+    pageLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    pageLayout.Parent = page
+
+    -- Lightweight Fluent-style compatibility controls.
+    function tab:AddLabel(value)
+        local label = text(page, value or "", 13, Theme.SubText, Enum.Font.GothamMedium)
+        label.Size = UDim2.new(1, 0, 0, 30)
+        label.TextWrapped = true
+        return label
+    end
+
+    function tab:AddButton(labelText, callback)
+        local button = Instance.new("TextButton")
+        button.Name = tostring(labelText or "Button")
+        button.Size = UDim2.new(1, 0, 0, 42)
+        button.BackgroundColor3 = Theme.Surface
+        button.BackgroundTransparency = 0.18
+        button.BorderSizePixel = 0
+        button.AutoButtonColor = false
+        button.Text = tostring(labelText or "Button")
+        button.TextColor3 = Theme.Text
+        button.TextSize = 13
+        button.Font = Enum.Font.GothamSemibold
+        button.Parent = page
+        corner(button, 10)
+        stroke(button, Theme.Border, 0.68)
+        button.MouseEnter:Connect(function() tween(button, 0.10, {BackgroundTransparency = 0.04}) end)
+        button.MouseLeave:Connect(function() tween(button, 0.10, {BackgroundTransparency = 0.18}) end)
+        button.MouseButton1Click:Connect(function()
+            if callback then callback() end
+        end)
+        return button
+    end
+
+    function tab:AddSwitch(labelText, callback)
+        local row = Instance.new("Frame")
+        row.Name = tostring(labelText or "Switch")
+        row.Size = UDim2.new(1, 0, 0, 44)
+        row.BackgroundColor3 = Theme.Surface
+        row.BackgroundTransparency = 0.18
+        row.BorderSizePixel = 0
+        row.Parent = page
+        corner(row, 10)
+        stroke(row, Theme.Border, 0.68)
+
+        local label = text(row, tostring(labelText or "Switch"), 13, Theme.Text, Enum.Font.GothamMedium)
+        label.Position = UDim2.fromOffset(13, 0)
+        label.Size = UDim2.new(1, -75, 1, 0)
+
+        local toggle = Instance.new("TextButton")
+        toggle.Size = UDim2.fromOffset(48, 24)
+        toggle.Position = UDim2.new(1, -60, 0.5, -12)
+        toggle.BackgroundColor3 = Theme.Muted
+        toggle.BorderSizePixel = 0
+        toggle.AutoButtonColor = false
+        toggle.Text = "OFF"
+        toggle.TextColor3 = Theme.Text
+        toggle.TextSize = 10
+        toggle.Font = Enum.Font.GothamBold
+        toggle.Parent = row
+        corner(toggle, 12)
+
+        local state = false
+        local switch = {}
+        local function apply(newState, fire)
+            state = newState and true or false
+            toggle.Text = state and "ON" or "OFF"
+            toggle.BackgroundColor3 = state and Theme.Green or Theme.Muted
+            if fire and callback then callback(state) end
+        end
+
+        function switch:Set(newState)
+            apply(newState, true)
+        end
+
+        function switch:Get() return state end
+        switch.Button = toggle
+        switch.Frame = row
+        toggle.MouseButton1Click:Connect(function() apply(not state, true) end)
+        return switch
+    end
+
+    function tab:AddTextBox(labelText, callback, options)
+        local box = Instance.new("TextBox")
+        box.Name = tostring(labelText or "TextBox")
+        box.Size = UDim2.new(1, 0, 0, 52)
+        box.BackgroundColor3 = Theme.Surface
+        box.BackgroundTransparency = 0.18
+        box.BorderSizePixel = 0
+        box.ClearTextOnFocus = false
+        box.Text = ""
+        box.PlaceholderText = (options and options.placeholder) or ""
+        box.PlaceholderColor3 = Theme.Muted
+        box.TextColor3 = Theme.Text
+        box.TextSize = 13
+        box.Font = Enum.Font.Gotham
+        box.TextXAlignment = Enum.TextXAlignment.Left
+        box.Parent = page
+        corner(box, 10)
+        stroke(box, Theme.Border, 0.68)
+        padding(box, 13, 0, 13, 0)
+        box.FocusLost:Connect(function()
+            if callback then callback(box.Text) end
+        end)
+        return box
+    end
+
+    function tab:Show()
+        self.Window:SelectTab(self)
+    end
 
     -- Fluent-style foundation for future content.
     function tab:AddSection(titleValue)
@@ -969,7 +812,7 @@ function UI:SelectTab(tab)
 
         if active then
             tween(item.Button, 0.14, {
-                BackgroundTransparency = 0.10,
+                BackgroundTransparency = 0.14,
             })
             tween(item.Label, 0.14, {
                 TextColor3 = Theme.Text,
@@ -1000,7 +843,6 @@ function UI:SetTitle(titleValue, subtitleValue)
 end
 
 function UI:Destroy()
-    self:StopGlobalExecutionFeed()
     if self._inputConnection then
         self._inputConnection:Disconnect()
         self._inputConnection = nil
@@ -1011,22 +853,44 @@ function UI:Destroy()
     end
 end
 
+
+--========================================================--
+-- JOHNNY | FARMING
+-- Cleaned / Organized Version
+--========================================================--
+
+--========================================================--
+-- SERVICES
+--========================================================--
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Lighting = game:GetService("Lighting")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TeleportService = game:GetService("TeleportService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local Stats = game:GetService("Stats")
+
+local Player = Players.LocalPlayer
+
+--========================================================--
+
 -- ============================================================
--- DEFAULT LAYOUT
+-- JOHNNY FEATURE INTEGRATION INTO THE WINDOWS 11 SHELL
 -- ============================================================
 
-local Window = UI:CreateWindow({
-    Title = "Empire",
-    Subtitle = "Logged in as : " .. ((Players.LocalPlayer and Players.LocalPlayer.Name) or "Unknown") .. " - V3.2.2",
-    Size = UDim2.fromScale(0.70, 0.76),
-    ContentTitle = "Stats",
-    ContentSubtitle = "Select a tab to begin building your interface.",
+local window = UI:CreateWindow({
+    Title = "♛ .johnnyfronny's script • V3.2.2",
+    Subtitle = "Windows 11 • Farming Edition",
+    Size = UDim2.fromScale(0.74, 0.80),
+    ContentTitle = "Farming",
+    ContentSubtitle = "Johnny farming controls integrated into the Windows 11 layout.",
 })
 
 local createdTabs = {}
-
 for _, info in ipairs(Tabs) do
-    createdTabs[info.Title] = Window:AddTab({
+    createdTabs[info.Title] = window:AddTab({
         Title = info.Title,
         Emoji = info.Emoji,
         Description = info.Description,
@@ -1037,986 +901,3573 @@ for _, info in ipairs(Tabs) do
             Player = Color3.fromRGB(71, 205, 150),
             Killing = Color3.fromRGB(255, 82, 82),
             Stats = Color3.fromRGB(86, 145, 255),
-            Admin = Color3.fromRGB(255, 196, 70),
+            Tickets = Color3.fromRGB(255, 211, 71),
             Perf = Color3.fromRGB(115, 121, 132),
             Misc = Color3.fromRGB(169, 176, 188),
-            Info = Color3.fromRGB(95, 177, 255),
         })[info.Title],
     })
 end
 
-Window:SelectTab(createdTabs.Stats)
+local MainTab = createdTabs.Player
+local FarmingTab = createdTabs.Farming
+local FastRebTab = createdTabs.Rebirth
+local RebirthTab = createdTabs.Rebirth
+local ToolsTab = createdTabs.Misc
+local openCompactMode
 
--- ============================================================
--- INFO / CREDITS PAGE
--- ============================================================
-local InfoTab = createdTabs.Info
-if InfoTab then
-    local infoPage = InfoTab.Page
-
-    local credits = Instance.new("Frame")
-    credits.Name = "CreditsCard"
-    credits.BackgroundColor3 = Theme.Surface
-    credits.BackgroundTransparency = 0.24
-    credits.BorderSizePixel = 0
-    credits.Size = UDim2.new(1, 0, 0, 170)
-    credits.Parent = infoPage
-    corner(credits, 13)
-    stroke(credits, Theme.Border, 0.64)
-
-    local heading = text(credits, "Empire", 22, Theme.Text, Enum.Font.GothamBold)
-    heading.Position = UDim2.fromOffset(18, 14)
-    heading.Size = UDim2.new(1, -36, 0, 30)
-
-    local madeBy = text(credits, "Made by JohnnyFronny", 14, Theme.SubText, Enum.Font.GothamMedium)
-    madeBy.Position = UDim2.fromOffset(18, 45)
-    madeBy.Size = UDim2.new(1, -36, 0, 22)
-
-    local desc = text(credits, "Empire is a compact Windows 11-inspired script interface.", 12, Theme.Muted, Enum.Font.Gotham)
-    desc.Position = UDim2.fromOffset(18, 68)
-    desc.Size = UDim2.new(1, -36, 0, 20)
-
-    
-local function empireTabIcon(parent, token)
-    local holder = Instance.new("Frame")
-    holder.Name = "EmpireTabIcon"
-    holder.BackgroundTransparency = 1
-    holder.Size = UDim2.fromOffset(22, 22)
-    holder.Position = UDim2.new(0, 7, 0.5, -11)
-    holder.Parent = parent
-
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = Color3.fromRGB(155, 160, 170)
-    stroke.Thickness = 1.4
-    stroke.Transparency = 0.15
-
-    local box = Instance.new("Frame")
-    box.Name = "IconShape"
-    box.BackgroundColor3 = Color3.fromRGB(35, 38, 44)
-    box.BackgroundTransparency = 0.15
-    box.Size = UDim2.fromOffset(18, 18)
-    box.Position = UDim2.fromOffset(2, 2)
-    box.Parent = holder
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 5)
-    corner.Parent = box
-    stroke.Parent = box
-
-    local label = Instance.new("TextLabel")
-    label.BackgroundTransparency = 1
-    label.Size = UDim2.fromScale(1, 1)
-    label.Font = Enum.Font.GothamBold
-    label.TextSize = 10
-    label.TextColor3 = Color3.fromRGB(220, 224, 230)
-    label.Text = tostring(token or "")
-    label.Parent = box
-
-    return holder
-end
-
-local function socialButton(parentObject, x, labelText, handleText, accent, symbol)
-        local b = Instance.new("TextButton")
-        b.BackgroundColor3 = Theme.WindowTop
-        b.BackgroundTransparency = 0.10
-        b.BorderSizePixel = 0
-        b.AutoButtonColor = false
-        b.Text = ""
-        b.Position = UDim2.fromOffset(x, 101)
-        b.Size = UDim2.fromOffset(170, 54)
-        b.Parent = parentObject
-        corner(b, 11)
-        stroke(b, Theme.Border, 0.70)
-        addGradient(b, accent:Lerp(Color3.fromRGB(255,255,255), 0.06), Theme.Window, 90)
-
-        local icon = Instance.new("Frame")
-        icon.BackgroundColor3 = accent
-        icon.BackgroundTransparency = 0.05
-        icon.BorderSizePixel = 0
-        icon.Position = UDim2.fromOffset(10, 11)
-        icon.Size = UDim2.fromOffset(32, 32)
-        icon.Parent = b
-        corner(icon, 9)
-
-        if labelText == "YouTube" then
-            local play = Instance.new("Frame")
-            play.BackgroundColor3 = Color3.fromRGB(255,255,255)
-            play.BorderSizePixel = 0
-            play.Position = UDim2.fromOffset(11, 8)
-            play.Size = UDim2.fromOffset(12, 16)
-            play.Parent = icon
-            corner(play, 2)
-            local cut = Instance.new("Frame")
-            cut.BackgroundColor3 = accent
-            cut.BorderSizePixel = 0
-            cut.Position = UDim2.fromOffset(11, 11)
-            cut.Size = UDim2.fromOffset(7, 10)
-            cut.Rotation = 45
-            cut.Parent = icon
-        else
-            -- Simple Discord-like glyph built from reliable UI primitives.
-            local head = Instance.new("Frame")
-            head.BackgroundColor3 = Color3.fromRGB(255,255,255)
-            head.BorderSizePixel = 0
-            head.Position = UDim2.fromOffset(6, 9)
-            head.Size = UDim2.fromOffset(20, 15)
-            head.Parent = icon
-            corner(head, 7)
-
-            local eye1 = Instance.new("Frame")
-            eye1.BackgroundColor3 = accent
-            eye1.BorderSizePixel = 0
-            eye1.Position = UDim2.fromOffset(11, 14)
-            eye1.Size = UDim2.fromOffset(3, 3)
-            eye1.Parent = icon
-            corner(eye1, 2)
-
-            local eye2 = eye1:Clone()
-            eye2.Position = UDim2.fromOffset(18, 14)
-            eye2.Parent = icon
-        end
-
-        local name = text(b, labelText, 12, Theme.Text, Enum.Font.GothamSemibold)
-        name.Position = UDim2.fromOffset(51, 7)
-        name.Size = UDim2.fromOffset(105, 18)
-
-        local handle = text(b, handleText, 10, Theme.SubText, Enum.Font.Gotham)
-        handle.Position = UDim2.fromOffset(51, 26)
-        handle.Size = UDim2.fromOffset(105, 18)
-
-        b.MouseEnter:Connect(function()
-            tween(b, 0.12, {BackgroundTransparency = 0})
-        end)
-        b.MouseLeave:Connect(function()
-            tween(b, 0.12, {BackgroundTransparency = 0.10})
-        end)
-
-        return b
-    end
-
-    socialButton(credits, 18, "YouTube", "JohnnyFronnyYT", Color3.fromRGB(255, 70, 70), "")
-    socialButton(credits, 198, "Discord", "JohnnyFronny", Color3.fromRGB(88, 101, 242), "")
-end
+window:SelectTab(FarmingTab)
 
 
--- ============================================================
--- ADMIN PAGE
--- ============================================================
--- Backend-ready admin dashboard. The UI accepts execution records from
--- a trusted server/backend through UI:SetAdminExecutions(entries).
--- It intentionally does not collect hardware IDs or precise location.
-local AdminTab = createdTabs.Admin
-if AdminTab then
-    local adminPage = AdminTab.Page
-    local ADMIN_PASSWORD = "yader45"
-    local adminUnlocked = false
-    local adminExecutions = {}
-    local filteredExecutions = {}
+--========================================================--
+-- FAST FARM TAB
+--========================================================--
 
-    local gate = Instance.new("Frame")
-    gate.Name = "AdminGate"
-    gate.BackgroundColor3 = Theme.Surface
-    gate.BackgroundTransparency = 0.18
-    gate.BorderSizePixel = 0
-    gate.Size = UDim2.new(1, 0, 0, 190)
-    gate.Parent = adminPage
-    corner(gate, 13)
-    stroke(gate, Theme.Border, 0.64)
+--========================================================--
+-- FARMING UI
+--========================================================--
 
-    local gateTitle = text(gate, "Admin Access", 17, Theme.Text, Enum.Font.GothamBold)
-    gateTitle.Position = UDim2.fromOffset(18, 15)
-    gateTitle.Size = UDim2.new(1, -36, 0, 26)
+FarmingTab:AddLabel("Time:").TextSize = 20
 
-    local gateDesc = text(gate, "Enter the admin password to unlock the Empire execution dashboard.", 12, Theme.SubText, Enum.Font.Gotham)
-    gateDesc.Position = UDim2.fromOffset(18, 43)
-    gateDesc.Size = UDim2.new(1, -36, 0, 20)
+local stopwatchLabel =
+    FarmingTab:AddLabel(
+        "0d 0h 0m 0s - Fast Rep Inactive"
+    )
 
-    local passwordBox = Instance.new("TextBox")
-    passwordBox.Name = "PasswordBox"
-    passwordBox.BackgroundColor3 = Theme.WindowTop
-    passwordBox.BackgroundTransparency = 0.10
-    passwordBox.BorderSizePixel = 0
-    passwordBox.ClearTextOnFocus = false
-    passwordBox.PlaceholderText = "Admin password"
-    passwordBox.PlaceholderColor3 = Theme.Muted
-    passwordBox.Text = ""
-    passwordBox.TextColor3 = Theme.Text
-    passwordBox.TextSize = 13
-    passwordBox.Font = Enum.Font.Gotham
-    passwordBox.TextXAlignment = Enum.TextXAlignment.Left
-    passwordBox.Position = UDim2.fromOffset(18, 76)
-    passwordBox.Size = UDim2.new(1, -140, 0, 40)
-    passwordBox.Parent = gate
-    corner(passwordBox, 9)
-    stroke(passwordBox, Theme.Border, 0.70)
-    padding(passwordBox, 12, 0, 12, 0)
+stopwatchLabel.TextSize = 17
 
-    local unlock = Instance.new("TextButton")
-    unlock.Name = "Unlock"
-    unlock.BackgroundColor3 = Color3.fromRGB(255, 196, 70)
-    unlock.BackgroundTransparency = 0.05
-    unlock.BorderSizePixel = 0
-    unlock.AutoButtonColor = false
-    unlock.Text = "Unlock"
-    unlock.TextColor3 = Color3.fromRGB(20, 17, 8)
-    unlock.TextSize = 12
-    unlock.Font = Enum.Font.GothamBold
-    unlock.Position = UDim2.new(1, -108, 0, 76)
-    unlock.Size = UDim2.fromOffset(90, 40)
-    unlock.Parent = gate
-    corner(unlock, 9)
+stopwatchLabel.TextColor3 =
+    Color3.fromRGB(
+        255,
+        50,
+        50
+    )
 
-    local status = text(gate, "Locked", 11, Theme.Muted, Enum.Font.GothamMedium)
-    status.Position = UDim2.fromOffset(18, 127)
-    status.Size = UDim2.new(1, -36, 0, 20)
+local projectedStrengthLabel =
+    FarmingTab:AddLabel(
+        "Strength Pace: 0 /Hour | 0 /Day | 0 /Week"
+    )
 
-    local dashboard = Instance.new("Frame")
-    dashboard.Name = "ExecutionDashboard"
-    dashboard.BackgroundColor3 = Theme.Surface
-    dashboard.BackgroundTransparency = 0.18
-    dashboard.BorderSizePixel = 0
-    dashboard.Size = UDim2.new(1, 0, 0, 470)
-    dashboard.Visible = false
-    dashboard.Parent = adminPage
-    corner(dashboard, 13)
-    stroke(dashboard, Theme.Border, 0.64)
+local projectedDurabilityLabel =
+    FarmingTab:AddLabel(
+        "Durability Pace: 0 /Hour | 0 /Day | 0 /Week"
+    )
 
-    local dashTitle = text(dashboard, "Global Current Executions", 17, Theme.Text, Enum.Font.GothamBold)
-    dashTitle.Position = UDim2.fromOffset(18, 14)
-    dashTitle.Size = UDim2.new(1, -160, 0, 25)
+local averageStrengthLabel =
+    FarmingTab:AddLabel(
+        "Average Strength Pace: 0 /Hour | 0 /Day | 0 /Week"
+    )
 
-    local dashNote = text(dashboard, "Backend-ready - username, UserId, game, server, version and public stats", 10, Theme.SubText, Enum.Font.Gotham)
-    dashNote.Position = UDim2.fromOffset(18, 39)
-    dashNote.Size = UDim2.new(1, -36, 0, 18)
+local averageDurabilityLabel =
+    FarmingTab:AddLabel(
+        "Average Durability Pace: 0 /Hour | 0 /Day | 0 /Week"
+    )
 
-    local countBadge = text(dashboard, "0 RECORDS", 9, Theme.Green, Enum.Font.GothamBold)
-    countBadge.BackgroundColor3 = Theme.WindowTop
-    countBadge.BackgroundTransparency = 0.10
-    countBadge.TextXAlignment = Enum.TextXAlignment.Center
-    countBadge.Position = UDim2.new(1, -112, 0, 17)
-    countBadge.Size = UDim2.fromOffset(94, 24)
-    corner(countBadge, 8)
+projectedStrengthLabel.TextSize = 17
+projectedDurabilityLabel.TextSize = 17
+averageStrengthLabel.TextSize = 17
+averageDurabilityLabel.TextSize = 17
 
-    local searchBox = Instance.new("TextBox")
-    searchBox.Name = "ExecutionSearch"
-    searchBox.BackgroundColor3 = Theme.WindowTop
-    searchBox.BackgroundTransparency = 0.10
-    searchBox.BorderSizePixel = 0
-    searchBox.ClearTextOnFocus = false
-    searchBox.PlaceholderText = "Search username, UserId, game or server..."
-    searchBox.PlaceholderColor3 = Theme.Muted
-    searchBox.Text = ""
-    searchBox.TextColor3 = Theme.Text
-    searchBox.TextSize = 11
-    searchBox.Font = Enum.Font.Gotham
-    searchBox.TextXAlignment = Enum.TextXAlignment.Left
-    searchBox.Position = UDim2.fromOffset(18, 67)
-    searchBox.Size = UDim2.new(1, -124, 0, 34)
-    searchBox.Parent = dashboard
-    corner(searchBox, 8)
-    stroke(searchBox, Theme.Border, 0.75)
-    padding(searchBox, 11, 0, 11, 0)
+FarmingTab:AddLabel("").TextSize = 10
 
-    local refresh = Instance.new("TextButton")
-    refresh.Name = "Refresh"
-    refresh.BackgroundColor3 = Theme.WindowTop
-    refresh.BackgroundTransparency = 0.05
-    refresh.BorderSizePixel = 0
-    refresh.AutoButtonColor = false
-    refresh.Text = "🔄"
-    refresh.TextColor3 = Theme.Text
-    refresh.TextSize = 17
-    refresh.Font = Enum.Font.GothamBold
-    refresh.Position = UDim2.new(1, -94, 0, 67)
-    refresh.Size = UDim2.fromOffset(76, 34)
-    refresh.Parent = dashboard
-    corner(refresh, 8)
-    stroke(refresh, Theme.Border, 0.72)
+FarmingTab:AddLabel("Stats:").TextSize = 20
 
-    local list = Instance.new("ScrollingFrame")
-    list.Name = "ExecutionList"
-    list.BackgroundTransparency = 1
-    list.BorderSizePixel = 0
-    list.Position = UDim2.fromOffset(14, 112)
-    list.Size = UDim2.new(1, -28, 1, -126)
-    list.CanvasSize = UDim2.new()
-    list.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    list.ScrollBarThickness = 3
-    list.ScrollBarImageColor3 = Theme.Border
-    list.Parent = dashboard
+local strengthLabel =
+    FarmingTab:AddLabel(
+        "Strength: 0 | Gained: 0"
+    )
 
-    local layout = Instance.new("UIListLayout")
-    layout.Padding = UDim.new(0, 7)
-    layout.SortOrder = Enum.SortOrder.LayoutOrder
-    layout.Parent = list
+local durabilityLabel =
+    FarmingTab:AddLabel(
+        "Durability: 0 | Gained: 0"
+    )
 
-    local function clearList()
-        for _, child in ipairs(list:GetChildren()) do
-            if child:IsA("Frame") then
-                child:Destroy()
+strengthLabel.TextSize = 17
+durabilityLabel.TextSize = 17
+
+--========================================================--
+-- FAST FARM TRACKING
+--========================================================--
+
+local fastRepRunning = false
+local trackingStarted = false
+
+local farmStartTime = 0
+local farmPausedElapsed = 0
+
+local strengthHistory = {}
+local durabilityHistory = {}
+
+local calculationInterval = 10
+
+local initialStrength =
+    strengthStat.Value
+
+local initialDurability =
+    durabilityStat.Value
+
+task.spawn(function()
+
+    local lastCalcTime = tick()
+
+    while not _G.JohnnyScriptDestroyed do
+
+        local currentTime = tick()
+
+        local currentStrength =
+            strengthStat.Value
+
+        local currentDurability =
+            durabilityStat.Value
+
+        strengthLabel.Text =
+            "Strength: " ..
+            formatStatNumber(
+                currentStrength
+            ) ..
+            " | Gained: " ..
+            formatStatNumber(
+                currentStrength -
+                initialStrength
+            )
+
+        durabilityLabel.Text =
+            "Durability: " ..
+            formatStatNumber(
+                currentDurability
+            ) ..
+            " | Gained: " ..
+            formatStatNumber(
+                currentDurability -
+                initialDurability
+            )
+
+        if fastRepRunning then
+
+            if not trackingStarted then
+
+                trackingStarted = true
+
+                farmStartTime =
+                    currentTime
+
+                strengthHistory = {}
+                durabilityHistory = {}
+
             end
-        end
-    end
 
-    local function abbreviateNumber(value)
-        local n = tonumber(value)
-        if not n then return tostring(value) end
-        local units = {"", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No"}
-        local index = 1
-        while math.abs(n) >= 1000 and index < #units do
-            n = n / 1000
-            index = index + 1
-        end
-        if index == 1 then
-            return tostring(math.floor(n + 0.5))
-        end
-        local formatted = string.format("%.2f", n):gsub("0+$", ""):gsub("\.$", "")
-        return formatted .. units[index]
-    end
+            local elapsed =
+                farmPausedElapsed +
+                (
+                    currentTime -
+                    farmStartTime
+                )
 
-    local function stringifyStats(stats)
-        if type(stats) ~= "table" then
-            return "No public stats supplied"
-        end
-        local parts = {}
-        local preferred = {"Strength", "Durability", "Rebirths"}
-        local used = {}
-        for _, key in ipairs(preferred) do
-            if stats[key] ~= nil then
-                local value = stats[key]
-                if key == "Strength" or key == "Durability" then
-                    value = abbreviateNumber(value)
-                end
-                table.insert(parts, key .. ": " .. tostring(value))
-                used[key] = true
+            local days =
+                math.floor(
+                    elapsed / 86400
+                )
+
+            local hours =
+                math.floor(
+                    (elapsed % 86400) /
+                    3600
+                )
+
+            local minutes =
+                math.floor(
+                    (elapsed % 3600) /
+                    60
+                )
+
+            local seconds =
+                math.floor(
+                    elapsed % 60
+                )
+
+            stopwatchLabel.Text =
+                string.format(
+                    "%dd %dh %dm %ds - Fast Rep Running",
+                    days,
+                    hours,
+                    minutes,
+                    seconds
+                )
+
+            stopwatchLabel.TextColor3 =
+                Color3.fromRGB(
+                    50,
+                    255,
+                    50
+                )
+
+            table.insert(
+                strengthHistory,
+                {
+                    time = currentTime,
+                    value = currentStrength
+                }
+            )
+
+            table.insert(
+                durabilityHistory,
+                {
+                    time = currentTime,
+                    value = currentDurability
+                }
+            )
+
+            while
+                #strengthHistory > 0
+                and
+                currentTime -
+                strengthHistory[1].time >
+                calculationInterval
+            do
+
+                table.remove(
+                    strengthHistory,
+                    1
+                )
             end
-        end
-        local extra = {}
-        for key, value in pairs(stats) do
-            if not used[key] then
-                table.insert(extra, tostring(key) .. ": " .. tostring(value))
+
+            while
+                #durabilityHistory > 0
+                and
+                currentTime -
+                durabilityHistory[1].time >
+                calculationInterval
+            do
+
+                table.remove(
+                    durabilityHistory,
+                    1
+                )
             end
-        end
-        table.sort(extra)
-        for _, line in ipairs(extra) do table.insert(parts, line) end
-        return #parts > 0 and table.concat(parts, "  -  ") or "No public stats supplied"
-    end
 
-    local function matches(record, query)
-        if query == "" then return true end
-        local haystack = table.concat({
-            tostring(record.Username or ""),
-            tostring(record.DisplayName or ""),
-            tostring(record.UserId or ""),
-            tostring(record.Game or ""),
-            tostring(record.PlaceId or ""),
-            tostring(record.Server or ""),
-            tostring(record.JobId or ""),
-            tostring(record.Version or ""),
-        }, " "):lower()
-        return string.find(haystack, query:lower(), 1, true) ~= nil
-    end
+            if
+                currentTime -
+                lastCalcTime >=
+                calculationInterval
+            then
 
-    local function renderExecutions()
-        if not adminUnlocked then return end
-        clearList()
-        local query = searchBox.Text or ""
-        filteredExecutions = {}
-        for _, record in ipairs(adminExecutions) do
-            if matches(record, query) then
-                table.insert(filteredExecutions, record)
+                lastCalcTime =
+                    currentTime
+
+                if #strengthHistory >= 2 then
+
+                    local first =
+                        strengthHistory[1]
+
+                    local last =
+                        strengthHistory[
+                            #strengthHistory
+                        ]
+
+                    local delta =
+                        last.value -
+                        first.value
+
+                    local secondsElapsed =
+                        last.time -
+                        first.time
+
+                    if secondsElapsed > 0 then
+
+                        local perSecond =
+                            delta /
+                            secondsElapsed
+
+                        projectedStrengthLabel.Text =
+                            string.format(
+                                "Strength Pace: %s/Hour | %s/Day | %s/Week",
+                                formatStatNumber(
+                                    perSecond * 3600
+                                ),
+                                formatStatNumber(
+                                    perSecond * 86400
+                                ),
+                                formatStatNumber(
+                                    perSecond * 604800
+                                )
+                            )
+                    end
+                end
+
+                if #durabilityHistory >= 2 then
+
+                    local first =
+                        durabilityHistory[1]
+
+                    local last =
+                        durabilityHistory[
+                            #durabilityHistory
+                        ]
+
+                    local delta =
+                        last.value -
+                        first.value
+
+                    local secondsElapsed =
+                        last.time -
+                        first.time
+
+                    if secondsElapsed > 0 then
+
+                        local perSecond =
+                            delta /
+                            secondsElapsed
+
+                        projectedDurabilityLabel.Text =
+                            string.format(
+                                "Durability Pace: %s/Hour | %s/Day | %s/Week",
+                                formatStatNumber(
+                                    perSecond * 3600
+                                ),
+                                formatStatNumber(
+                                    perSecond * 86400
+                                ),
+                                formatStatNumber(
+                                    perSecond * 604800
+                                )
+                            )
+                    end
+                end
+
+                local totalElapsed =
+                    farmPausedElapsed +
+                    (
+                        currentTime -
+                        farmStartTime
+                    )
+
+                if totalElapsed > 0 then
+
+                    local strengthPerSecond =
+                        (
+                            currentStrength -
+                            initialStrength
+                        ) /
+                        totalElapsed
+
+                    local durabilityPerSecond =
+                        (
+                            currentDurability -
+                            initialDurability
+                        ) /
+                        totalElapsed
+
+                    averageStrengthLabel.Text =
+                        string.format(
+                            "Average Strength Pace: %s/Hour | %s/Day | %s/Week",
+                            formatStatNumber(
+                                strengthPerSecond * 3600
+                            ),
+                            formatStatNumber(
+                                strengthPerSecond * 86400
+                            ),
+                            formatStatNumber(
+                                strengthPerSecond * 604800
+                            )
+                        )
+
+                    averageDurabilityLabel.Text =
+                        string.format(
+                            "Average Durability Pace: %s/Hour | %s/Day | %s/Week",
+                            formatStatNumber(
+                                durabilityPerSecond * 3600
+                            ),
+                            formatStatNumber(
+                                durabilityPerSecond * 86400
+                            ),
+                            formatStatNumber(
+                                durabilityPerSecond * 604800
+                            )
+                        )
+                end
             end
+
+        elseif trackingStarted then
+
+            trackingStarted = false
+
+            farmPausedElapsed +=
+                currentTime -
+                farmStartTime
+
+            local elapsed =
+                farmPausedElapsed
+
+            stopwatchLabel.Text =
+                string.format(
+                    "%dd %dh %dm %ds - Fast Rep Stopped",
+                    math.floor(
+                        elapsed / 86400
+                    ),
+                    math.floor(
+                        (elapsed % 86400) /
+                        3600
+                    ),
+                    math.floor(
+                        (elapsed % 3600) /
+                        60
+                    ),
+                    math.floor(
+                        elapsed % 60
+                    )
+                )
+
+            stopwatchLabel.TextColor3 =
+                Color3.fromRGB(
+                    255,
+                    165,
+                    0
+                )
+
+            projectedStrengthLabel.Text =
+                "Strength Pace: 0 /Hour | 0 /Day | 0 /Week"
+
+            projectedDurabilityLabel.Text =
+                "Durability Pace: 0 /Hour | 0 /Day | 0 /Week"
+
+            averageStrengthLabel.Text =
+                "Average Strength Pace: 0 /Hour | 0 /Day | 0 /Week"
+
+            averageDurabilityLabel.Text =
+                "Average Durability Pace: 0 /Hour | 0 /Day | 0 /Week"
+
+            strengthHistory = {}
+            durabilityHistory = {}
         end
 
-        countBadge.Text = tostring(#filteredExecutions) .. " RECORDS"
-
-        if #filteredExecutions == 0 then
-            local empty = Instance.new("Frame")
-            empty.BackgroundColor3 = Theme.WindowTop
-            empty.BackgroundTransparency = 0.20
-            empty.BorderSizePixel = 0
-            empty.Size = UDim2.new(1, -2, 0, 92)
-            empty.Parent = list
-            corner(empty, 10)
-
-            local emptyTitle = text(empty, "No executions yet", 13, Theme.Text, Enum.Font.GothamSemibold)
-            emptyTitle.Position = UDim2.fromOffset(14, 18)
-            emptyTitle.Size = UDim2.new(1, -28, 0, 20)
-            emptyTitle.TextXAlignment = Enum.TextXAlignment.Center
-
-            local emptyMessage = UI.ExecutionLogger.LastError and ("Feed: " .. tostring(UI.ExecutionLogger.LastError)) or "No current global executions were returned by Pipedream."
-            local emptyNote = text(empty, emptyMessage, 10, Theme.Muted, Enum.Font.Gotham)
-            emptyNote.Position = UDim2.fromOffset(14, 44)
-            emptyNote.Size = UDim2.new(1, -28, 0, 18)
-            emptyNote.TextXAlignment = Enum.TextXAlignment.Center
-            return
-        end
-
-        for index, record in ipairs(filteredExecutions) do
-            local row = Instance.new("Frame")
-            row.Name = "Execution_" .. index
-            row.BackgroundColor3 = Theme.WindowTop
-            row.BackgroundTransparency = 0.14
-            row.BorderSizePixel = 0
-            row.Size = UDim2.new(1, -2, 0, 86)
-            row.Parent = list
-            corner(row, 9)
-
-            local user = text(row, tostring(record.Username or "Unknown"), 12, Theme.Text, Enum.Font.GothamSemibold)
-            user.Position = UDim2.fromOffset(12, 8)
-            user.Size = UDim2.new(0.42, 0, 0, 18)
-
-            local display = record.DisplayName and ("Display: " .. tostring(record.DisplayName)) or ""
-            local uid = record.UserId and ("UserId: " .. tostring(record.UserId)) or ""
-            local identity = text(row, display .. ((display ~= "" and uid ~= "") and "  -  " or "") .. uid, 9, Theme.SubText, Enum.Font.Gotham)
-            identity.Position = UDim2.fromOffset(12, 29)
-            identity.Size = UDim2.new(0.62, 0, 0, 15)
-            identity.TextTruncate = Enum.TextTruncate.AtEnd
-
-            local gameInfo = text(row, tostring(record.Game or "Unknown game") .. "  -  Place " .. tostring(record.PlaceId or "?"), 9, Theme.SubText, Enum.Font.Gotham)
-            gameInfo.Position = UDim2.new(0.44, 0, 8, 0)
-            gameInfo.Size = UDim2.new(0.54, -12, 0, 18)
-            gameInfo.TextXAlignment = Enum.TextXAlignment.Right
-            gameInfo.TextTruncate = Enum.TextTruncate.AtEnd
-
-            local server = text(row, "Server: " .. tostring(record.Server or record.JobId or "Unknown"), 9, Theme.Muted, Enum.Font.Gotham)
-            server.Position = UDim2.fromOffset(12, 48)
-            server.Size = UDim2.new(0.58, 0, 0, 15)
-            server.TextTruncate = Enum.TextTruncate.AtEnd
-
-            local version = text(row, "V" .. tostring(record.Version or "3.2.2") .. "  -  " .. tostring(record.Timestamp or ""), 9, Theme.Muted, Enum.Font.Gotham)
-            version.Position = UDim2.new(0.42, 0, 48, 0)
-            version.Size = UDim2.new(0.56, -12, 0, 15)
-            version.TextXAlignment = Enum.TextXAlignment.Right
-            version.TextTruncate = Enum.TextTruncate.AtEnd
-
-            local stats = text(row, stringifyStats(record.Stats), 9, Theme.Muted, Enum.Font.Gotham)
-            stats.Position = UDim2.fromOffset(12, 67)
-            stats.Size = UDim2.new(1, -24, 0, 14)
-            stats.TextTruncate = Enum.TextTruncate.AtEnd
-        end
+        task.wait(0.05)
     end
+end)
 
-    function UI:SetAdminExecutions(entries)
-        if type(entries) ~= "table" then
-            entries = {}
+--========================================================--
+-- FAST FARM
+--========================================================--
+
+FarmingTab:AddLabel("")
+
+FarmingTab:AddLabel(
+    "Fast Farm (Recommended Speed: 20)"
+).TextSize = 20
+
+local repsPerTick = 1
+
+FarmingTab:AddTextBox(
+    "Rep Speed",
+    function(value)
+
+        local number =
+            tonumber(value)
+
+        if number and number > 0 then
+            repsPerTick =
+                math.floor(number)
         end
-        adminExecutions = {}
-        for _, record in ipairs(entries) do
-            if type(record) == "table" then
-                table.insert(adminExecutions, record)
-            end
-        end
-        if adminUnlocked then
-            renderExecutions()
-        end
-    end
 
-    function UI:AddAdminExecution(record)
-        if type(record) ~= "table" then return end
-        table.insert(adminExecutions, 1, record)
-        if adminUnlocked then
-            renderExecutions()
-        end
-    end
-
-    local function unlockAdmin()
-        if passwordBox.Text == ADMIN_PASSWORD then
-            adminUnlocked = true
-            status.Text = "Unlocked - loading global executions..."
-            status.TextColor3 = Theme.Yellow
-            gate.Visible = false
-            dashboard.Visible = true
-            renderExecutions()
-
-            task.spawn(function()
-                local ok, result = UI:FetchGlobalExecutions()
-                if ok then
-                    status.Text = "Global feed connected - " .. tostring(#result) .. " current execution(s)"
-                    status.TextColor3 = Theme.Green
-                else
-                    status.Text = "Global feed error: " .. tostring(result)
-                    status.TextColor3 = Theme.Red
-                end
-                renderExecutions()
-            end)
-        else
-            status.Text = "Incorrect password"
-            status.TextColor3 = Theme.Red
-            task.delay(0.8, function()
-                if status.Parent then
-                    status.Text = "Locked"
-                    status.TextColor3 = Theme.Muted
-                end
-            end)
-        end
-    end
-
-    unlock.MouseButton1Click:Connect(unlockAdmin)
-    passwordBox.FocusLost:Connect(function(enterPressed)
-        if enterPressed then unlockAdmin() end
-    end)
-
-    searchBox:GetPropertyChangedSignal("Text"):Connect(function()
-        if adminUnlocked then renderExecutions() end
-    end)
-
-    refresh.MouseButton1Click:Connect(function()
-        if adminUnlocked then
-            refresh.Text = "⟳"
-            task.spawn(function()
-                local ok = false
-                if UI.ExecutionLogger.PollEndpoint ~= "" then
-                    ok = UI:FetchGlobalExecutions()
-                end
-                if not ok then
-                    renderExecutions()
-                end
-                refresh.Text = "🔄"
-            end)
-        end
-    end)
-end
-
--- ============================================================
--- DISCORD EXECUTION LOGGER + GLOBAL CURRENT FEED
--- ============================================================
--- Discord webhook = execution reporting.
--- Tiny Discord bridge = reads the same channel for the Admin tab.
--- No database is used.
---
--- IMPORTANT: replace the two placeholder URLs below with your own values.
--- The Discord webhook is used only to POST the execution embed.
--- The bridge URL is the public URL of the tiny Discord bot's /executions endpoint.
-
-UI.ExecutionLogger = {
-    Enabled = false,
-    Webhook = "",
-    PollEndpoint = "",
-    Timeout = 8,
-    PollInterval = 8,
-    LastError = nil,
-    LastResponse = nil,
-}
-
-local function findRequestFunction()
-    local candidates = {
-        rawget(getgenv and getgenv() or _G, "request"),
-        rawget(getgenv and getgenv() or _G, "http_request"),
-        rawget(getgenv and getgenv() or _G, "http") and rawget(getgenv and getgenv() or _G, "http").request,
-        rawget(getgenv and getgenv() or _G, "syn") and rawget(getgenv and getgenv() or _G, "syn").request,
+    end,
+    {
+        placeholder = "1"
     }
-    for _, fn in ipairs(candidates) do
-        if type(fn) == "function" then
-            return fn
+)
+
+--========================================================--
+-- PING ADJUSTER
+--========================================================--
+
+local pingAdjusterEnabled = true
+
+local pausePing = 250
+local resumePing = 200
+local pauseDuration = 1
+
+local pingPaused = false
+local lastKnownPing = 0
+
+local pingStatusLabel =
+    FarmingTab:AddLabel(
+        "Ping: -- ms | Status: Ready"
+    )
+
+pingStatusLabel.TextSize = 16
+
+local function readPingStat(stat)
+
+    if not stat then
+        return nil
+    end
+
+    local ok, value =
+        pcall(function()
+            return stat:GetValue()
+        end)
+
+    if ok
+        and type(value) == "number"
+        and value >= 0
+    then
+
+        return value
+    end
+
+    local okString, valueString =
+        pcall(function()
+            return stat:GetValueString()
+        end)
+
+    if okString
+        and type(valueString) ==
+        "string"
+    then
+
+        local number =
+            tonumber(
+                valueString:
+                match("([%d%.]+)")
+            )
+
+        if number then
+            return number
         end
     end
+
     return nil
 end
 
-local function safeJson(value)
-    local ok, encoded = pcall(function()
-        return HttpService:JSONEncode(value)
-    end)
-    return ok and encoded or nil
-end
+local function getPing()
 
-local function isoTimestamp()
-    return os.date("!%Y-%m-%dT%H:%M:%SZ")
-end
+    local candidates = {}
 
-local function normaliseRecord(record)
-    record = type(record) == "table" and record or {}
-    local localPlayer = Players.LocalPlayer
+    local network =
+        Stats:FindFirstChild("Network")
 
-    return {
-        Username = record.Username or (localPlayer and localPlayer.Name) or "Unknown",
-        DisplayName = record.DisplayName or (localPlayer and localPlayer.DisplayName) or "Unknown",
-        UserId = tonumber(record.UserId) or (localPlayer and localPlayer.UserId) or 0,
-        Game = record.Game or "Unknown",
-        PlaceId = tonumber(record.PlaceId) or game.PlaceId,
-        Server = record.Server or record.JobId or game.JobId or "Unknown",
-        JobId = record.JobId or game.JobId or "Unknown",
-        Executor = record.Executor or "Unknown",
-        Version = record.Version or "3.2.2",
-        Timestamp = record.Timestamp or isoTimestamp(),
-        Stats = type(record.Stats) == "table" and record.Stats or {},
-    }
-end
+    if network then
 
-function UI:ConfigureExecutionLogger(config)
-    config = type(config) == "table" and config or {}
-    self.ExecutionLogger.Webhook = tostring(config.Webhook or self.ExecutionLogger.Webhook or "")
-    self.ExecutionLogger.PollEndpoint = tostring(config.PollEndpoint or self.ExecutionLogger.PollEndpoint or "")
-    self.ExecutionLogger.Enabled = config.Enabled == true
-    self.ExecutionLogger.Timeout = tonumber(config.Timeout) or 8
-    self.ExecutionLogger.PollInterval = tonumber(config.PollInterval) or 8
-    self.ExecutionLogger.LastError = nil
-    return self.ExecutionLogger
-end
+        local serverStats =
+            network:FindFirstChild(
+                "ServerStatsItem"
+            )
 
-function UI:BuildDiscordEmbed(record)
-    record = normaliseRecord(record)
+        if serverStats then
 
-    local statLines = {}
-    for key, value in pairs(record.Stats) do
-        table.insert(statLines, tostring(key) .. ": " .. tostring(value))
-    end
-    table.sort(statLines)
+            table.insert(
+                candidates,
+                serverStats:FindFirstChild(
+                    "Data Ping"
+                )
+            )
 
-    local fields = {
-        {
-            name = "Player",
-            value = string.format("%s (@%s)", tostring(record.DisplayName), tostring(record.Username)),
-            inline = true,
-        },
-        {
-            name = "UserId",
-            value = tostring(record.UserId),
-            inline = true,
-        },
-        {
-            name = "Game",
-            value = string.format("%s\nPlaceId: `%s`", tostring(record.Game), tostring(record.PlaceId)),
-            inline = true,
-        },
-        {
-            name = "Server / JobId",
-            value = "`" .. tostring(record.JobId or record.Server) .. "`",
-            inline = false,
-        },
-        {
-            name = "Executor",
-            value = tostring(record.Executor),
-            inline = true,
-        },
-    }
-
-    if #statLines > 0 then
-        table.insert(fields, {
-            name = "Public Stats",
-            value = table.concat(statLines, "\n"):sub(1, 1024),
-            inline = false,
-        })
+            table.insert(
+                candidates,
+                serverStats:FindFirstChild(
+                    "Ping"
+                )
+            )
+        end
     end
 
-    return {
-        title = "EMPIRE | SCRIPT EXECUTED",
-        description = string.format("**%s** executed Empire.", tostring(record.Username)),
-        color = 16761930,
-        fields = fields,
-        footer = {text = "Empire V" .. tostring(record.Version)},
-        timestamp = record.Timestamp,
-    }
+    local performance =
+        Stats:FindFirstChild(
+            "PerformanceStats"
+        )
+
+    if performance then
+
+        table.insert(
+            candidates,
+            performance:FindFirstChild(
+                "Ping"
+            )
+        )
+    end
+
+    for _, stat in ipairs(candidates) do
+
+        local value =
+            readPingStat(stat)
+
+        if value then
+
+            lastKnownPing =
+                value
+
+            return value
+        end
+    end
+
+    return lastKnownPing
 end
 
-function UI:BuildDiscordWebhookPayload(record)
-    return {
-        username = "Empire Logger",
-        embeds = {self:BuildDiscordEmbed(record)},
-    }
+local function updatePingStatus(status)
+
+    local ping =
+        getPing()
+
+    pingStatusLabel.Text =
+        string.format(
+            "Ping: %d ms | Status: %s",
+            math.floor(
+                ping + 0.5
+            ),
+            status
+        )
 end
 
-function UI:SendExecutionLog(record)
-    local logger = self.ExecutionLogger
-    if not logger.Enabled then
-        return false, "Execution logger is disabled."
+local function waitForPingRecovery()
+
+    if pauseDuration > 0 then
+
+        local finish =
+            tick() +
+            pauseDuration
+
+        while
+            fastRepRunning
+            and
+            pingAdjusterEnabled
+            and
+            tick() < finish
+        do
+
+            updatePingStatus(
+                "Paused - cooldown"
+            )
+
+            task.wait(0.1)
+        end
     end
 
-    local requestFn = findRequestFunction()
-    if not requestFn then
-        return false, "No executor HTTP request function is available."
+    while
+        fastRepRunning
+        and
+        pingAdjusterEnabled
+    do
+
+        local ping =
+            getPing()
+
+        if ping < resumePing then
+            break
+        end
+
+        updatePingStatus(
+            "Paused - waiting for recovery"
+        )
+
+        task.wait(0.15)
     end
 
-    record = normaliseRecord(record)
-    local payload = {
-        Username = record.Username,
-        DisplayName = record.DisplayName,
-        UserId = record.UserId,
-        Game = record.Game,
-        PlaceId = record.PlaceId,
-        JobId = record.JobId,
-        Server = record.Server,
-        Executor = record.Executor,
-        Version = record.Version,
-        Timestamp = record.Timestamp,
-        Strength = record.Stats and record.Stats.Strength or nil,
-        Durability = record.Stats and record.Stats.Durability or nil,
-        Rebirths = record.Stats and record.Stats.Rebirths or nil,
-        Stats = record.Stats or {},
-    }
+    pingPaused = false
 
-    local body = safeJson(payload)
-    if not body then
-        return false, "Unable to JSON-encode execution payload."
+    if fastRepRunning then
+
+        updatePingStatus(
+            pingAdjusterEnabled
+            and "Running"
+            or "Disabled"
+        )
     end
+end
 
-    local sentAny = false
-    local lastError = nil
+local pingAdjusterSwitch =
+    FarmingTab:AddSwitch(
+        "Ping Adjuster",
+        function(state)
 
-    -- Send the execution to Pipedream for the global Admin feed.
-    if logger.PollEndpoint ~= "" then
-        local ok, response = pcall(function()
-            return requestFn({
-                Url = logger.PollEndpoint,
-                Method = "POST",
-                Headers = {
-                    ["Content-Type"] = "application/json",
-                    ["Accept"] = "application/json",
-                },
-                Body = body,
-            })
-        end)
-        if ok then
-            logger.LastResponse = response
-            local statusCode = type(response) == "table" and (response.StatusCode or response.status_code or response.Code or response.code) or nil
-            if statusCode and tonumber(statusCode) and tonumber(statusCode) >= 400 then
-                lastError = "Pipedream POST returned HTTP " .. tostring(statusCode)
-            else
-                sentAny = true
+            pingAdjusterEnabled =
+                state
+
+            if not state then
+
+                pingPaused = false
+
+                updatePingStatus(
+                    "Disabled"
+                )
             end
+        end
+    )
+
+local pingAdjusterSwitch =
+    FarmingTab:AddSwitch(
+        "Ping Adjuster",
+        function(state)
+
+            pingAdjusterEnabled =
+                state
+
+            if not state then
+
+                pingPaused = false
+
+                updatePingStatus(
+                    "Disabled"
+                )
+            end
+        end
+    )
+
+FarmingTab:AddTextBox(
+    "Pause At Ping (ms)",
+    function(value)
+
+        local n =
+            tonumber(value)
+
+        if n and n >= 1 then
+
+            pausePing =
+                math.floor(n)
+
+            if resumePing >= pausePing then
+
+                resumePing =
+                    math.max(
+                        0,
+                        pausePing - 25
+                    )
+            end
+        end
+    end,
+    {
+        placeholder = "250"
+    }
+)
+
+FarmingTab:AddTextBox(
+    "Resume Below Ping (ms)",
+    function(value)
+
+        local n =
+            tonumber(value)
+
+        if n and n >= 0 then
+
+            resumePing =
+                math.min(
+                    math.floor(n),
+                    math.max(
+                        0,
+                        pausePing - 1
+                    )
+                )
+        end
+    end,
+    {
+        placeholder = "200"
+    }
+)
+
+FarmingTab:AddTextBox(
+    "Pause Duration (seconds)",
+    function(value)
+
+        local n =
+            tonumber(value)
+
+        if n and n >= 0 then
+            pauseDuration = n
+        end
+    end,
+    {
+        placeholder = "1"
+    }
+)
+
+-- Keep the original Fast Farm behavior: Ping Adjuster starts enabled.
+pingAdjusterEnabled = true
+
+--========================================================--
+-- FAST REP LOOP
+--========================================================--
+
+local function fastRepLoop()
+
+    while fastRepRunning do
+
+        if pingAdjusterEnabled then
+
+            local ping =
+                getPing()
+
+            if ping >= pausePing then
+
+                pingPaused = true
+
+                updatePingStatus(
+                    "Paused - high ping"
+                )
+
+                waitForPingRecovery()
+
+                continue
+            end
+
         else
-            lastError = "Pipedream POST failed: " .. tostring(response)
+
+            pingPaused = false
+        end
+
+        if not fastRepRunning then
+            break
+        end
+
+        local batchStart =
+            tick()
+
+        while
+            fastRepRunning
+            and
+            tick() - batchStart < 0.05
+        do
+
+            if
+                pingAdjusterEnabled
+                and
+                getPing() >=
+                pausePing
+            then
+
+                break
+            end
+
+            for i = 1, repsPerTick do
+
+                if not fastRepRunning then
+                    break
+                end
+
+                pcall(function()
+                    muscleEvent:FireServer(
+                        "rep"
+                    )
+                end)
+            end
+
+            task.wait(0.01)
+        end
+
+        task.wait()
+    end
+
+    pingPaused = false
+
+    updatePingStatus(
+        "Stopped"
+    )
+end
+
+FarmingTab:AddSwitch(
+    "Fast Rep",
+    function(state)
+
+        if state
+            and
+            not fastRepRunning
+        then
+
+            fastRepRunning = true
+
+            task.spawn(
+                fastRepLoop
+            )
+
+        elseif
+            not state
+            and
+            fastRepRunning
+        then
+
+            fastRepRunning = false
+        end
+    end
+)
+
+--========================================================--
+-- FARMING MISC
+--========================================================--
+
+FarmingTab:AddLabel("").TextSize = 10
+FarmingTab:AddLabel("Misc:").TextSize = 20
+
+--========================================================--
+-- PET MANAGEMENT BUTTONS
+--========================================================--
+
+local function unequipPets()
+
+    -- Titanium Hydra is protected.
+    unequipAllExceptProtected()
+
+    task.wait(0.05)
+end
+
+local function equipPetsByName(name)
+
+    unequipAllExceptProtected()
+
+    task.wait(0.05)
+
+    equipPetByName(name)
+end
+
+--========================================================--
+-- AUTO PROTEIN EGG
+--========================================================--
+
+local autoEggRunning = false
+
+local function activateProteinEgg()
+
+    local tool =
+        getTool("Protein Egg")
+
+    if tool then
+
+        pcall(function()
+            muscleEvent:FireServer(
+                "proteinEgg",
+                tool
+            )
+        end)
+
+    end
+end
+
+task.spawn(function()
+
+    while not _G.JohnnyScriptDestroyed do
+
+        if autoEggRunning then
+
+            activateProteinEgg()
+
+            task.wait(1800)
+
+        else
+
+            task.wait(1)
+
+        end
+    end
+end)
+
+local autoEggSwitch =
+    FarmingTab:AddSwitch(
+        "Auto Egg",
+        function(state)
+
+            autoEggRunning = state
+
+            if state then
+                activateProteinEgg()
+            end
+
+        end
+    )
+
+autoEggSwitch:Set(false)
+
+--========================================================--
+-- FARMING AUTO SHAKE
+--========================================================--
+
+local farmingAutoShakeRunning = false
+
+task.spawn(function()
+
+    while not _G.JohnnyScriptDestroyed do
+
+        if farmingAutoShakeRunning then
+
+            activateShake()
+
+            task.wait(900)
+
+        else
+
+            task.wait(1)
+
+        end
+
+    end
+end)
+
+local farmingShakeSwitch =
+    FarmingTab:AddSwitch(
+        "Auto Shake",
+        function(state)
+
+            farmingAutoShakeRunning =
+                state
+
+            if state then
+                activateShake()
+            end
+
+        end
+    )
+
+farmingShakeSwitch:Set(false)
+
+--========================================================--
+-- FARMING FORTUNE WHEEL
+--========================================================--
+
+FarmingTab:AddSwitch(
+    "Spin Fortune Wheel",
+    function(state)
+        setFortuneWheel(state)
+    end
+)
+
+--========================================================--
+-- AUTO TELEPORT MUSCLE KING
+--========================================================--
+
+FarmingTab:AddSwitch(
+    "Auto Teleport to Muscle King",
+    function(state)
+
+        _G.JohnnyMuscleKingTP =
+            state
+
+        if not state then
+            return
+        end
+
+        task.spawn(function()
+
+            while
+                _G.JohnnyMuscleKingTP
+            do
+
+                local character =
+                    Player.Character
+
+                if character then
+
+                    pcall(function()
+
+                        character:MoveTo(
+                            Vector3.new(
+                                -8646,
+                                17,
+                                -5738
+                            )
+                        )
+
+                    end)
+
+                end
+
+                task.wait(0.2)
+            end
+
+        end)
+    end
+)
+
+--========================================================--
+-- AUTO SIZE 1
+--========================================================--
+
+FarmingTab:AddSwitch(
+    "Auto Size 1",
+    function(state)
+
+        _G.JohnnyAutoSize1 =
+            state
+
+        if not state then
+            return
+        end
+
+        task.spawn(function()
+
+            while
+                _G.JohnnyAutoSize1
+            do
+
+                pcall(function()
+
+                    changeSpeedSizeRemote:
+                    InvokeServer(
+                        "changeSize",
+                        1
+                    )
+
+                end)
+
+                task.wait()
+            end
+
+        end)
+    end
+)
+
+--========================================================--
+-- AUTO EAT EGG 60 MINUTES
+--========================================================--
+
+FarmingTab:AddSwitch(
+    "Auto Eat Egg | 60 Minutes",
+    function(state)
+
+        _G.JohnnyAutoEgg60 =
+            state
+
+        if not state then
+            return
+        end
+
+        task.spawn(function()
+
+            while
+                _G.JohnnyAutoEgg60
+            do
+
+                activateProteinEgg()
+
+                task.wait(3600)
+
+            end
+
+        end)
+    end
+)
+
+--========================================================--
+-- JUNGLE SQUAT
+--========================================================--
+
+FarmingTab:AddButton(
+    "Jungle Squat",
+    function()
+
+        local root =
+            getRootPart()
+
+        if not root then
+            return
+        end
+
+        root.CFrame =
+            CFrame.new(
+                -8371.43359375,
+                6.79806327,
+                2858.88525390
+            )
+
+        task.wait(0.2)
+
+        pressE()
+    end
+)
+
+--========================================================--
+-- FARMING ANTI LAG
+--========================================================--
+
+FarmingTab:AddButton(
+    "Anti Lag",
+    activateAntiLag
+)
+
+--========================================================--
+-- INDUSTRIAL GYM SQUAT
+--========================================================--
+
+FarmingTab:AddButton(
+    "Industrial Gym Squat",
+    function()
+
+        local root =
+            getRootPart()
+
+        if not root then
+            return
+        end
+
+        root.CFrame =
+            CFrame.new(
+                -5218,
+                61,
+                5412
+            )
+
+        task.wait(0.2)
+
+        pressE()
+    end
+)
+
+--========================================================--
+-- INDUSTRIAL GYM SUPER SQUAT
+--========================================================--
+
+FarmingTab:AddButton(
+    "Industrial Gym Super Squat",
+    function()
+
+        local root =
+            getRootPart()
+
+        if not root then
+            return
+        end
+
+        root.CFrame =
+            CFrame.new(
+                -5488,
+                61,
+                4641
+            )
+
+        task.wait(0.2)
+
+        pressE()
+    end
+)
+
+
+--========================================================--
+-- EQUIP SWIFT SAMURAI
+--========================================================--
+
+FarmingTab:AddButton(
+    "Equip Swift Samurai",
+    function()
+
+        equipPetsByName(
+            "Swift Samurai"
+        )
+
+    end
+)
+
+
+MainTab:AddLabel("Settings").TextSize = 30
+
+--========================================================--
+-- SPEED
+--========================================================--
+
+MainTab:AddTextBox("Speed", function(value)
+    local speed = tonumber(value)
+
+    if not speed then
+        return
+    end
+
+    _G.AutoSpeed = true
+
+    local humanoid = getHumanoid()
+
+    if humanoid then
+        humanoid.WalkSpeed = speed
+    end
+end)
+
+--========================================================--
+-- SIZE
+--========================================================--
+
+MainTab:AddTextBox("Size", function(value)
+    local size = tonumber(value)
+
+    if not size then
+        return
+    end
+
+    _G.AutoSize = true
+
+    pcall(function()
+        changeSpeedSizeRemote:InvokeServer(
+            "changeSize",
+            size
+        )
+    end)
+end)
+
+--========================================================--
+-- ESSENTIALS
+--========================================================--
+
+MainTab:AddLabel("Essenttals:").TextSize = 30
+
+--========================================================--
+-- REMOVE PORTALS
+--========================================================--
+
+local function removePortals()
+    local function destroyPortal(obj)
+        if obj and obj.Name == "RobloxForwardPortals" then
+            pcall(function()
+                obj:Destroy()
+            end)
         end
     end
 
-    -- Keep the Discord notification as well.
-    if logger.Webhook ~= "" then
-        local discordBody = safeJson(self:BuildDiscordWebhookPayload(record))
-        if discordBody then
-            local ok, response = pcall(function()
-                return requestFn({
-                    Url = logger.Webhook,
-                    Method = "POST",
-                    Headers = {
-                        ["Content-Type"] = "application/json",
-                    },
-                    Body = discordBody,
-                })
+    for _, obj in ipairs(game:GetDescendants()) do
+        destroyPortal(obj)
+    end
+
+    if _G.JohnnyPortalConnection then
+        pcall(function()
+            _G.JohnnyPortalConnection:Disconnect()
+        end)
+    end
+
+    _G.JohnnyPortalConnection =
+        game.DescendantAdded:Connect(function(obj)
+            if obj.Name == "RobloxForwardPortals" then
+                destroyPortal(obj)
+            end
+        end)
+end
+
+removePortals()
+
+--========================================================--
+-- INFINITE YIELD
+--========================================================--
+
+MainTab:AddButton("Load Infinite Yield", function()
+    pcall(function()
+        loadstring(
+            game:HttpGet(
+                "https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"
+            )
+        )()
+    end)
+end)
+
+--========================================================--
+-- ANTI LAG
+--========================================================--
+
+MainTab:AddButton("Load Anti Lag", function()
+    pcall(function()
+        loadstring(
+            game:HttpGet(
+                "https://raw.githubusercontent.com/juywvm/-Roblox-Projects-/main/____Anti_Afk_Remastered_______"
+            )
+        )()
+    end)
+end)
+
+--========================================================--
+-- WALK ON WATER
+--========================================================--
+
+local parts = {}
+
+local partSize = 2048
+local totalDistance = 50000
+local startPosition = Vector3.new(-2, -9.5, -2)
+
+local function createAllParts()
+    local numberOfParts =
+        math.ceil(totalDistance / partSize)
+
+    for x = 0, numberOfParts - 1 do
+        for z = 0, numberOfParts - 1 do
+
+            local function createPart(pos, name)
+                local part = Instance.new("Part")
+
+                part.Size =
+                    Vector3.new(
+                        partSize,
+                        1,
+                        partSize
+                    )
+
+                part.Position = pos
+                part.Anchored = true
+                part.Transparency = 1
+                part.CanCollide = false
+                part.Name = name
+                part.Parent = workspace
+
+                return part
+            end
+
+            table.insert(
+                parts,
+                createPart(
+                    startPosition +
+                    Vector3.new(
+                        x * partSize,
+                        0,
+                        z * partSize
+                    ),
+                    "Part_Side_" .. x .. "_" .. z
+                )
+            )
+
+            table.insert(
+                parts,
+                createPart(
+                    startPosition +
+                    Vector3.new(
+                        -x * partSize,
+                        0,
+                        z * partSize
+                    ),
+                    "Part_LeftRight_" .. x .. "_" .. z
+                )
+            )
+
+            table.insert(
+                parts,
+                createPart(
+                    startPosition +
+                    Vector3.new(
+                        -x * partSize,
+                        0,
+                        -z * partSize
+                    ),
+                    "Part_UpLeft_" .. x .. "_" .. z
+                )
+            )
+
+            table.insert(
+                parts,
+                createPart(
+                    startPosition +
+                    Vector3.new(
+                        x * partSize,
+                        0,
+                        -z * partSize
+                    ),
+                    "Part_UpRight_" .. x .. "_" .. z
+                )
+            )
+        end
+    end
+end
+
+task.spawn(createAllParts)
+
+local walkOnWaterSwitch =
+    MainTab:AddSwitch("Walk on Water", function(state)
+
+        for _, part in ipairs(parts) do
+            if part and part.Parent then
+                part.CanCollide = state
+            end
+        end
+
+    end)
+
+walkOnWaterSwitch:Set(false)
+
+--========================================================--
+-- PET VISIBILITY
+--========================================================--
+
+MainTab:AddSwitch("Show Pets", function(state)
+    local value =
+        Player:FindFirstChild("hidePets")
+
+    if value then
+        value.Value = state
+    end
+end)
+
+MainTab:AddSwitch("Show Other Pets", function(state)
+    local value =
+        Player:FindFirstChild("showOtherPetsOn")
+
+    if value then
+        value.Value = state
+    end
+end)
+
+--========================================================--
+-- INFINITE JUMP
+--========================================================--
+
+local infiniteJumpEnabled = false
+
+MainTab:AddSwitch("Infinite Jump", function(state)
+    infiniteJumpEnabled = state
+end)
+
+UserInputService.JumpRequest:Connect(function()
+    if not infiniteJumpEnabled then
+        return
+    end
+
+    local humanoid = getHumanoid()
+
+    if humanoid then
+        humanoid:ChangeState(
+            Enum.HumanoidStateType.Jumping
+        )
+    end
+end)
+
+--========================================================--
+-- TIME
+--========================================================--
+
+MainTab:AddButton("Time: Night", function()
+    Lighting.ClockTime = 0
+end)
+
+MainTab:AddButton("Time: Day", function()
+    Lighting.ClockTime = 12
+end)
+
+MainTab:AddButton("Time: Midnight", function()
+    Lighting.ClockTime = 6
+end)
+
+--========================================================--
+-- ANTI FLING
+--========================================================--
+
+local antiFlingVelocity = nil
+
+local antiKnockbackSwitch =
+    MainTab:AddSwitch("Anti Fling", function(state)
+
+        local rootPart = getRootPart()
+
+        if not rootPart then
+            return
+        end
+
+        if state then
+
+            if antiFlingVelocity then
+                pcall(function()
+                    antiFlingVelocity:Destroy()
+                end)
+            end
+
+            antiFlingVelocity =
+                Instance.new("BodyVelocity")
+
+            antiFlingVelocity.MaxForce =
+                Vector3.new(
+                    100000,
+                    0,
+                    100000
+                )
+
+            antiFlingVelocity.Velocity =
+                Vector3.zero
+
+            antiFlingVelocity.P = 1250
+
+            antiFlingVelocity.Parent =
+                rootPart
+
+        else
+
+            if antiFlingVelocity then
+                pcall(function()
+                    antiFlingVelocity:Destroy()
+                end)
+
+                antiFlingVelocity = nil
+            end
+
+            local existing =
+                rootPart:FindFirstChild("BodyVelocity")
+
+            if existing
+                and existing.MaxForce ==
+                    Vector3.new(100000, 0, 100000) then
+
+                pcall(function()
+                    existing:Destroy()
+                end)
+            end
+        end
+    end)
+
+antiKnockbackSwitch:Set(true)
+
+--========================================================--
+-- MAIN LOCK POSITION
+--========================================================--
+
+local mainPositionLockConnection = nil
+
+local mainLockSwitch =
+    MainTab:AddSwitch("Lock Position", function(state)
+
+        if mainPositionLockConnection then
+            pcall(function()
+                mainPositionLockConnection:Disconnect()
             end)
-            if ok then
-                sentAny = true
-            else
-                lastError = tostring(response)
+
+            mainPositionLockConnection = nil
+        end
+
+        if not state then
+            return
+        end
+
+        local rootPart = getRootPart()
+
+        if not rootPart then
+            return
+        end
+
+        local lockedCFrame =
+            rootPart.CFrame
+
+        mainPositionLockConnection =
+            RunService.Heartbeat:Connect(function()
+
+                local currentRoot =
+                    getRootPart()
+
+                if currentRoot then
+                    currentRoot.CFrame =
+                        lockedCFrame
+                end
+            end)
+    end)
+
+--========================================================--
+-- REJOIN
+--========================================================--
+
+MainTab:AddButton("Rejoin", function()
+
+    pcall(function()
+        TeleportService:TeleportToPlaceInstance(
+            game.PlaceId,
+            game.JobId,
+            Player
+        )
+    end)
+
+end)
+
+--========================================================--
+-- FAST REBIRTH TAB
+--========================================================--
+
+-- Forward declarations: these are referenced by the mode button callback
+-- before the main Fast Rebirth state/loop is declared below.
+local fastRebirthLoop
+local isFastRebirthRunning
+local fastRebirthStartTime
+local fastRebirthTotalElapsed
+
+--========================================================--
+-- FAST REBIRTH UI
+--========================================================--
+
+isFastRebirthRunning = false
+fastRebirthStartTime = 0
+fastRebirthTotalElapsed = 0
+
+local initialRebirths =
+    rebirthsStat.Value
+
+local rebirthServerLabel =
+    FastRebTab:AddLabel("Time:")
+
+rebirthServerLabel.TextSize = 20
+
+local rebirthTimeLabel =
+    FastRebTab:AddLabel(
+        "0d 0h 0m 0s - Inactive"
+    )
+
+rebirthTimeLabel.TextSize = 17
+
+local rebirthPaceLabel =
+    FastRebTab:AddLabel(
+        "Pace: 0 / Hour | 0 / Day | 0 / Week"
+    )
+
+local rebirthAverageLabel =
+    FastRebTab:AddLabel(
+        "Average Pace: 0 / Hour | 0 / Day | 0 / Week"
+    )
+
+rebirthPaceLabel.TextSize = 17
+rebirthAverageLabel.TextSize = 17
+
+local rebirthStatsLabel =
+    FastRebTab:AddLabel(
+        "Rebirths: " ..
+        formatRebirthNumber(rebirthsStat.Value) ..
+        " | Gained: 0"
+    )
+
+rebirthStatsLabel.TextSize = 17
+
+--========================================================--
+-- FAST REBIRTH PACE
+--========================================================--
+
+local lastRebirthTime = tick()
+local lastRebirthValue =
+    rebirthsStat.Value
+
+local paceHistoryHour = {}
+local paceHistoryDay = {}
+local paceHistoryWeek = {}
+
+local maxHistoryLength = 20
+local rebirthCount = 0
+
+local function updateRebirthsLabel()
+
+    local gained =
+        rebirthsStat.Value -
+        initialRebirths
+
+    rebirthStatsLabel.Text =
+        string.format(
+            "Rebirths: %s | Gained: %s",
+            formatRebirthNumber(
+                rebirthsStat.Value
+            ),
+            formatRebirthNumber(gained)
+        )
+end
+
+local function averageTable(tbl)
+
+    if #tbl == 0 then
+        return 0
+    end
+
+    local total = 0
+
+    for _, value in ipairs(tbl) do
+        total += value
+    end
+
+    return total / #tbl
+end
+
+local function calculateRebirthPace()
+
+    rebirthCount += 1
+
+    if rebirthCount < 2 then
+        lastRebirthTime = tick()
+        lastRebirthValue =
+            rebirthsStat.Value
+        return
+    end
+
+    local now = tick()
+
+    local gained =
+        rebirthsStat.Value -
+        lastRebirthValue
+
+    if gained <= 0 then
+        return
+    end
+
+    local elapsed =
+        now - lastRebirthTime
+
+    if elapsed <= 0 then
+        return
+    end
+
+    local perSecond =
+        gained / elapsed
+
+    local perHour =
+        perSecond * 3600
+
+    local perDay =
+        perSecond * 86400
+
+    local perWeek =
+        perSecond * 604800
+
+    rebirthPaceLabel.Text =
+        string.format(
+            "Pace: %s / Hour | %s / Day | %s / Week",
+            formatRebirthNumber(perHour),
+            formatRebirthNumber(perDay),
+            formatRebirthNumber(perWeek)
+        )
+
+    table.insert(
+        paceHistoryHour,
+        perHour
+    )
+
+    table.insert(
+        paceHistoryDay,
+        perDay
+    )
+
+    table.insert(
+        paceHistoryWeek,
+        perWeek
+    )
+
+    if #paceHistoryHour > maxHistoryLength then
+        table.remove(paceHistoryHour, 1)
+        table.remove(paceHistoryDay, 1)
+        table.remove(paceHistoryWeek, 1)
+    end
+
+    rebirthAverageLabel.Text =
+        string.format(
+            "Average Pace: %s / Hour | %s / Day | %s / Week",
+            formatRebirthNumber(
+                averageTable(paceHistoryHour)
+            ),
+            formatRebirthNumber(
+                averageTable(paceHistoryDay)
+            ),
+            formatRebirthNumber(
+                averageTable(paceHistoryWeek)
+            )
+        )
+
+    lastRebirthTime = now
+    lastRebirthValue =
+        rebirthsStat.Value
+end
+
+rebirthsStat:GetPropertyChangedSignal(
+    "Value"
+):Connect(function()
+
+    calculateRebirthPace()
+    updateRebirthsLabel()
+
+end)
+
+--========================================================--
+-- PET MANAGEMENT
+--========================================================--
+-- IMPORTANT:
+-- Titanium Hydra is NEVER unequipped.
+--
+-- This allows the new 12-slot setup to keep
+-- Titanium Hydra equipped while the script manages
+-- Swift Samurai / Tribal Overlord.
+--========================================================--
+
+local function getUniquePetsFolder()
+
+    local petsFolder =
+        Player:FindFirstChild("petsFolder")
+
+    if not petsFolder then
+        return nil
+    end
+
+    return petsFolder:FindFirstChild("Unique")
+end
+
+local function isProtectedPet(pet)
+
+    return pet
+        and pet.Name ==
+        "Titanium Hydra"
+end
+
+local function unequipAllExceptProtected()
+
+    local petsFolder =
+        Player:FindFirstChild("petsFolder")
+
+    if not petsFolder then
+        return
+    end
+
+    for _, folder in ipairs(
+        petsFolder:GetChildren()
+    ) do
+
+        if folder:IsA("Folder") then
+
+            for _, pet in ipairs(
+                folder:GetChildren()
+            ) do
+
+                if not isProtectedPet(pet) then
+
+                    pcall(function()
+                        equipPetEvent:FireServer(
+                            "unequipPet",
+                            pet
+                        )
+                    end)
+
+                end
+            end
+        end
+    end
+end
+
+local function equipPetByName(petName)
+
+    local uniquePets =
+        getUniquePetsFolder()
+
+    if not uniquePets then
+        return
+    end
+
+    for _, pet in ipairs(
+        uniquePets:GetChildren()
+    ) do
+
+        if pet.Name == petName then
+
+            pcall(function()
+                equipPetEvent:FireServer(
+                    "equipPet",
+                    pet
+                )
+            end)
+
+        end
+    end
+end
+
+local function managePets(petName)
+
+    -- Titanium Hydra stays equipped.
+    unequipAllExceptProtected()
+
+    task.wait(0.05)
+
+    -- Equip the requested pet.
+    equipPetByName(petName)
+
+end
+
+--========================================================--
+-- FAST REBIRTH LOGIC
+--========================================================--
+
+local function doFastRebirth()
+
+    local currentRebirths =
+        rebirthsStat.Value
+
+    local strengthTarget =
+        5000 +
+        (currentRebirths * 2550)
+
+    while
+        isFastRebirthRunning
+        and
+        strengthStat.Value <
+        strengthTarget
+    do
+
+        local reps
+
+        if Player.MembershipType ==
+            Enum.MembershipType.Premium then
+
+            reps = 8
+
+        else
+
+            reps = 14
+
+        end
+
+        for _ = 1, reps do
+
+            if not isFastRebirthRunning then
+                break
+            end
+
+            pcall(function()
+                muscleEvent:FireServer("rep")
+            end)
+
+        end
+
+        task.wait(0.01)
+    end
+
+    if
+        isFastRebirthRunning
+        and
+        strengthStat.Value >=
+        strengthTarget
+    then
+
+        -- Keep Titanium Hydra equipped.
+        managePets("Tribal Overlord")
+
+        task.wait(0.1)
+
+        local before =
+            rebirthsStat.Value
+
+        repeat
+
+            pcall(function()
+                rebirthRemote:InvokeServer(
+                    "rebirthRequest"
+                )
+            end)
+
+            task.wait(0.05)
+
+        until
+            rebirthsStat.Value > before
+            or
+            not isFastRebirthRunning
+    end
+end
+
+fastRebirthLoop = function()
+
+    while isFastRebirthRunning do
+
+        -- Titanium Hydra remains equipped.
+        -- Swift Samurai is managed normally.
+        managePets("Swift Samurai")
+
+        doFastRebirth()
+
+        task.wait(0.05)
+    end
+
+end
+
+--========================================================--
+-- FAST REBIRTH SWITCH
+--========================================================--
+
+FastRebTab:AddLabel("").TextSize = 10
+
+local rebirthingLabel =
+    FastRebTab:AddLabel("Rebirthing:")
+
+rebirthingLabel.TextSize = 20
+
+FastRebTab:AddSwitch(
+    "Fast Rebirth",
+    function(state)
+
+        if state then
+
+            if isFastRebirthRunning then
+                return
+            end
+
+            isFastRebirthRunning = true
+
+            fastRebirthStartTime =
+                tick()
+
+            task.spawn(
+                fastRebirthLoop
+            )
+
+        else
+
+            if not isFastRebirthRunning then
+                return
+            end
+
+            isFastRebirthRunning = false
+
+            fastRebirthTotalElapsed +=
+                tick() -
+                fastRebirthStartTime
+
+            rebirthTimeLabel.Text =
+                string.format(
+                    "%dd %dh %dm %ds - Paused",
+                    math.floor(
+                        fastRebirthTotalElapsed /
+                        86400
+                    ),
+                    math.floor(
+                        (
+                            fastRebirthTotalElapsed %
+                            86400
+                        ) / 3600
+                    ),
+                    math.floor(
+                        (
+                            fastRebirthTotalElapsed %
+                            3600
+                        ) / 60
+                    ),
+                    math.floor(
+                        fastRebirthTotalElapsed %
+                        60
+                    )
+                )
+
+        end
+
+    end
+)
+
+--========================================================--
+-- FAST REBIRTH TIMER
+--========================================================--
+
+task.spawn(function()
+
+    while not _G.JohnnyScriptDestroyed do
+
+        if isFastRebirthRunning then
+
+            local elapsed =
+                tick() -
+                fastRebirthStartTime +
+                fastRebirthTotalElapsed
+
+            local days =
+                math.floor(
+                    elapsed / 86400
+                )
+
+            local hours =
+                math.floor(
+                    (elapsed % 86400) /
+                    3600
+                )
+
+            local minutes =
+                math.floor(
+                    (elapsed % 3600) /
+                    60
+                )
+
+            local seconds =
+                math.floor(
+                    elapsed % 60
+                )
+
+            rebirthTimeLabel.Text =
+                string.format(
+                    "%dd %dh %dm %ds - Rebirthing",
+                    days,
+                    hours,
+                    minutes,
+                    seconds
+                )
+
+            rebirthTimeLabel.TextColor3 =
+                Color3.fromRGB(
+                    50,
+                    255,
+                    50
+                )
+
+        else
+
+            rebirthTimeLabel.TextColor3 =
+                Color3.fromRGB(
+                    255,
+                    50,
+                    50
+                )
+
+        end
+
+        task.wait(0.1)
+    end
+
+end)
+
+--========================================================--
+-- SET SIZE 1
+--========================================================--
+
+local size1Running = false
+
+FastRebTab:AddSwitch(
+    "Set Size 1",
+    function(state)
+
+        size1Running = state
+
+        if not state then
+            return
+        end
+
+        task.spawn(function()
+
+            while size1Running do
+
+                pcall(function()
+                    changeSpeedSizeRemote:InvokeServer(
+                        "changeSize",
+                        1
+                    )
+                end)
+
+                task.wait(0.01)
+            end
+
+        end)
+
+    end
+)
+
+--========================================================--
+-- FAST REBIRTH ANTI LAG
+--========================================================--
+
+local compactAntiLagEnabled = false
+
+local function activateAntiLag()
+    compactAntiLagEnabled = not compactAntiLagEnabled
+
+    if compactAntiLagEnabled then
+        -- Performance mode: remove expensive visual effects without deleting the
+        -- player's UI, so the compact Mode window remains usable.
+        for _, object in ipairs(Lighting:GetChildren()) do
+            if object:IsA("Sky") or object:IsA("PostEffect") then
+                pcall(function() object:Destroy() end)
+            end
+        end
+
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("ParticleEmitter")
+                or obj:IsA("Trail")
+                or obj:IsA("Beam")
+                or obj:IsA("PointLight")
+                or obj:IsA("SpotLight")
+                or obj:IsA("SurfaceLight") then
+                pcall(function() obj:Destroy() end)
+            end
+        end
+    end
+end
+
+
+FastRebTab:AddButton(
+    "Anti Lag",
+    activateAntiLag
+)
+
+--========================================================--
+-- FAST REBIRTH LOCK POSITION
+--========================================================--
+
+local fastLockRunning = false
+local fastLockConnection = nil
+
+FastRebTab:AddSwitch(
+    "Lock Position",
+    function(state)
+
+        fastLockRunning = state
+
+        if fastLockConnection then
+
+            pcall(function()
+                fastLockConnection:Disconnect()
+            end)
+
+            fastLockConnection = nil
+        end
+
+        if not state then
+            return
+        end
+
+        local rootPart =
+            getRootPart()
+
+        if not rootPart then
+            return
+        end
+
+        local lockedPosition =
+            rootPart.Position
+
+        fastLockConnection =
+            RunService.Heartbeat:Connect(
+                function()
+
+                    local currentRoot =
+                        getRootPart()
+
+                    if currentRoot then
+
+                        currentRoot.Velocity =
+                            Vector3.zero
+
+                        currentRoot.RotVelocity =
+                            Vector3.zero
+
+                        currentRoot.CFrame =
+                            CFrame.new(
+                                lockedPosition
+                            )
+
+                    end
+                end
+            )
+    end
+)
+
+--========================================================--
+-- AUTO SHAKE
+--========================================================--
+
+local autoShakeRunning = false
+
+local function activateShake()
+
+    local tool =
+        getTool("Tropical Shake")
+
+    if tool then
+
+        pcall(function()
+            muscleEvent:FireServer(
+                "tropicalShake",
+                tool
+            )
+        end)
+
+    end
+end
+
+task.spawn(function()
+
+    while not _G.JohnnyScriptDestroyed do
+
+        if autoShakeRunning then
+            activateShake()
+            task.wait(450)
+        else
+            task.wait(1)
+        end
+
+    end
+
+end)
+
+local autoShakeSwitch =
+    FastRebTab:AddSwitch(
+        "Auto Shake",
+        function(state)
+
+            autoShakeRunning = state
+
+            if state then
+                activateShake()
+            end
+
+        end
+    )
+
+autoShakeSwitch:Set(false)
+
+--========================================================--
+-- FAST REBIRTH FORTUNE WHEEL
+--========================================================--
+
+local fortuneWheelRunning = false
+local fortuneWheelLoopId = 0
+_G.JohnnyAutoSpinWheel = false
+
+local function describeInstance(label, object)
+    if object == nil then
+        warn("[Johnny] Fortune Wheel: " .. label .. " = NIL")
+        return false
+    end
+
+    print(
+        "[Johnny] Fortune Wheel: "
+        .. label
+        .. " = "
+        .. object:GetFullName()
+        .. " ["
+        .. object.ClassName
+        .. "]"
+    )
+
+    return true
+end
+
+local fortuneWheelSwitch = nil
+
+local function hasMaxSpinsMessage()
+    local playerGui = Player:FindFirstChildOfClass("PlayerGui")
+
+    if not playerGui then
+        return false
+    end
+
+    for _, object in ipairs(playerGui:GetDescendants()) do
+        if object:IsA("TextLabel")
+            or object:IsA("TextButton")
+            or object:IsA("TextBox")
+        then
+            local ok, value = pcall(function()
+                return object.Text
+            end)
+
+            if ok
+                and type(value) == "string"
+                and value:lower():find("you have max spins", 1, true)
+            then
+                return true
             end
         end
     end
 
-    if sentAny then
-        logger.LastError = nil
-        return true, "Execution sent."
-    end
-
-    logger.LastError = lastError or "No execution endpoint is configured."
-    return false, logger.LastError
+    return false
 end
 
-function UI:FetchGlobalExecutions()
-    local logger = self.ExecutionLogger
-    if not logger.Enabled or logger.PollEndpoint == "" then
-        return false, "Global current feed is disabled or has no bridge endpoint."
+local function spinFortuneWheelOnce()
+    print("[Johnny] Fortune Wheel: starting diagnostic spin")
+
+    if hasMaxSpinsMessage() then
+        print("[Johnny] Fortune Wheel: maximum spins reached; stopping.")
+        return "MAX_SPINS"
     end
 
-    local requestFn = findRequestFunction()
-    if not requestFn then
-        return false, "No executor HTTP request function is available."
-    end
+    local ok, result = pcall(function()
 
-    local ok, response = pcall(function()
-        return requestFn({
-            Url = logger.PollEndpoint,
-            Method = "GET",
-            Headers = { ["Accept"] = "application/json" },
-        })
+        local events =
+            ReplicatedStorage:FindFirstChild("rEvents")
+
+        if not describeInstance("rEvents", events) then
+            return false, "rEvents was not found in ReplicatedStorage"
+        end
+
+        local remote =
+            events:FindFirstChild("openFortuneWheelRemote")
+
+        if not describeInstance(
+            "openFortuneWheelRemote",
+            remote
+        ) then
+            return false,
+                "openFortuneWheelRemote was not found under rEvents"
+        end
+
+        if not remote:IsA("RemoteFunction") then
+            return false,
+                "openFortuneWheelRemote is "
+                .. remote.ClassName
+                .. ", not RemoteFunction"
+        end
+
+        local chances =
+            ReplicatedStorage:FindFirstChild(
+                "fortuneWheelChances"
+            )
+
+        if not describeInstance(
+            "fortuneWheelChances",
+            chances
+        ) then
+            return false,
+                "fortuneWheelChances was not found in ReplicatedStorage"
+        end
+
+        local wheel =
+            chances:FindFirstChild("Fortune Wheel")
+
+        if not describeInstance(
+            "Fortune Wheel",
+            wheel
+        ) then
+            return false,
+                "Fortune Wheel was not found under fortuneWheelChances"
+        end
+
+        print(
+            "[Johnny] Fortune Wheel: invoking remote..."
+        )
+
+        local invokeOk, serverResult =
+            pcall(function()
+                return remote:InvokeServer(
+                    "openFortuneWheel",
+                    wheel
+                )
+            end)
+
+        if not invokeOk then
+            warn(
+                "[Johnny] Fortune Wheel SERVER/REMOTE ERROR: "
+                .. tostring(serverResult)
+            )
+
+            return false, serverResult
+        end
+
+        print(
+            "[Johnny] Fortune Wheel: server returned:",
+            serverResult
+        )
+
+        return true, serverResult
     end)
 
     if not ok then
-        logger.LastError = tostring(response)
-        return false, logger.LastError
+        warn(
+            "[Johnny] Fortune Wheel LOCAL ERROR: "
+            .. tostring(result)
+        )
+        return false
     end
 
-    local statusCode = type(response) == "table" and (response.StatusCode or response.status_code or response.Code or response.code) or nil
-    if statusCode and tonumber(statusCode) and tonumber(statusCode) >= 400 then
-        logger.LastError = "Global feed returned HTTP " .. tostring(statusCode)
-        return false, logger.LastError
+    if result == false then
+        return false
     end
 
-    local body = type(response) == "table" and (response.Body or response.body or response.ResponseBody or response.responseBody) or response
-    if type(body) ~= "string" then
-        return false, "Global current feed returned no response body."
+    task.wait(0.15)
+
+    if hasMaxSpinsMessage() then
+        print("[Johnny] Fortune Wheel: maximum spins reached; stopping.")
+        return "MAX_SPINS"
     end
 
-    local decodedOk, data = pcall(function()
-        return HttpService:JSONDecode(body)
-    end)
-    if not decodedOk or type(data) ~= "table" then
-        logger.LastError = "Global current feed returned invalid JSON: " .. tostring(body):sub(1, 120)
-        return false, logger.LastError
-    end
-
-    -- Accept Pipedream's direct object response, an array, or common wrappers.
-    local entries = data.executions or data.entries or data.records or data.data
-    if type(entries) == "string" then
-        local nestedOk, nested = pcall(function()
-            return HttpService:JSONDecode(entries)
-        end)
-        if nestedOk then entries = nested end
-    end
-
-    if type(entries) ~= "table" or (type(entries) == "table" and next(entries) == nil) then
-        entries = data
-    end
-
-    local flattened = {}
-    if type(entries) == "table" then
-        for key, value in pairs(entries) do
-            if type(value) == "table" then
-                local record = {}
-                for field, fieldValue in pairs(value) do
-                    record[field] = fieldValue
-                end
-                if record.JobId == nil and record.Server == nil and type(key) ~= "number" then
-                    record.JobId = tostring(key)
-                    record.Server = tostring(key)
-                end
-                table.insert(flattened, record)
-            end
-        end
-    end
-
-    -- If the endpoint returned a normal JSON array, pairs() above preserves its records.
-    entries = flattened
-
-    if type(entries) == "table" then
-        self:SetAdminExecutions(entries)
-        logger.LastError = nil
-        return true, entries
-    end
-
-    return false, "Global current feed returned no execution records."
+    return true
 end
 
-function UI:StartGlobalExecutionFeed()
-    if self._globalFeedRunning then return end
-    self._globalFeedRunning = true
+local function setFortuneWheel(state)
+    fortuneWheelRunning = state
+    fortuneWheelLoopId += 1
+
+    local myLoopId = fortuneWheelLoopId
+
+    if not state then
+        print("[Johnny] Fortune Wheel: stopped")
+        return
+    end
+
     task.spawn(function()
-        while self._globalFeedRunning and self.Gui and self.Gui.Parent do
-            pcall(function() self:FetchGlobalExecutions() end)
-            task.wait(self.ExecutionLogger.PollInterval or 8)
-        end
-    end)
-end
 
-function UI:StopGlobalExecutionFeed()
-    self._globalFeedRunning = false
-end
+        while
+            fortuneWheelRunning
+            and
+            myLoopId == fortuneWheelLoopId
+            and
+            not _G.JohnnyScriptDestroyed
+        do
 
-function UI:LogExecution(record)
-    record = normaliseRecord(record)
-    if self.ExecutionLogger.Enabled then
-        task.spawn(function()
-            self:SendExecutionLog(record)
-        end)
-    end
-    return record
-end
+            local result = spinFortuneWheelOnce()
 
-UI.AdminRecordSchema = {
-    "Username", "DisplayName", "UserId", "Game", "PlaceId",
-    "Server", "JobId", "Executor", "Version", "Timestamp", "Stats"
-}
+            if result == "MAX_SPINS" then
+                fortuneWheelRunning = false
 
--- ============================================================
--- AUTO GLOBAL CURRENT TELEMETRY
--- ============================================================
--- Discord webhook: paste your webhook URL here.
-local EMPIRE_DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1552367569300889601/MMBAd0HKUQgqzc-cn2kl7VdbueIn7k02gwb0n_vXP7_YRdQULNGaYyLgCdUxEtZ1wjEJ"
+                if fortuneWheelSwitch then
+                    pcall(function()
+                        fortuneWheelSwitch:Set(false)
+                    end)
+                end
 
--- Public URL of the tiny Discord bridge, ending in /executions.
-local EMPIRE_POLL_ENDPOINT = "https://eoqj0chxad43q4c.m.pipedream.net"
-
-UI:ConfigureExecutionLogger({
-    Enabled = EMPIRE_DISCORD_WEBHOOK ~= "" and EMPIRE_DISCORD_WEBHOOK ~= "YOUR_DISCORD_WEBHOOK_URL",
-    Webhook = EMPIRE_DISCORD_WEBHOOK,
-    PollEndpoint = EMPIRE_POLL_ENDPOINT,
-    PollInterval = 8,
-})
-
-local function collectPublicStats()
-    local result = {}
-    local player = Players.LocalPlayer
-    local leaderstats = player and player:FindFirstChild("leaderstats")
-    if leaderstats then
-        for _, value in ipairs(leaderstats:GetChildren()) do
-            if value:IsA("ValueBase") then
-                result[value.Name] = value.Value
-            end
-        end
-    end
-
-    -- Explicitly include Durability if the game exposes it outside leaderstats.
-    if result.Durability == nil and player then
-        local aliases = {"Durability", "durability", "Defense", "defense"}
-        for _, alias in ipairs(aliases) do
-            local attr = player:GetAttribute(alias)
-            if attr ~= nil then
-                result.Durability = attr
                 break
             end
+
+            task.wait(1)
+        end
+    end)
+end
+
+fortuneWheelSwitch =
+    FastRebTab:AddSwitch(
+        "Spin Fortune Wheel",
+        function(state)
+            setFortuneWheel(state)
+        end
+    )
+
+--========================================================--
+-- JUNGLE LIFT
+--========================================================--
+
+local function pressE()
+    VirtualInputManager:SendKeyEvent(
+        true,
+        Enum.KeyCode.E,
+        false,
+        game
+    )
+
+    task.wait(0.05)
+
+    VirtualInputManager:SendKeyEvent(
+        false,
+        Enum.KeyCode.E,
+        false,
+        game
+    )
+end
+
+FastRebTab:AddButton(
+    "Jungle Lift",
+    function()
+
+        local root =
+            getRootPart()
+
+        if not root then
+            return
+        end
+
+        root.CFrame =
+            CFrame.new(
+                -8642.396484375,
+                6.7980651855,
+                2086.1030273
+            )
+
+        task.wait(0.2)
+
+        pressE()
+
+    end
+)
+
+--========================================================--
+-- REBIRTH TAB
+--========================================================--
+
+--========================================================--
+-- REBIRTH OPTIONS
+--========================================================--
+
+RebirthTab:AddLabel("").TextSize = 10
+RebirthTab:AddLabel("Rebirth Options").TextSize = 20
+
+local rebirthTarget = 1
+
+local targetRebirthActive = false
+local infiniteRebirthActive = false
+
+local targetToggle
+local infiniteToggle
+
+RebirthTab:AddTextBox(
+    "Rebirth Target",
+    function(value)
+
+        local number =
+            tonumber(value)
+
+        if number and number > 0 then
+
+            rebirthTarget =
+                math.floor(number)
+
         end
     end
+)
 
-    if result.Durability == nil and player then
-        local containers = {"Stats", "Data", "PlayerData"}
-        for _, containerName in ipairs(containers) do
-            local container = player:FindFirstChild(containerName)
-            if container then
-                for _, alias in ipairs(aliases) do
-                    local value = container:FindFirstChild(alias)
-                    if value and value:IsA("ValueBase") then
-                        result.Durability = value.Value
+targetToggle =
+    RebirthTab:AddSwitch(
+        "Auto Rebirth Target",
+        function(state)
+
+            targetRebirthActive =
+                state
+
+            if not state then
+                return
+            end
+
+            infiniteRebirthActive =
+                false
+
+            if infiniteToggle then
+
+                pcall(function()
+                    infiniteToggle:Set(false)
+                end)
+
+            end
+
+            task.spawn(function()
+
+                while targetRebirthActive do
+
+                    local statsFolder =
+                        Player:FindFirstChild(
+                            "leaderstats"
+                        )
+
+                    local rebirths =
+                        statsFolder
+                        and
+                        statsFolder:
+                        FindFirstChild(
+                            "Rebirths"
+                        )
+
+                    if
+                        rebirths
+                        and
+                        rebirths.Value >=
+                        rebirthTarget
+                    then
+
+                        targetRebirthActive =
+                            false
+
+                        pcall(function()
+                            targetToggle:Set(
+                                false
+                            )
+                        end)
+
                         break
                     end
+
+                    pcall(function()
+                        rebirthRemote:
+                        InvokeServer(
+                            "rebirthRequest"
+                        )
+                    end)
+
+                    task.wait(0.1)
                 end
+            end)
+        end
+    )
+
+infiniteToggle =
+    RebirthTab:AddSwitch(
+        "Auto Rebirth (Infinitely)",
+        function(state)
+
+            infiniteRebirthActive =
+                state
+
+            if not state then
+                return
             end
-            if result.Durability ~= nil then break end
-        end
-    end
 
-    return result
+            targetRebirthActive =
+                false
+
+            if targetToggle then
+
+                pcall(function()
+                    targetToggle:Set(false)
+                end)
+
+            end
+
+            task.spawn(function()
+
+                while infiniteRebirthActive do
+
+                    pcall(function()
+                        rebirthRemote:
+                        InvokeServer(
+                            "rebirthRequest"
+                        )
+                    end)
+
+                    task.wait(0.1)
+                end
+
+            end)
+        end
+    )
+
+
+--========================================================--
+-- TOOLS TAB
+--========================================================--
+
+
+--========================================================--
+-- AUTO EXERCISES
+--========================================================--
+
+ToolsTab:AddLabel("").TextSize = 10
+ToolsTab:AddLabel("Auto Exercises").TextSize = 20
+
+local function addAutoExercise(
+    exerciseName
+)
+
+    local key =
+        "JohnnyAuto" ..
+        exerciseName:gsub(
+            "%s",
+            ""
+        )
+
+    ToolsTab:AddSwitch(
+        "Auto " .. exerciseName,
+        function(state)
+
+            _G[key] = state
+
+            if not state then
+                return
+            end
+
+            task.spawn(function()
+
+                while _G[key] do
+
+                    local character =
+                        Player.Character
+
+                    local backpack =
+                        Player.Backpack
+
+                    local tool =
+                        (
+                            character
+                            and
+                            character:FindFirstChild(
+                                exerciseName
+                            )
+                        )
+                        or
+                        (
+                            backpack
+                            and
+                            backpack:FindFirstChild(
+                                exerciseName
+                            )
+                        )
+
+                    if tool and character then
+
+                        local humanoid =
+                            character:
+                            FindFirstChildOfClass(
+                                "Humanoid"
+                            )
+
+                        if humanoid
+                            and
+                            tool.Parent ==
+                            backpack
+                        then
+
+                            pcall(function()
+                                humanoid:EquipTool(
+                                    tool
+                                )
+                            end)
+                        end
+                    end
+
+                    pcall(function()
+                        muscleEvent:FireServer(
+                            "rep"
+                        )
+                    end)
+
+                    task.wait(0.1)
+                end
+            end)
+        end
+    )
 end
 
-if UI.ExecutionLogger.Enabled then
-    local player = Players.LocalPlayer
-    local gameName = "Roblox"
-    pcall(function()
-        local info = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
-        if info and info.Name then
-            gameName = info.Name
+addAutoExercise("Weight")
+addAutoExercise("Pushups")
+addAutoExercise("Handstands")
+addAutoExercise("Situps")
+addAutoExercise("Punch")
+
+--========================================================--
+-- FAST TOOLS
+--========================================================--
+
+ToolsTab:AddLabel("").TextSize = 10
+ToolsTab:AddLabel("Fast Tools").TextSize = 20
+
+ToolsTab:AddSwitch(
+    "Fast Tools",
+    function(state)
+
+        _G.JohnnyFastTools =
+            state
+
+        local settings = {
+
+            {
+                "Punch",
+                "attackTime",
+                state and 0 or 0.35
+            },
+
+            {
+                "Ground Slam",
+                "attackTime",
+                state and 0 or 6
+            },
+
+            {
+                "Stomp",
+                "attackTime",
+                state and 0 or 7
+            },
+
+            {
+                "Handstands",
+                "repTime",
+                state and 0 or 1
+            },
+
+            {
+                "Pushups",
+                "repTime",
+                state and 0 or 1
+            },
+
+            {
+                "Weight",
+                "repTime",
+                state and 0 or 1
+            },
+
+            {
+                "Situps",
+                "repTime",
+                state and 0 or 1
+            }
+        }
+
+        local backpack =
+            Player:WaitForChild(
+                "Backpack"
+            )
+
+        for _, entry in ipairs(
+            settings
+        ) do
+
+            local toolName =
+                entry[1]
+
+            local attributeName =
+                entry[2]
+
+            local value =
+                entry[3]
+
+            local tool =
+                backpack:FindFirstChild(
+                    toolName
+                )
+                or
+                (
+                    Player.Character
+                    and
+                    Player.Character:
+                    FindFirstChild(
+                        toolName
+                    )
+                )
+
+            local object =
+                tool and
+                tool:FindFirstChild(
+                    attributeName
+                )
+
+            if object then
+
+                pcall(function()
+                    object.Value =
+                        value
+                end)
+
+            end
         end
-    end)
+    end
+)
 
-    local executor = "Unknown"
-    pcall(function()
-        if type(identifyexecutor) == "function" then
-            executor = identifyexecutor()
+--========================================================--
+-- GYM TELEPORTS
+--========================================================--
+
+ToolsTab:AddLabel("").TextSize = 10
+ToolsTab:AddLabel("Gym Teleports").TextSize = 20
+
+local gymLocations = {
+
+    ["Jungle Bench Press"] =
+        CFrame.new(
+            -8173,
+            64,
+            1898
+        ),
+
+    ["Jungle Pull Ups"] =
+        CFrame.new(
+            -8666,
+            34,
+            2070
+        ),
+
+    ["Jungle Boulder"] =
+        CFrame.new(
+            -8621,
+            34,
+            2684
+        )
+}
+
+for name, target in pairs(
+    gymLocations
+) do
+
+    ToolsTab:AddButton(
+        name,
+        function()
+
+            local root =
+                getRootPart()
+
+            if not root then
+                return
+            end
+
+            root.CFrame =
+                target
+
+            task.wait(0.2)
+
+            pressE()
+
         end
-    end)
+    )
+end
 
-    UI:LogExecution({
-        Username = player and player.Name or "Unknown",
-        DisplayName = player and player.DisplayName or "Unknown",
-        UserId = player and player.UserId or 0,
-        Game = gameName,
-        PlaceId = game.PlaceId,
-        JobId = game.JobId,
-        Executor = tostring(executor),
-        Stats = collectPublicStats(),
-    })
+--========================================================--
 
-    if EMPIRE_POLL_ENDPOINT ~= "" and not string.find(EMPIRE_POLL_ENDPOINT, "YOUR%-PUBLIC%-BRIDGE%-DOMAIN", 1, false) then
-        UI:StartGlobalExecutionFeed()
+
+--========================================================--
+-- WINDOWS 11 FEATURE PRESENTATION / CROSS-SECTION EXTRAS
+--========================================================--
+
+-- Fast Farm mode controls that were previously only exposed by the compact panel.
+local function getFarmPaceNumbers()
+    local sh, sd, sw = "0", "0", "0"
+    local dh, dd, dw = "0", "0", "0"
+    local ok1, sv = pcall(function() return projectedStrengthLabel.Text end)
+    local ok2, dv = pcall(function() return projectedDurabilityLabel.Text end)
+    if ok1 and type(sv) == "string" then
+        local a,b,c = sv:match("Strength Pace:%s*([^/]+)%s*/Hour%s*|%s*([^/]+)%s*/Day%s*|%s*([^/]+)%s*/Week")
+        if a then sh,sd,sw = a:gsub("%s+", ""), b:gsub("%s+", ""), c:gsub("%s+", "") end
+    end
+    if ok2 and type(dv) == "string" then
+        local a,b,c = dv:match("Durability Pace:%s*([^/]+)%s*/Hour%s*|%s*([^/]+)%s*/Day%s*|%s*([^/]+)%s*/Week")
+        if a then dh,dd,dw = a:gsub("%s+", ""), b:gsub("%s+", ""), c:gsub("%s+", "") end
+    end
+    return sh, sd, sw, dh, dd, dw
+end
+
+FarmingTab:AddLabel("Fast Farm Mode Controls")
+local farmPaceFormat = "Full"
+local farmPaceLabel = FarmingTab:AddLabel("Pace display: Full")
+
+local function setFarmPaceFormat(name)
+    farmPaceFormat = name
+    farmPaceLabel.Text = "Pace display: " .. name
+    local h, d, w, dh, dd, dw = getFarmPaceNumbers()
+    if name == "Short" then
+        projectedStrengthLabel.Text = string.format("Strength: %s/h | %s/d | %s/w", h, d, w)
+        projectedDurabilityLabel.Text = string.format("Durability: %s/h | %s/d | %s/w", dh, dd, dw)
+    elseif name == "Compact" then
+        projectedStrengthLabel.Text = string.format("STR %s / %s / %s", h, d, w)
+        projectedDurabilityLabel.Text = string.format("DUR %s / %s / %s", dh, dd, dw)
+    elseif name == "Mini" then
+        projectedStrengthLabel.Text = string.format("STR %s/h", h)
+        projectedDurabilityLabel.Text = string.format("DUR %s/h", dh)
     end
 end
 
-return UI
+local farmPaceRow = FarmingTab:AddSection("Pace Format")
+for _, name in ipairs({"Full", "Short", "Compact", "Mini"}) do
+    FarmingTab:AddButton("Pace: " .. name, function()
+        setFarmPaceFormat(name)
+    end)
+end
+
+FarmingTab:AddButton("Night Mode", function()
+    Lighting.ClockTime = 0
+    sendNotification("Night Mode", "Night mode applied.")
+end)
+FarmingTab:AddButton("Day Mode", function()
+    Lighting.ClockTime = 12
+    sendNotification("Day Mode", "Day mode applied.")
+end)
+FarmingTab:AddButton("Midnight Time", function()
+    Lighting.ClockTime = 6
+    sendNotification("Time", "Midnight preset applied.")
+end)
+
+-- The square Game Pass thumbnail from v13 is retained as a Windows 11 shell shortcut.
+local gamepassShortcut = Instance.new("ImageButton")
+gamepassShortcut.Name = "JohnnyGamePassShortcut"
+gamepassShortcut.Size = UDim2.fromOffset(42, 42)
+gamepassShortcut.Position = UDim2.fromOffset(18, 85)
+gamepassShortcut.BackgroundColor3 = Theme.Surface
+gamepassShortcut.BackgroundTransparency = 0.05
+gamepassShortcut.BorderSizePixel = 0
+gamepassShortcut.Image = "rbxthumb://type=GamePass&id=176454015&w=150&h=150"
+gamepassShortcut.ScaleType = Enum.ScaleType.Crop
+gamepassShortcut.Parent = window.Gui
+corner(gamepassShortcut, 9)
+stroke(gamepassShortcut, Theme.Border, 0.15, 1.5)
+makeDraggable(gamepassShortcut, gamepassShortcut)
+gamepassShortcut.MouseButton1Click:Connect(function()
+    window:Restore()
+    window:SelectTab(FarmingTab)
+end)
+
+-- Put v13's player/pet visibility controls in their natural Windows 11 sections.
+local petsTab = createdTabs.Pets
+petsTab:AddLabel("Pet Visibility")
+petsTab:AddSwitch("Show Pets", function(state)
+    local value = Player:FindFirstChild("hidePets")
+    if value then value.Value = state end
+end)
+petsTab:AddSwitch("Show Other Pets", function(state)
+    local value = Player:FindFirstChild("showOtherPetsOn")
+    if value then value.Value = state end
+end)
+petsTab:AddButton("Equip Swift Samurai", function()
+    equipPetsByName("Swift Samurai")
+end)
+petsTab:AddLabel("Titanium Hydra remains protected by the Fast Rebirth pet manager.")
+
+-- Performance section receives the Anti-Lag action used by v13.
+local perfTab = createdTabs.Perf
+perfTab:AddLabel("Performance")
+perfTab:AddButton("Anti Lag", activateAntiLag)
+perfTab:AddLabel("Fast Farm Ping Adjuster is kept in the Farming section because it directly controls the farm loop.")
+
+-- Session statistics surface.
+local statsTab = createdTabs.Stats
+statsTab:AddLabel("Live Stats")
+local statsLive = statsTab:AddLabel("Loading...")
+task.spawn(function()
+    while not _G.JohnnyScriptDestroyed and statsLive.Parent do
+        statsLive.Text = string.format(
+            "Strength: %s\nDurability: %s\nRebirths: %s",
+            formatStatNumber(strengthStat.Value),
+            formatStatNumber(durabilityStat.Value),
+            formatRebirthNumber(rebirthsStat.Value)
+        )
+        task.wait(0.5)
+    end
+end)
+
+
+
+--========================================================--
+
+
+local infoTab = createdTabs.Misc
+
+infoTab:Show()
+
+infoTab:AddButton(
+    "Destroy Script + Anti AFK",
+    function()
+
+        _G.JohnnyScriptDestroyed =
+            true
+
+        -- Stop all major loops.
+        isFastRebirthRunning = false
+        fastRepRunning = false
+
+        autoEggRunning = false
+        autoShakeRunning = false
+        farmingAutoShakeRunning = false
+
+        size1Running = false
+
+        targetRebirthActive = false
+        infiniteRebirthActive = false
+
+        _G.JohnnyAutoSpinWheel =
+            false
+
+        fortuneWheelRunning = false
+        fortuneWheelLoopId += 1
+
+        _G.JohnnyMuscleKingTP =
+            false
+
+        _G.JohnnyAutoSize1 =
+            false
+
+        _G.JohnnyAutoEgg60 =
+            false
+
+        -- Disconnect position locks.
+        if mainPositionLockConnection then
+
+            pcall(function()
+                mainPositionLockConnection:
+                    Disconnect()
+            end)
+
+            mainPositionLockConnection =
+                nil
+        end
+
+        if fastLockConnection then
+
+            pcall(function()
+                fastLockConnection:
+                    Disconnect()
+            end)
+
+            fastLockConnection =
+                nil
+        end
+
+        -- Disconnect anti AFK.
+        if _G.JohnnyAntiAfkConnection then
+
+            pcall(function()
+                _G.JohnnyAntiAfkConnection:
+                    Disconnect()
+            end)
+
+            _G.JohnnyAntiAfkConnection =
+                nil
+        end
+
+        -- Remove Anti AFK UI.
+        if _G.JohnnyAntiAfkGui then
+
+            pcall(function()
+                _G.JohnnyAntiAfkGui:
+                    Destroy()
+            end)
+
+            _G.JohnnyAntiAfkGui =
+                nil
+        end
+
+        -- Remove portal connection.
+        if _G.JohnnyPortalConnection then
+
+            pcall(function()
+                _G.JohnnyPortalConnection:
+                    Disconnect()
+            end)
+
+            _G.JohnnyPortalConnection =
+                nil
+        end
+
+        -- Destroy UI.
+        pcall(function()
+            window:Destroy()
+        end)
+
+        if script then
+
+            pcall(function()
+                script:Destroy()
+            end)
+
+        end
+    end
+)
+
+infoTab:AddLabel(
+    "Made by Johnny"
+).TextSize = 20
+
+infoTab:AddLabel(
+    "discord.gg/Muscle"
+).TextSize = 20
+
+infoTab:AddButton(
+    "Copy Invite",
+    function()
+
+        local link =
+            "https://discord.gg/Muscle"
+
+        if setclipboard then
+
+            setclipboard(link)
+
+            sendNotification(
+                "Link Copied!",
+                "You can continue to Discord now."
+            )
+
+        else
+
+            sendNotification(
+                "Error!",
+                "Not Supported."
+            )
+
+        end
+    end
+)
+
+infoTab:AddLabel("")
+
+local versionLabel =
+    infoTab:AddLabel(
+        "VERSION:1.1"
+    )
+
+versionLabel.TextSize = 40
+versionLabel.Font =
+    Enum.Font.Arcade
+
+--========================================================--
+-- ANTI AFK
+--========================================================--
+
+task.wait(0.5)
+
+local antiAfkGui =
+    Instance.new("ScreenGui")
+
+antiAfkGui.Name =
+    "JohnnyAntiAfk"
+
+antiAfkGui.ResetOnSpawn =
+    false
+
+_G.JohnnyAntiAfkGui =
+    antiAfkGui
+
+local antiAfkTitle =
+    Instance.new("TextLabel")
+
+local antiAfkFrame =
+    Instance.new("Frame")
+
+local antiAfkCreator =
+    Instance.new("TextLabel")
+
+local antiAfkStatus =
+    Instance.new("TextLabel")
+
+antiAfkGui.Parent =
+    game:GetService("CoreGui")
+
+antiAfkGui.ZIndexBehavior =
+    Enum.ZIndexBehavior.Sibling
+
+antiAfkTitle.Parent =
+    antiAfkGui
+
+antiAfkTitle.Active =
+    true
+
+antiAfkTitle.BackgroundColor3 =
+    Color3.new(
+        0.176471,
+        0.176471,
+        0.176471
+    )
+
+antiAfkTitle.Draggable =
+    true
+
+antiAfkTitle.Position =
+    UDim2.new(
+        0.698610067,
+        0,
+        0.098096624,
+        0
+    )
+
+antiAfkTitle.Size =
+    UDim2.new(
+        0,
+        370,
+        0,
+        52
+    )
+
+antiAfkTitle.Font =
+    Enum.Font.SourceSansSemibold
+
+antiAfkTitle.Text =
+    "Anti Afk"
+
+antiAfkTitle.TextColor3 =
+    Color3.new(
+        192 / 255,
+        192 / 255,
+        192 / 255
+    )
+
+antiAfkTitle.TextSize = 22
+
+antiAfkFrame.Parent =
+    antiAfkTitle
+
+antiAfkFrame.BackgroundColor3 =
+    Color3.new(
+        0.196078,
+        0.196078,
+        0.196078
+    )
+
+antiAfkFrame.Position =
+    UDim2.new(
+        0,
+        0,
+        1.0192306,
+        0
+    )
+
+antiAfkFrame.Size =
+    UDim2.new(
+        0,
+        370,
+        0,
+        107
+    )
+
+antiAfkCreator.Parent =
+    antiAfkFrame
+
+antiAfkCreator.BackgroundColor3 =
+    Color3.new(
+        0.176471,
+        0.176471,
+        0.176471
+    )
+
+antiAfkCreator.Position =
+    UDim2.new(
+        0,
+        0,
+        0.800455689,
+        0
+    )
+
+antiAfkCreator.Size =
+    UDim2.new(
+        0,
+        370,
+        0,
+        21
+    )
+
+antiAfkCreator.Font =
+    Enum.Font.Arial
+
+antiAfkCreator.Text =
+    "Made by Johnnyboy"
+
+antiAfkCreator.TextColor3 =
+    Color3.new(
+        192 / 255,
+        192 / 255,
+        192 / 255
+    )
+
+antiAfkCreator.TextSize = 20
+
+antiAfkStatus.Parent =
+    antiAfkFrame
+
+antiAfkStatus.BackgroundColor3 =
+    Color3.new(
+        0.176471,
+        0.176471,
+        0.176471
+    )
+
+antiAfkStatus.Position =
+    UDim2.new(
+        0,
+        0,
+        0.158377,
+        0
+    )
+
+antiAfkStatus.Size =
+    UDim2.new(
+        0,
+        370,
+        0,
+        44
+    )
+
+antiAfkStatus.Font =
+    Enum.Font.ArialBold
+
+antiAfkStatus.Text =
+    "Status: Active"
+
+antiAfkStatus.TextColor3 =
+    Color3.new(
+        192 / 255,
+        192 / 255,
+        192 / 255
+    )
+
+antiAfkStatus.TextSize = 20
+
+local virtualUser =
+    game:GetService(
+        "VirtualUser"
+    )
+
+_G.JohnnyAntiAfkConnection =
+    Player.Idled:Connect(
+        function()
+
+            if _G.JohnnyScriptDestroyed then
+                return
+            end
+
+            virtualUser:
+                CaptureController()
+
+            virtualUser:
+                ClickButton2(
+                    Vector2.new()
+                )
+
+            antiAfkStatus.Text =
+                "Roblox tried kicking you but I didnt let them!"
+
+            task.wait(2)
+
+            if antiAfkStatus then
+
+                antiAfkStatus.Text =
+                    "Status : Active"
+
+            end
+        end
+    )
+
+--========================================================--
+-- END
+--========================================================--
