@@ -1,5 +1,5 @@
 --[[
-    JohnnyFronny / Windows 11 Glass Layout Shell
+    Empire / Windows 11 Glass Layout Shell
     ------------------------------------------------
     Layout-only UI foundation.
 
@@ -47,6 +47,7 @@ local Tabs = {
     {Title = "Tickets", Emoji = "🎟️", Description = "Tickets and rewards."},
     {Title = "Perf", Emoji = "💻", Description = "Performance settings."},
     {Title = "Misc", Emoji = "⚙️", Description = "Miscellaneous settings."},
+    {Title = "Info", Emoji = "i", Description = "Credits and community links."},
 }
 
 local function tween(object, duration, properties)
@@ -160,7 +161,7 @@ function UI:CreateWindow(config)
 
     local parent = (gethui and gethui()) or game:GetService("CoreGui")
 
-    local old = parent:FindFirstChild("JohnnyFronny_Win11")
+    local old = parent:FindFirstChild("Empire_Win11")
     if old then
         old:Destroy()
     end
@@ -172,7 +173,7 @@ function UI:CreateWindow(config)
     self.IsMaximized = false
 
     local gui = Instance.new("ScreenGui")
-    gui.Name = "JohnnyFronny_Win11"
+    gui.Name = "Empire_Win11"
     gui.ResetOnSpawn = false
     gui.IgnoreGuiInset = true
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -267,42 +268,106 @@ function UI:CreateWindow(config)
     self.MinimizeButton = minimizeButton
     self.MaximizeButton = maximizeButton
 
-    -- Keep the crowns as their own labels so they render reliably across Roblox fonts.
-    local leftCrown = text(header, "♛", 20, Theme.Text, Enum.Font.SourceSansBold)
-    leftCrown.Position = UDim2.fromOffset(96, 8)
-    leftCrown.Size = UDim2.fromOffset(26, 32)
-    leftCrown.TextXAlignment = Enum.TextXAlignment.Center
-    self.LeftCrown = leftCrown
+    -- Roblox does not guarantee Unicode/emoji glyphs in TextLabels; many fonts simply
+    -- omit them or render a tofu box. Use reliable vector UI marks for the brand instead.
+    local function makeBuildingMark(parentObject, x, y, scale)
+        scale = scale or 1
+        local holder = Instance.new("Frame")
+        holder.Name = "BuildingMark"
+        holder.BackgroundTransparency = 1
+        holder.Position = UDim2.fromOffset(x, y)
+        holder.Size = UDim2.fromOffset(math.floor(30 * scale), math.floor(30 * scale))
+        holder.Parent = parentObject
+
+        local bodyMark = Instance.new("Frame")
+        bodyMark.BackgroundColor3 = Color3.fromRGB(225, 231, 240)
+        bodyMark.BorderSizePixel = 0
+        bodyMark.Position = UDim2.fromOffset(math.floor(5 * scale), math.floor(6 * scale))
+        bodyMark.Size = UDim2.fromOffset(math.floor(20 * scale), math.floor(18 * scale))
+        bodyMark.Parent = holder
+        corner(bodyMark, math.max(2, math.floor(3 * scale)))
+
+        local roof = Instance.new("Frame")
+        roof.BackgroundColor3 = Color3.fromRGB(160, 169, 184)
+        roof.BorderSizePixel = 0
+        roof.Position = UDim2.fromOffset(math.floor(3 * scale), math.floor(3 * scale))
+        roof.Size = UDim2.fromOffset(math.floor(24 * scale), math.max(2, math.floor(3 * scale)))
+        roof.Parent = holder
+        corner(roof, math.max(1, math.floor(1.5 * scale)))
+
+        for row = 0, 1 do
+            for col = 0, 2 do
+                local windowMark = Instance.new("Frame")
+                windowMark.BackgroundColor3 = Color3.fromRGB(22, 28, 36)
+                windowMark.BorderSizePixel = 0
+                windowMark.Position = UDim2.fromOffset(
+                    math.floor((8 + col * 5) * scale),
+                    math.floor((9 + row * 6) * scale)
+                )
+                windowMark.Size = UDim2.fromOffset(math.max(2, math.floor(3 * scale)), math.max(2, math.floor(3 * scale)))
+                windowMark.Parent = holder
+                corner(windowMark, 1)
+            end
+        end
+
+        local door = Instance.new("Frame")
+        door.BackgroundColor3 = Color3.fromRGB(22, 28, 36)
+        door.BorderSizePixel = 0
+        door.Position = UDim2.fromOffset(math.floor(13 * scale), math.floor(18 * scale))
+        door.Size = UDim2.fromOffset(math.max(2, math.floor(4 * scale)), math.floor(6 * scale))
+        door.Parent = holder
+        corner(door, 1)
+
+        return holder
+    end
+
+    local leftBuilding = makeBuildingMark(header, 88, 10, 1.0)
+    self.LeftBrandMark = leftBuilding
+
+    -- Emoji overlay: Roblox supports emoji text, but glyph availability can vary;
+    -- the vector mark underneath keeps the branding visible if the emoji font is missing.
+    local leftBuildingEmoji = text(header, "🏢", 23, Theme.Text, Enum.Font.Gotham)
+    leftBuildingEmoji.Position = UDim2.fromOffset(87, 8)
+    leftBuildingEmoji.Size = UDim2.fromOffset(32, 32)
+    leftBuildingEmoji.TextXAlignment = Enum.TextXAlignment.Center
+    leftBuildingEmoji.TextYAlignment = Enum.TextYAlignment.Center
+    leftBuildingEmoji.ZIndex = 3
+    self.LeftBrandEmoji = leftBuildingEmoji
 
     local title = text(
         header,
-        config.Title or "JohnnyFronny",
-        18,
+        config.Title or "Empire",
+        20,
         Theme.Text,
         Enum.Font.GothamBold
     )
-    title.Position = UDim2.fromOffset(122, 12)
-    title.Size = UDim2.new(1, -190, 0, 26)
-    title.TextTruncate = Enum.TextTruncate.AtEnd
+    title.Position = UDim2.fromOffset(122, 8)
+    title.Size = UDim2.new(0, 210, 0, 30)
+    title.TextTruncate = Enum.TextTruncate.None
     self.TitleLabel = title
 
-    local rightCrown = text(header, "♛", 20, Theme.Text, Enum.Font.SourceSansBold)
-    rightCrown.Position = UDim2.new(0, 122, 0, 8)
-    rightCrown.Size = UDim2.fromOffset(26, 32)
-    rightCrown.TextXAlignment = Enum.TextXAlignment.Center
-    self.RightCrown = rightCrown
+    local rightBuilding = makeBuildingMark(header, 0, 10, 0.82)
+    self.RightBrandMark = rightBuilding
 
-    -- Position the second crown immediately after JohnnyFronny.
-    local function updateCrownPosition()
-        local width = math.max(92, title.TextBounds.X)
-        rightCrown.Position = UDim2.fromOffset(122 + width + 4, 8)
+    local rightBuildingEmoji = text(header, "🏢", 20, Theme.Text, Enum.Font.Gotham)
+    rightBuildingEmoji.Position = UDim2.fromOffset(0, 10)
+    rightBuildingEmoji.Size = UDim2.fromOffset(28, 28)
+    rightBuildingEmoji.TextXAlignment = Enum.TextXAlignment.Center
+    rightBuildingEmoji.TextYAlignment = Enum.TextYAlignment.Center
+    rightBuildingEmoji.ZIndex = 3
+    self.RightBrandEmoji = rightBuildingEmoji
+
+    local function updateBrandMark()
+        local x = 122 + title.TextBounds.X + 8
+        rightBuilding.Position = UDim2.fromOffset(x, 12)
+        rightBuildingEmoji.Position = UDim2.fromOffset(x - 1, 10)
     end
-    title:GetPropertyChangedSignal("TextBounds"):Connect(updateCrownPosition)
-    task.defer(updateCrownPosition)
+    title:GetPropertyChangedSignal("TextBounds"):Connect(updateBrandMark)
+    task.defer(updateBrandMark)
 
     local subtitle = text(
         header,
-        config.Subtitle or ("Logged in as : " .. ((Players.LocalPlayer and Players.LocalPlayer.Name) or "Unknown") .. " • V3.2.2"),
+        config.Subtitle or ("Logged in as : " .. ((Players.LocalPlayer and Players.LocalPlayer.Name) or "Unknown") .. "  •  V3.2.2"),
         12,
         Theme.SubText
     )
@@ -310,6 +375,30 @@ function UI:CreateWindow(config)
     subtitle.Size = UDim2.new(1, -118, 0, 20)
     subtitle.TextTruncate = Enum.TextTruncate.AtEnd
     self.SubtitleLabel = subtitle
+
+    local statusBadge = Instance.new("Frame")
+    statusBadge.Name = "StatusBadge"
+    statusBadge.BackgroundColor3 = Theme.Green
+    statusBadge.BackgroundTransparency = 0.84
+    statusBadge.BorderSizePixel = 0
+    statusBadge.Position = UDim2.new(1, -126, 0, 13)
+    statusBadge.Size = UDim2.fromOffset(76, 24)
+    statusBadge.Parent = header
+    corner(statusBadge, 12)
+    stroke(statusBadge, Theme.Green, 0.72, 1)
+
+    local statusDot = Instance.new("Frame")
+    statusDot.BackgroundColor3 = Theme.Green
+    statusDot.BorderSizePixel = 0
+    statusDot.Position = UDim2.fromOffset(9, 8)
+    statusDot.Size = UDim2.fromOffset(8, 8)
+    statusDot.Parent = statusBadge
+    corner(statusDot, 4)
+
+    local statusText = text(statusBadge, "ONLINE", 9, Theme.Text, Enum.Font.GothamBold)
+    statusText.Position = UDim2.fromOffset(22, 0)
+    statusText.Size = UDim2.fromOffset(46, 24)
+    self.StatusBadge = statusBadge
 
     local line = Instance.new("Frame")
     line.BackgroundColor3 = Theme.Border
@@ -518,8 +607,8 @@ function UI:Minimize()
     local open = Instance.new("TextButton")
     open.Name = "Open"
     open.AnchorPoint = Vector2.new(0.5, 0)
-    open.Position = UDim2.fromScale(0.5, 0.045)
-    open.Size = UDim2.fromOffset(122, 38)
+    open.Position = UDim2.fromScale(0.5, 0.035)
+    open.Size = UDim2.fromOffset(238, 44)
     open.BackgroundColor3 = Color3.fromRGB(3, 4, 6)
     open.BackgroundTransparency = 0.28
     open.BorderSizePixel = 0
@@ -535,34 +624,102 @@ function UI:Minimize()
     local indicator = Instance.new("Frame")
     indicator.BackgroundColor3 = Theme.Green
     indicator.BorderSizePixel = 0
-    indicator.Position = UDim2.fromOffset(12, 14)
-    indicator.Size = UDim2.fromOffset(9, 9)
+    indicator.Position = UDim2.fromOffset(14, 17)
+    indicator.Size = UDim2.fromOffset(10, 10)
     indicator.Parent = open
     corner(indicator, 5)
 
-    local crown = Instance.new("TextLabel")
-    crown.BackgroundTransparency = 1
-    crown.Text = "♛"
-    crown.TextColor3 = Theme.Text
-    crown.TextSize = 15
-    crown.Font = Enum.Font.SourceSansBold
-    crown.TextXAlignment = Enum.TextXAlignment.Center
-    crown.TextYAlignment = Enum.TextYAlignment.Center
-    crown.Position = UDim2.fromOffset(27, 0)
-    crown.Size = UDim2.fromOffset(20, 38)
-    crown.Parent = open
+    -- Compact pill uses the same vector building mark so the full Empire name
+    -- remains visible even on executors/fonts without emoji glyph support.
+    local function makePillBuilding(parentObject)
+        local holder = Instance.new("Frame")
+        holder.Name = "EmpireMark"
+        holder.BackgroundTransparency = 1
+        holder.Position = UDim2.fromOffset(34, 7)
+        holder.Size = UDim2.fromOffset(30, 30)
+        holder.Parent = parentObject
 
-    local label = Instance.new("TextLabel")
-    label.BackgroundTransparency = 1
-    label.Text = "JohnnyFronny"
-    label.TextColor3 = Theme.Text
-    label.TextSize = 13
-    label.Font = Enum.Font.GothamSemibold
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.TextYAlignment = Enum.TextYAlignment.Center
-    label.Position = UDim2.fromOffset(49, 0)
-    label.Size = UDim2.fromOffset(66, 38)
-    label.Parent = open
+        local bodyMark = Instance.new("Frame")
+        bodyMark.BackgroundColor3 = Color3.fromRGB(225, 231, 240)
+        bodyMark.BorderSizePixel = 0
+        bodyMark.Position = UDim2.fromOffset(5, 6)
+        bodyMark.Size = UDim2.fromOffset(20, 18)
+        bodyMark.Parent = holder
+        corner(bodyMark, 3)
+
+        local roof = Instance.new("Frame")
+        roof.BackgroundColor3 = Color3.fromRGB(160, 169, 184)
+        roof.BorderSizePixel = 0
+        roof.Position = UDim2.fromOffset(3, 3)
+        roof.Size = UDim2.fromOffset(24, 3)
+        roof.Parent = holder
+        corner(roof, 2)
+
+        for row = 0, 1 do
+            for col = 0, 2 do
+                local w = Instance.new("Frame")
+                w.BackgroundColor3 = Color3.fromRGB(22, 28, 36)
+                w.BorderSizePixel = 0
+                w.Position = UDim2.fromOffset(8 + col * 5, 9 + row * 6)
+                w.Size = UDim2.fromOffset(3, 3)
+                w.Parent = holder
+                corner(w, 1)
+            end
+        end
+        return holder
+    end
+
+    makePillBuilding(open)
+
+    local pillEmoji = text(open, "🏢", 20, Theme.Text, Enum.Font.Gotham)
+    pillEmoji.Position = UDim2.fromOffset(32, 7)
+    pillEmoji.Size = UDim2.fromOffset(32, 30)
+    pillEmoji.TextXAlignment = Enum.TextXAlignment.Center
+    pillEmoji.TextYAlignment = Enum.TextYAlignment.Center
+    pillEmoji.ZIndex = 3
+
+    local rightPillEmoji = text(open, "🏢", 20, Theme.Text, Enum.Font.Gotham)
+    rightPillEmoji.Position = UDim2.fromOffset(149, 7)
+    rightPillEmoji.Size = UDim2.fromOffset(30, 30)
+    rightPillEmoji.TextXAlignment = Enum.TextXAlignment.Center
+    rightPillEmoji.TextYAlignment = Enum.TextYAlignment.Center
+    rightPillEmoji.ZIndex = 3
+
+    local empireLabel = Instance.new("TextLabel")
+    empireLabel.BackgroundTransparency = 1
+    empireLabel.Text = "Empire"
+    empireLabel.TextColor3 = Theme.Text
+    empireLabel.TextSize = 15
+    empireLabel.Font = Enum.Font.GothamBold
+    empireLabel.TextXAlignment = Enum.TextXAlignment.Left
+    empireLabel.TextYAlignment = Enum.TextYAlignment.Center
+    empireLabel.Position = UDim2.fromOffset(68, 4)
+    empireLabel.Size = UDim2.fromOffset(82, 20)
+    empireLabel.Parent = open
+
+    local versionLabel = Instance.new("TextLabel")
+    versionLabel.BackgroundTransparency = 1
+    versionLabel.Text = "V3.2.2"
+    versionLabel.TextColor3 = Theme.SubText
+    versionLabel.TextSize = 10
+    versionLabel.Font = Enum.Font.GothamMedium
+    versionLabel.TextXAlignment = Enum.TextXAlignment.Left
+    versionLabel.TextYAlignment = Enum.TextYAlignment.Center
+    versionLabel.Position = UDim2.fromOffset(69, 23)
+    versionLabel.Size = UDim2.fromOffset(65, 15)
+    versionLabel.Parent = open
+
+    local openHint = Instance.new("TextLabel")
+    openHint.BackgroundTransparency = 1
+    openHint.Text = "RESTORE"
+    openHint.TextColor3 = Theme.Muted
+    openHint.TextSize = 10
+    openHint.Font = Enum.Font.Gotham
+    openHint.TextXAlignment = Enum.TextXAlignment.Right
+    openHint.TextYAlignment = Enum.TextYAlignment.Center
+    openHint.Position = UDim2.fromOffset(181, 0)
+    openHint.Size = UDim2.fromOffset(48, 44)
+    openHint.Parent = open
 
     open.MouseButton1Click:Connect(function()
         self:Restore()
@@ -857,7 +1014,7 @@ end
 -- ============================================================
 
 local Window = UI:CreateWindow({
-    Title = "JohnnyFronny",
+    Title = "Empire",
     Subtitle = "Logged in as : " .. ((Players.LocalPlayer and Players.LocalPlayer.Name) or "Unknown") .. " • V3.2.2",
     Size = UDim2.fromScale(0.70, 0.76),
     ContentTitle = "Stats",
@@ -881,10 +1038,120 @@ for _, info in ipairs(Tabs) do
             Tickets = Color3.fromRGB(255, 211, 71),
             Perf = Color3.fromRGB(115, 121, 132),
             Misc = Color3.fromRGB(169, 176, 188),
+            Info = Color3.fromRGB(95, 177, 255),
         })[info.Title],
     })
 end
 
 Window:SelectTab(createdTabs.Stats)
+
+-- ============================================================
+-- INFO / CREDITS PAGE
+-- ============================================================
+local InfoTab = createdTabs.Info
+if InfoTab then
+    local infoPage = InfoTab.Page
+
+    local credits = Instance.new("Frame")
+    credits.Name = "CreditsCard"
+    credits.BackgroundColor3 = Theme.Surface
+    credits.BackgroundTransparency = 0.24
+    credits.BorderSizePixel = 0
+    credits.Size = UDim2.new(1, 0, 0, 170)
+    credits.Parent = infoPage
+    corner(credits, 13)
+    stroke(credits, Theme.Border, 0.64)
+
+    local heading = text(credits, "Empire", 22, Theme.Text, Enum.Font.GothamBold)
+    heading.Position = UDim2.fromOffset(18, 14)
+    heading.Size = UDim2.new(1, -36, 0, 30)
+
+    local madeBy = text(credits, "Made by JohnnyFronny", 14, Theme.SubText, Enum.Font.GothamMedium)
+    madeBy.Position = UDim2.fromOffset(18, 45)
+    madeBy.Size = UDim2.new(1, -36, 0, 22)
+
+    local desc = text(credits, "Empire is a compact Windows 11-inspired script interface.", 12, Theme.Muted, Enum.Font.Gotham)
+    desc.Position = UDim2.fromOffset(18, 68)
+    desc.Size = UDim2.new(1, -36, 0, 20)
+
+    local function socialButton(parentObject, x, labelText, handleText, accent, symbol)
+        local b = Instance.new("TextButton")
+        b.BackgroundColor3 = Theme.WindowTop
+        b.BackgroundTransparency = 0.10
+        b.BorderSizePixel = 0
+        b.AutoButtonColor = false
+        b.Text = ""
+        b.Position = UDim2.fromOffset(x, 101)
+        b.Size = UDim2.fromOffset(170, 54)
+        b.Parent = parentObject
+        corner(b, 11)
+        stroke(b, Theme.Border, 0.70)
+        addGradient(b, accent:Lerp(Color3.fromRGB(255,255,255), 0.06), Theme.Window, 90)
+
+        local icon = Instance.new("Frame")
+        icon.BackgroundColor3 = accent
+        icon.BackgroundTransparency = 0.05
+        icon.BorderSizePixel = 0
+        icon.Position = UDim2.fromOffset(10, 11)
+        icon.Size = UDim2.fromOffset(32, 32)
+        icon.Parent = b
+        corner(icon, 9)
+
+        if labelText == "YouTube" then
+            local triangle = Instance.new("TextLabel")
+            triangle.BackgroundTransparency = 1
+            triangle.Text = "▶"
+            triangle.TextColor3 = Color3.fromRGB(255,255,255)
+            triangle.TextSize = 15
+            triangle.Font = Enum.Font.GothamBold
+            triangle.TextXAlignment = Enum.TextXAlignment.Center
+            triangle.TextYAlignment = Enum.TextYAlignment.Center
+            triangle.Position = UDim2.fromOffset(8, 7)
+            triangle.Size = UDim2.fromOffset(16, 18)
+            triangle.Parent = icon
+        else
+            -- Simple Discord-like glyph built from reliable UI primitives.
+            local head = Instance.new("Frame")
+            head.BackgroundColor3 = Color3.fromRGB(255,255,255)
+            head.BorderSizePixel = 0
+            head.Position = UDim2.fromOffset(6, 9)
+            head.Size = UDim2.fromOffset(20, 15)
+            head.Parent = icon
+            corner(head, 7)
+
+            local eye1 = Instance.new("Frame")
+            eye1.BackgroundColor3 = accent
+            eye1.BorderSizePixel = 0
+            eye1.Position = UDim2.fromOffset(11, 14)
+            eye1.Size = UDim2.fromOffset(3, 3)
+            eye1.Parent = icon
+            corner(eye1, 2)
+
+            local eye2 = eye1:Clone()
+            eye2.Position = UDim2.fromOffset(18, 14)
+            eye2.Parent = icon
+        end
+
+        local name = text(b, labelText, 12, Theme.Text, Enum.Font.GothamSemibold)
+        name.Position = UDim2.fromOffset(51, 7)
+        name.Size = UDim2.fromOffset(105, 18)
+
+        local handle = text(b, handleText, 10, Theme.SubText, Enum.Font.Gotham)
+        handle.Position = UDim2.fromOffset(51, 26)
+        handle.Size = UDim2.fromOffset(105, 18)
+
+        b.MouseEnter:Connect(function()
+            tween(b, 0.12, {BackgroundTransparency = 0})
+        end)
+        b.MouseLeave:Connect(function()
+            tween(b, 0.12, {BackgroundTransparency = 0.10})
+        end)
+
+        return b
+    end
+
+    socialButton(credits, 18, "YouTube", "JohnnyFronnyYT", Color3.fromRGB(255, 70, 70), "")
+    socialButton(credits, 198, "Discord", "JohnnyFronnyyt", Color3.fromRGB(88, 101, 242), "")
+end
 
 return UI
