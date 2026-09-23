@@ -1076,7 +1076,46 @@ if InfoTab then
     desc.Position = UDim2.fromOffset(18, 68)
     desc.Size = UDim2.new(1, -36, 0, 20)
 
-    local function socialButton(parentObject, x, labelText, handleText, accent, symbol)
+    
+local function empireTabIcon(parent, token)
+    local holder = Instance.new("Frame")
+    holder.Name = "EmpireTabIcon"
+    holder.BackgroundTransparency = 1
+    holder.Size = UDim2.fromOffset(22, 22)
+    holder.Position = UDim2.new(0, 7, 0.5, -11)
+    holder.Parent = parent
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(155, 160, 170)
+    stroke.Thickness = 1.4
+    stroke.Transparency = 0.15
+
+    local box = Instance.new("Frame")
+    box.Name = "IconShape"
+    box.BackgroundColor3 = Color3.fromRGB(35, 38, 44)
+    box.BackgroundTransparency = 0.15
+    box.Size = UDim2.fromOffset(18, 18)
+    box.Position = UDim2.fromOffset(2, 2)
+    box.Parent = holder
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 5)
+    corner.Parent = box
+    stroke.Parent = box
+
+    local label = Instance.new("TextLabel")
+    label.BackgroundTransparency = 1
+    label.Size = UDim2.fromScale(1, 1)
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 10
+    label.TextColor3 = Color3.fromRGB(220, 224, 230)
+    label.Text = tostring(token or "")
+    label.Parent = box
+
+    return holder
+end
+
+local function socialButton(parentObject, x, labelText, handleText, accent, symbol)
         local b = Instance.new("TextButton")
         b.BackgroundColor3 = Theme.WindowTop
         b.BackgroundTransparency = 0.10
