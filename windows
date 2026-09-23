@@ -1686,8 +1686,8 @@ end
 
 function UI:SendExecutionLog(record)
     local logger = self.ExecutionLogger
-    if not logger.Enabled or logger.Webhook == "" then
-        return false, "Discord execution logger is disabled or has no webhook."
+    if not logger.Enabled then
+        return false, "Execution logger is disabled."
     end
 
     local requestFn = findRequestFunction()
@@ -1695,30 +1695,81 @@ function UI:SendExecutionLog(record)
         return false, "No executor HTTP request function is available."
     end
 
-    local body = safeJson(self:BuildDiscordWebhookPayload(record))
+    record = normaliseRecord(record)
+    local payload = {
+        Username = record.Username,
+        DisplayName = record.DisplayName,
+        UserId = record.UserId,
+        Game = record.Game,
+        PlaceId = record.PlaceId,
+        JobId = record.JobId,
+        Server = record.Server,
+        Executor = record.Executor,
+        Version = record.Version,
+        Timestamp = record.Timestamp,
+        Strength = record.Stats and record.Stats.Strength or nil,
+        Rebirths = record.Stats and record.Stats.Rebirths or nil,
+        Stats = record.Stats or {},
+    }
+
+    local body = safeJson(payload)
     if not body then
-        return false, "Unable to JSON-encode Discord payload."
+        return false, "Unable to JSON-encode execution payload."
     end
 
-    local ok, response = pcall(function()
-        return requestFn({
-            Url = logger.Webhook,
-            Method = "POST",
-            Headers = {
-                ["Content-Type"] = "application/json",
-            },
-            Body = body,
-        })
-    end)
+    local sentAny = false
+    local lastError = nil
 
-    if not ok then
-        logger.LastError = tostring(response)
-        return false, logger.LastError
+    -- Send the execution to Pipedream for the global Admin feed.
+    if logger.PollEndpoint ~= "" then
+        local ok, response = pcall(function()
+            return requestFn({
+                Url = logger.PollEndpoint,
+                Method = "POST",
+                Headers = {
+                    ["Content-Type"] = "application/json",
+                    ["Accept"] = "application/json",
+                },
+                Body = body,
+            })
+        end)
+        if ok then
+            sentAny = true
+            logger.LastResponse = response
+        else
+            lastError = tostring(response)
+        end
     end
 
-    logger.LastResponse = response
-    logger.LastError = nil
-    return true, response
+    -- Keep the Discord notification as well.
+    if logger.Webhook ~= "" then
+        local discordBody = safeJson(self:BuildDiscordWebhookPayload(record))
+        if discordBody then
+            local ok, response = pcall(function()
+                return requestFn({
+                    Url = logger.Webhook,
+                    Method = "POST",
+                    Headers = {
+                        ["Content-Type"] = "application/json",
+                    },
+                    Body = discordBody,
+                })
+            end)
+            if ok then
+                sentAny = true
+            else
+                lastError = tostring(response)
+            end
+        end
+    end
+
+    if sentAny then
+        logger.LastError = nil
+        return true, "Execution sent."
+    end
+
+    logger.LastError = lastError or "No execution endpoint is configured."
+    return false, logger.LastError
 end
 
 function UI:FetchGlobalExecutions()
