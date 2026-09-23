@@ -1,19 +1,16 @@
 --[[
-    AstrarServices / Windows 11 Layout
-    ----------------------------------
-    Layout-only Fluent-style shell.
+    AstrarServices / Windows 11 Fluent Layout Shell
+    ------------------------------------------------
+    Layout-only UI foundation.
 
-    This version intentionally contains NO fake farming/stat/player features.
-    It is only the UI foundation so you can build the pages yourself.
+    Colored traffic-light controls:
+      RED    = close
+      YELLOW = minimize / restore
+      GREEN  = maximize / restore
 
-    API:
-        local UI = loadstring(game:HttpGet("YOUR_RAW_URL"))()
-        local Window = UI:CreateWindow({...})
-        local Tab = Window:AddTab({...})
-        Window:SelectTab(Tab)
+    No feature logic is included. Build your own content on top.
 ]]
 
-local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 
@@ -21,39 +18,39 @@ local UI = {}
 UI.__index = UI
 
 local Theme = {
-    Window = Color3.fromRGB(15, 17, 20),
-    Sidebar = Color3.fromRGB(12, 14, 17),
-    Surface = Color3.fromRGB(22, 25, 29),
-    SurfaceHover = Color3.fromRGB(29, 33, 38),
-    SurfaceSelected = Color3.fromRGB(27, 31, 36),
-    Border = Color3.fromRGB(57, 63, 71),
-    Text = Color3.fromRGB(240, 242, 245),
+    Window = Color3.fromRGB(7, 9, 12),
+    WindowTop = Color3.fromRGB(14, 17, 21),
+    Sidebar = Color3.fromRGB(8, 10, 13),
+    Surface = Color3.fromRGB(17, 20, 24),
+    SurfaceHover = Color3.fromRGB(25, 29, 34),
+    SurfaceSelected = Color3.fromRGB(28, 32, 38),
+
+    Border = Color3.fromRGB(70, 77, 88),
+    Text = Color3.fromRGB(241, 243, 246),
     SubText = Color3.fromRGB(151, 158, 168),
-    Muted = Color3.fromRGB(94, 101, 111),
+    Muted = Color3.fromRGB(92, 99, 110),
 
     Red = Color3.fromRGB(255, 95, 87),
     Yellow = Color3.fromRGB(255, 189, 46),
     Green = Color3.fromRGB(40, 200, 64),
-
-    Accent = Color3.fromRGB(77, 145, 255),
 }
 
-local TabColors = {
-    Farming = Color3.fromRGB(78, 165, 255),
-    Rebirth = Color3.fromRGB(255, 174, 71),
-    Pets = Color3.fromRGB(194, 116, 255),
-    Player = Color3.fromRGB(71, 205, 150),
-    Killing = Color3.fromRGB(255, 82, 82),
-    Stats = Color3.fromRGB(86, 145, 255),
-    Tickets = Color3.fromRGB(255, 211, 71),
-    Perf = Color3.fromRGB(115, 121, 132),
-    Misc = Color3.fromRGB(169, 176, 188),
+local Tabs = {
+    {Title = "Farming", Emoji = "⚒️", Description = "Automation and farming."},
+    {Title = "Rebirth", Emoji = "🔄", Description = "Rebirth tools and settings."},
+    {Title = "Pets", Emoji = "🐾", Description = "Pet management."},
+    {Title = "Player", Emoji = "👤", Description = "Player settings."},
+    {Title = "Killing", Emoji = "⚔️", Description = "Combat tools."},
+    {Title = "Stats", Emoji = "📊", Description = "Statistics and session information."},
+    {Title = "Tickets", Emoji = "🎟️", Description = "Tickets and rewards."},
+    {Title = "Perf", Emoji = "💻", Description = "Performance settings."},
+    {Title = "Misc", Emoji = "⚙️", Description = "Miscellaneous settings."},
 }
 
-local function tween(obj, duration, properties)
+local function tween(object, duration, properties)
     local ok, result = pcall(function()
         local t = TweenService:Create(
-            obj,
+            object,
             TweenInfo.new(duration or 0.16, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
             properties
         )
@@ -79,20 +76,20 @@ local function stroke(parent, color, transparency, thickness)
     return s
 end
 
-local function padding(parent, l, t, r, b)
+local function padding(parent, left, top, right, bottom)
     local p = Instance.new("UIPadding")
-    p.PaddingLeft = UDim.new(0, l or 0)
-    p.PaddingTop = UDim.new(0, t or 0)
-    p.PaddingRight = UDim.new(0, r or 0)
-    p.PaddingBottom = UDim.new(0, b or 0)
+    p.PaddingLeft = UDim.new(0, left or 0)
+    p.PaddingTop = UDim.new(0, top or 0)
+    p.PaddingRight = UDim.new(0, right or 0)
+    p.PaddingBottom = UDim.new(0, bottom or 0)
     p.Parent = parent
     return p
 end
 
-local function label(parent, text, size, color, font)
+local function text(parent, value, size, color, font)
     local l = Instance.new("TextLabel")
     l.BackgroundTransparency = 1
-    l.Text = text or ""
+    l.Text = value or ""
     l.TextSize = size or 14
     l.TextColor3 = color or Theme.Text
     l.Font = font or Enum.Font.Gotham
@@ -102,7 +99,7 @@ local function label(parent, text, size, color, font)
     return l
 end
 
-local function draggable(handle, object)
+local function makeDraggable(handle, object)
     local dragging = false
     local dragStart
     local startPosition
@@ -148,8 +145,8 @@ end
 function UI:CreateWindow(config)
     config = config or {}
 
-    -- Remove a previous copy when re-running the script.
     local parent = (gethui and gethui()) or game:GetService("CoreGui")
+
     local old = parent:FindFirstChild("AstrarServices_Win11")
     if old then
         old:Destroy()
@@ -158,6 +155,8 @@ function UI:CreateWindow(config)
     local self = setmetatable({}, UI)
     self.Tabs = {}
     self.ActiveTab = nil
+    self.IsMinimized = false
+    self.IsMaximized = false
 
     local gui = Instance.new("ScreenGui")
     gui.Name = "AstrarServices_Win11"
@@ -168,27 +167,27 @@ function UI:CreateWindow(config)
     gui.Parent = parent
     self.Gui = gui
 
-    -- A scale-based window prevents the old 980x650 fixed-size problem.
-    -- It stays compact on a 1280x585 screen and adapts to other resolutions.
+    -- Responsive shell. Dark translucent black, not white.
     local root = Instance.new("Frame")
     root.Name = "Window"
     root.AnchorPoint = Vector2.new(0.5, 0.5)
     root.Position = UDim2.fromScale(0.5, 0.5)
-    root.Size = config.Size or UDim2.fromScale(0.76, 0.82)
+    root.Size = config.Size or UDim2.fromScale(0.70, 0.76)
     root.BackgroundColor3 = Theme.Window
-    root.BackgroundTransparency = 0.08
+    root.BackgroundTransparency = 0.12
     root.BorderSizePixel = 0
     root.ClipsDescendants = true
     root.Parent = gui
-    corner(root, 16)
-    stroke(root, Theme.Border, 0.25, 1)
+    corner(root, 15)
+    stroke(root, Theme.Border, 0.28, 1)
     self.Root = root
 
-    -- Subtle dark glass gradient. No white background.
+    -- Very subtle black glass gradient.
     local gradient = Instance.new("UIGradient")
     gradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(21, 24, 28)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(11, 13, 16)),
+        ColorSequenceKeypoint.new(0, Theme.WindowTop),
+        ColorSequenceKeypoint.new(0.48, Theme.Window),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(4, 5, 7)),
     })
     gradient.Rotation = 90
     gradient.Parent = root
@@ -197,15 +196,16 @@ function UI:CreateWindow(config)
     local header = Instance.new("Frame")
     header.Name = "Header"
     header.BackgroundTransparency = 1
-    header.Size = UDim2.new(1, 0, 0, 72)
+    header.Size = UDim2.new(1, 0, 0, 70)
     header.Parent = root
     self.Header = header
-    draggable(header, root)
+    makeDraggable(header, root)
 
-    -- Traffic-light dots ONLY. No symbols and no minimize/close/maximize behavior.
+    -- Functional traffic lights. No symbols inside them.
     local traffic = Instance.new("Frame")
+    traffic.Name = "TrafficLights"
     traffic.BackgroundTransparency = 1
-    traffic.Position = UDim2.fromOffset(20, 25)
+    traffic.Position = UDim2.fromOffset(20, 26)
     traffic.Size = UDim2.fromOffset(58, 16)
     traffic.Parent = header
 
@@ -214,71 +214,81 @@ function UI:CreateWindow(config)
     trafficLayout.Padding = UDim.new(0, 8)
     trafficLayout.Parent = traffic
 
-    for _, color in ipairs({Theme.Red, Theme.Yellow, Theme.Green}) do
-        local dot = Instance.new("Frame")
-        dot.Size = UDim2.fromOffset(14, 14)
-        dot.BackgroundColor3 = color
-        dot.BorderSizePixel = 0
-        dot.Parent = traffic
-        corner(dot, 7)
+    local function trafficButton(color, name)
+        local b = Instance.new("TextButton")
+        b.Name = name
+        b.Text = ""
+        b.AutoButtonColor = false
+        b.BackgroundColor3 = color
+        b.BorderSizePixel = 0
+        b.Size = UDim2.fromOffset(14, 14)
+        b.Parent = traffic
+        corner(b, 7)
+        return b
     end
 
-    local title = label(
+    local closeButton = trafficButton(Theme.Red, "Close")
+    local minimizeButton = trafficButton(Theme.Yellow, "Minimize")
+    local maximizeButton = trafficButton(Theme.Green, "Maximize")
+
+    self.CloseButton = closeButton
+    self.MinimizeButton = minimizeButton
+    self.MaximizeButton = maximizeButton
+
+    local title = text(
         header,
         config.Title or "Muscle Legends - V3.2.1 Private",
         18,
         Theme.Text,
         Enum.Font.GothamBold
     )
-    title.Position = UDim2.fromOffset(96, 13)
-    title.Size = UDim2.new(1, -120, 0, 25)
+    title.Position = UDim2.fromOffset(96, 12)
+    title.Size = UDim2.new(1, -118, 0, 26)
     title.TextTruncate = Enum.TextTruncate.AtEnd
     self.TitleLabel = title
 
-    local subtitle = label(
+    local subtitle = text(
         header,
         config.Subtitle or "AstrarServices",
         12,
-        Theme.SubText,
-        Enum.Font.Gotham
+        Theme.SubText
     )
     subtitle.Position = UDim2.fromOffset(96, 38)
-    subtitle.Size = UDim2.new(1, -120, 0, 20)
+    subtitle.Size = UDim2.new(1, -118, 0, 20)
     subtitle.TextTruncate = Enum.TextTruncate.AtEnd
     self.SubtitleLabel = subtitle
 
-    local headerLine = Instance.new("Frame")
-    headerLine.BackgroundColor3 = Theme.Border
-    headerLine.BackgroundTransparency = 0.72
-    headerLine.BorderSizePixel = 0
-    headerLine.Position = UDim2.new(0, 18, 0, 71)
-    headerLine.Size = UDim2.new(1, -36, 0, 1)
-    headerLine.Parent = root
+    local line = Instance.new("Frame")
+    line.BackgroundColor3 = Theme.Border
+    line.BackgroundTransparency = 0.70
+    line.BorderSizePixel = 0
+    line.Position = UDim2.new(0, 17, 0, 69)
+    line.Size = UDim2.new(1, -34, 0, 1)
+    line.Parent = root
 
-    -- Main body
+    -- Body
     local body = Instance.new("Frame")
     body.Name = "Body"
     body.BackgroundTransparency = 1
-    body.Position = UDim2.fromOffset(14, 84)
-    body.Size = UDim2.new(1, -28, 1, -98)
+    body.Position = UDim2.fromOffset(13, 82)
+    body.Size = UDim2.new(1, -26, 1, -95)
     body.Parent = root
 
     -- Sidebar
     local sidebar = Instance.new("Frame")
     sidebar.Name = "Sidebar"
     sidebar.BackgroundColor3 = Theme.Sidebar
-    sidebar.BackgroundTransparency = 0.16
+    sidebar.BackgroundTransparency = 0.18
     sidebar.BorderSizePixel = 0
-    sidebar.Size = UDim2.new(0.245, 0, 1, 0)
+    sidebar.Size = UDim2.new(0.24, 0, 1, 0)
     sidebar.Parent = body
-    corner(sidebar, 13)
-    stroke(sidebar, Theme.Border, 0.58)
+    corner(sidebar, 12)
+    stroke(sidebar, Theme.Border, 0.62)
 
-    -- Search
     local search = Instance.new("TextBox")
     search.Name = "Search"
     search.BackgroundColor3 = Theme.Surface
-    search.BackgroundTransparency = 0.18
+    search.BackgroundTransparency = 0.20
     search.BorderSizePixel = 0
     search.ClearTextOnFocus = false
     search.PlaceholderText = "Search"
@@ -289,7 +299,7 @@ function UI:CreateWindow(config)
     search.Font = Enum.Font.Gotham
     search.TextXAlignment = Enum.TextXAlignment.Left
     search.Position = UDim2.fromOffset(9, 9)
-    search.Size = UDim2.new(1, -18, 0, 38)
+    search.Size = UDim2.new(1, -18, 0, 37)
     search.Parent = sidebar
     corner(search, 9)
     stroke(search, Theme.Border, 0.72)
@@ -300,8 +310,8 @@ function UI:CreateWindow(config)
     nav.Name = "Navigation"
     nav.BackgroundTransparency = 1
     nav.BorderSizePixel = 0
-    nav.Position = UDim2.fromOffset(8, 56)
-    nav.Size = UDim2.new(1, -16, 1, -64)
+    nav.Position = UDim2.fromOffset(8, 54)
+    nav.Size = UDim2.new(1, -16, 1, -61)
     nav.ScrollBarThickness = 2
     nav.ScrollBarImageColor3 = Theme.Border
     nav.AutomaticCanvasSize = Enum.AutomaticSize.Y
@@ -318,59 +328,179 @@ function UI:CreateWindow(config)
     local content = Instance.new("Frame")
     content.Name = "Content"
     content.BackgroundTransparency = 1
-    content.Position = UDim2.new(0.245, 12, 0, 0)
-    content.Size = UDim2.new(0.755, -12, 1, 0)
+    content.Position = UDim2.new(0.24, 12, 0, 0)
+    content.Size = UDim2.new(0.76, -12, 1, 0)
     content.Parent = body
     self.Content = content
 
-    local pageTitle = label(
+    local pageTitle = text(
         content,
         config.ContentTitle or "Stats",
         24,
         Theme.Text,
         Enum.Font.GothamBold
     )
-    pageTitle.Position = UDim2.fromOffset(18, 2)
-    pageTitle.Size = UDim2.new(1, -36, 0, 32)
+    pageTitle.Position = UDim2.fromOffset(17, 2)
+    pageTitle.Size = UDim2.new(1, -34, 0, 31)
     self.PageTitle = pageTitle
 
-    local pageSubtitle = label(
+    local pageSubtitle = text(
         content,
         config.ContentSubtitle or "Select a tab to begin building your interface.",
         12,
         Theme.SubText
     )
-    pageSubtitle.Position = UDim2.fromOffset(18, 34)
-    pageSubtitle.Size = UDim2.new(1, -36, 0, 22)
+    pageSubtitle.Position = UDim2.fromOffset(17, 34)
+    pageSubtitle.Size = UDim2.new(1, -34, 0, 21)
     pageSubtitle.TextTruncate = Enum.TextTruncate.AtEnd
     self.PageSubtitle = pageSubtitle
 
     local pages = Instance.new("Frame")
     pages.Name = "Pages"
     pages.BackgroundTransparency = 1
-    pages.Position = UDim2.fromOffset(0, 65)
-    pages.Size = UDim2.new(1, 0, 1, -65)
+    pages.Position = UDim2.fromOffset(0, 63)
+    pages.Size = UDim2.new(1, 0, 1, -63)
     pages.Parent = content
     self.Pages = pages
 
-    -- Search behavior
     search:GetPropertyChangedSignal("Text"):Connect(function()
         self:_filterTabs(search.Text)
     end)
 
-    -- Small open animation without changing the final layout size.
+    -- Close = destroy.
+    closeButton.MouseButton1Click:Connect(function()
+        self:Destroy()
+    end)
+
+    -- Minimize = compact "Open" pill like the supplied reference image.
+    minimizeButton.MouseButton1Click:Connect(function()
+        if self.IsMinimized then
+            self:Restore()
+        else
+            self:Minimize()
+        end
+    end)
+
+    -- Green = maximize / restore.
+    maximizeButton.MouseButton1Click:Connect(function()
+        self:ToggleMaximize()
+    end)
+
+    -- Small hover feedback while keeping the traffic lights symbol-free.
+    for _, b in ipairs({closeButton, minimizeButton, maximizeButton}) do
+        local normal = b.Size
+        b.MouseEnter:Connect(function()
+            tween(b, 0.10, {
+                Size = UDim2.fromOffset(16, 16),
+            })
+        end)
+        b.MouseLeave:Connect(function()
+            tween(b, 0.10, {
+                Size = normal,
+            })
+        end)
+    end
+
     root.BackgroundTransparency = 1
-    tween(root, 0.18, {BackgroundTransparency = 0.08})
+    tween(root, 0.18, {BackgroundTransparency = 0.12})
 
     return self
+end
+
+function UI:Minimize()
+    if self.IsMinimized then return end
+
+    self.IsMinimized = true
+    self.SavedPosition = self.Root.Position
+    self.SavedSize = self.Root.Size
+
+    local root = self.Root
+    local gui = self.Gui
+
+    -- Hide the shell and leave a compact dark "Open" pill.
+    root.Visible = false
+
+    if self.MinimizedButton then
+        self.MinimizedButton:Destroy()
+    end
+
+    local open = Instance.new("TextButton")
+    open.Name = "Open"
+    open.AnchorPoint = Vector2.new(0.5, 1)
+    open.Position = UDim2.fromScale(0.5, 0.96)
+    open.Size = UDim2.fromOffset(112, 36)
+    open.BackgroundColor3 = Color3.fromRGB(8, 10, 12)
+    open.BackgroundTransparency = 0.08
+    open.BorderSizePixel = 0
+    open.AutoButtonColor = false
+    open.Text = "Open"
+    open.TextColor3 = Theme.Text
+    open.TextSize = 14
+    open.Font = Enum.Font.GothamSemibold
+    open.Parent = gui
+    corner(open, 18)
+    stroke(open, Theme.Green, 0.25, 1)
+    self.MinimizedButton = open
+
+    local indicator = Instance.new("Frame")
+    indicator.BackgroundColor3 = Theme.Green
+    indicator.BorderSizePixel = 0
+    indicator.Position = UDim2.fromOffset(12, 13)
+    indicator.Size = UDim2.fromOffset(10, 10)
+    indicator.Parent = open
+    corner(indicator, 5)
+
+    open.MouseButton1Click:Connect(function()
+        self:Restore()
+    end)
+end
+
+function UI:Restore()
+    if not self.IsMinimized then return end
+
+    self.IsMinimized = false
+
+    if self.MinimizedButton then
+        self.MinimizedButton:Destroy()
+        self.MinimizedButton = nil
+    end
+
+    self.Root.Visible = true
+end
+
+function UI:ToggleMaximize()
+    if self.IsMinimized then
+        self:Restore()
+    end
+
+    if not self.IsMaximized then
+        self.SavedPosition = self.Root.Position
+        self.SavedSize = self.Root.Size
+
+        tween(self.Root, 0.20, {
+            Position = UDim2.fromScale(0.5, 0.5),
+            Size = UDim2.fromScale(0.90, 0.88),
+        })
+
+        self.IsMaximized = true
+    else
+        tween(self.Root, 0.20, {
+            Position = self.SavedPosition or UDim2.fromScale(0.5, 0.5),
+            Size = self.SavedSize or UDim2.fromScale(0.70, 0.76),
+        })
+
+        self.IsMaximized = false
+    end
 end
 
 function UI:_filterTabs(query)
     query = string.lower(query or "")
 
     for _, tab in ipairs(self.Tabs) do
-        local matches = query == "" or string.find(string.lower(tab.Title), query, 1, true) ~= nil
-        tab.Button.Visible = matches
+        local match = query == ""
+            or string.find(string.lower(tab.Title), query, 1, true) ~= nil
+
+        tab.Button.Visible = match
     end
 end
 
@@ -380,11 +510,11 @@ function UI:AddTab(config)
     local tab = {
         Window = self,
         Title = config.Title or ("Tab " .. tostring(#self.Tabs + 1)),
+        Emoji = config.Emoji or "•",
         Description = config.Description or "",
-        Accent = config.Accent or TabColors[config.Title] or Theme.Accent,
+        Accent = config.Accent or Theme.Green,
     }
 
-    -- Navigation row
     local button = Instance.new("TextButton")
     button.Name = tab.Title .. "_Tab"
     button.BackgroundColor3 = Theme.SurfaceSelected
@@ -397,20 +527,33 @@ function UI:AddTab(config)
     corner(button, 9)
     tab.Button = button
 
-    -- Colored square icon: color carries the meaning, no icon glyph needed.
-    local icon = Instance.new("Frame")
-    icon.Name = "ColorIcon"
+    -- Colored square with the requested emoji.
+    local icon = Instance.new("TextLabel")
+    icon.Name = "EmojiIcon"
     icon.BackgroundColor3 = tab.Accent
+    icon.BackgroundTransparency = 0.02
     icon.BorderSizePixel = 0
-    icon.Position = UDim2.fromOffset(10, 9)
-    icon.Size = UDim2.fromOffset(25, 25)
+    icon.Text = tab.Emoji
+    icon.TextSize = 15
+    icon.TextColor3 = Color3.fromRGB(255, 255, 255)
+    icon.Font = Enum.Font.GothamBold
+    icon.TextXAlignment = Enum.TextXAlignment.Center
+    icon.TextYAlignment = Enum.TextYAlignment.Center
+    icon.Position = UDim2.fromOffset(9, 8)
+    icon.Size = UDim2.fromOffset(27, 27)
     icon.Parent = button
     corner(icon, 7)
     tab.Icon = icon
 
-    local tabLabel = label(button, tab.Title, 13, Theme.SubText, Enum.Font.GothamMedium)
-    tabLabel.Position = UDim2.fromOffset(47, 0)
-    tabLabel.Size = UDim2.new(1, -56, 1, 0)
+    local tabLabel = text(
+        button,
+        tab.Title,
+        13,
+        Theme.SubText,
+        Enum.Font.GothamMedium
+    )
+    tabLabel.Position = UDim2.fromOffset(48, 0)
+    tabLabel.Size = UDim2.new(1, -57, 1, 0)
     tabLabel.TextTruncate = Enum.TextTruncate.AtEnd
     tab.Label = tabLabel
 
@@ -425,7 +568,7 @@ function UI:AddTab(config)
     corner(selected, 2)
     tab.SelectedBar = selected
 
-    -- Empty page. This is intentional: build your own content here.
+    -- Empty page by design.
     local page = Instance.new("ScrollingFrame")
     page.Name = tab.Title .. "_Page"
     page.BackgroundTransparency = 1
@@ -439,11 +582,10 @@ function UI:AddTab(config)
     page.Parent = self.Pages
     tab.Page = page
 
-    local pagePadding = padding(page, 18, 10, 18, 18)
-    tab.PagePadding = pagePadding
+    padding(page, 18, 10, 18, 18)
 
-    -- Minimal fluent-style section helper for future building.
-    function tab:AddSection(title)
+    -- Fluent-style foundation for future content.
+    function tab:AddSection(titleValue)
         local section = {
             Tab = tab,
             Window = self,
@@ -452,50 +594,42 @@ function UI:AddTab(config)
         local card = Instance.new("Frame")
         card.Name = "Section"
         card.BackgroundColor3 = Theme.Surface
-        card.BackgroundTransparency = 0.28
+        card.BackgroundTransparency = 0.25
         card.BorderSizePixel = 0
-        card.Size = UDim2.new(1, 0, 0, 0)
-        card.AutomaticSize = Enum.AutomaticSize.Y
+        card.Size = UDim2.new(1, 0, 0, 70)
         card.Parent = page
         corner(card, 11)
-        stroke(card, Theme.Border, 0.72)
+        stroke(card, Theme.Border, 0.70)
 
-        local sectionTitle = label(card, title or "Section", 14, Theme.Text, Enum.Font.GothamSemibold)
-        sectionTitle.Position = UDim2.fromOffset(14, 11)
-        sectionTitle.Size = UDim2.new(1, -28, 0, 22)
-
-        local placeholder = label(
+        local heading = text(
             card,
-            "",
-            12,
-            Theme.SubText
+            titleValue or "Section",
+            14,
+            Theme.Text,
+            Enum.Font.GothamSemibold
         )
-        placeholder.Position = UDim2.fromOffset(14, 35)
-        placeholder.Size = UDim2.new(1, -28, 0, 1)
-
-        local list = Instance.new("UIListLayout")
-        list.Padding = UDim.new(0, 8)
-        list.SortOrder = Enum.SortOrder.LayoutOrder
-        list.Parent = card
-
-        padding(card, 14, 10, 14, 14)
+        heading.Position = UDim2.fromOffset(14, 9)
+        heading.Size = UDim2.new(1, -28, 0, 23)
 
         section.Frame = card
-        section.Title = sectionTitle
-        section.Layout = list
+        section.Title = heading
 
         return section
     end
 
     button.MouseEnter:Connect(function()
         if self.ActiveTab ~= tab then
-            tween(button, 0.12, {BackgroundTransparency = 0.72})
+            tween(button, 0.12, {
+                BackgroundTransparency = 0.72,
+            })
         end
     end)
 
     button.MouseLeave:Connect(function()
         if self.ActiveTab ~= tab then
-            tween(button, 0.12, {BackgroundTransparency = 1})
+            tween(button, 0.12, {
+                BackgroundTransparency = 1,
+            })
         end
     end)
 
@@ -513,9 +647,7 @@ function UI:AddTab(config)
 end
 
 function UI:SelectTab(tab)
-    if not tab then
-        return
-    end
+    if not tab then return end
 
     self.ActiveTab = tab
 
@@ -527,7 +659,7 @@ function UI:SelectTab(tab)
 
         if active then
             tween(item.Button, 0.14, {
-                BackgroundTransparency = 0.16,
+                BackgroundTransparency = 0.14,
             })
             tween(item.Label, 0.14, {
                 TextColor3 = Theme.Text,
@@ -543,16 +675,17 @@ function UI:SelectTab(tab)
     end
 
     self.PageTitle.Text = tab.Title
-    self.PageSubtitle.Text = tab.Description ~= "" and tab.Description
+    self.PageSubtitle.Text =
+        tab.Description ~= "" and tab.Description
         or "Build this page using the Fluent-style API."
 end
 
-function UI:SetTitle(title, subtitle)
-    if title then
-        self.TitleLabel.Text = title
+function UI:SetTitle(titleValue, subtitleValue)
+    if titleValue then
+        self.TitleLabel.Text = titleValue
     end
-    if subtitle then
-        self.SubtitleLabel.Text = subtitle
+    if subtitleValue then
+        self.SubtitleLabel.Text = subtitleValue
     end
 end
 
@@ -566,43 +699,35 @@ end
 -- DEFAULT LAYOUT
 -- ============================================================
 
-local existingParent = (gethui and gethui()) or game:GetService("CoreGui")
-local existing = existingParent:FindFirstChild("AstrarServices_Win11")
-if existing then
-    existing:Destroy()
-end
-
 local Window = UI:CreateWindow({
     Title = "Muscle Legends - V3.2.1 Private",
     Subtitle = "AstrarServices",
-    Size = UDim2.fromScale(0.76, 0.82),
+    Size = UDim2.fromScale(0.70, 0.76),
     ContentTitle = "Stats",
     ContentSubtitle = "Select a tab to begin building your interface.",
 })
 
-local tabs = {
-    {"Farming", "Automation and farming."},
-    {"Rebirth", "Rebirth tools and settings."},
-    {"Pets", "Pet management."},
-    {"Player", "Player settings."},
-    {"Killing", "Combat tools."},
-    {"Stats", "Statistics and session information."},
-    {"Tickets", "Tickets and rewards."},
-    {"Perf", "Performance settings."},
-    {"Misc", "Miscellaneous settings."},
-}
-
 local createdTabs = {}
 
-for _, data in ipairs(tabs) do
-    createdTabs[data[1]] = Window:AddTab({
-        Title = data[1],
-        Description = data[2],
-        Accent = TabColors[data[1]],
+for _, info in ipairs(Tabs) do
+    createdTabs[info.Title] = Window:AddTab({
+        Title = info.Title,
+        Emoji = info.Emoji,
+        Description = info.Description,
+        Accent = ({
+            Farming = Color3.fromRGB(78, 165, 255),
+            Rebirth = Color3.fromRGB(255, 174, 71),
+            Pets = Color3.fromRGB(194, 116, 255),
+            Player = Color3.fromRGB(71, 205, 150),
+            Killing = Color3.fromRGB(255, 82, 82),
+            Stats = Color3.fromRGB(86, 145, 255),
+            Tickets = Color3.fromRGB(255, 211, 71),
+            Perf = Color3.fromRGB(115, 121, 132),
+            Misc = Color3.fromRGB(169, 176, 188),
+        })[info.Title],
     })
 end
 
--- Match the screenshot's initial page.
 Window:SelectTab(createdTabs.Stats)
 
 return UI
