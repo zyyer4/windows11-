@@ -2116,79 +2116,204 @@ end
 -- The Windows 11 shell uses Page-based tab objects, so provide the
 -- small API bridge here instead of replacing the shell.
 
+local function _JohnnyGetFeatureContent(tab)
+    if tab.FeatureContent and tab.FeatureContent.Parent then
+        return tab.FeatureContent
+    end
+
+    local page = tab.Page
+    if not page then return nil end
+
+    -- Fluent-inspired element host: every element lives in one vertically
+    -- laid-out container. This avoids Roblox's default (0,0) stacking and
+    -- gives the page a single reliable content height to scroll.
+    local content = Instance.new("Frame")
+    content.Name = "FeatureContent"
+    content.BackgroundTransparency = 1
+    content.BorderSizePixel = 0
+    content.Position = UDim2.fromOffset(18, 10)
+    content.Size = UDim2.new(1, -36, 0, 0)
+    content.AutomaticSize = Enum.AutomaticSize.Y
+    content.Parent = page
+
+    local contentPadding = Instance.new("UIPadding")
+    contentPadding.PaddingBottom = UDim.new(0, 18)
+    contentPadding.Parent = content
+
+    local layout = Instance.new("UIListLayout")
+    layout.Name = "FluentElementLayout"
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding = UDim.new(0, 7)
+    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    layout.Parent = content
+
+    local function syncCanvas()
+        local height = layout.AbsoluteContentSize.Y + 28
+        page.CanvasSize = UDim2.fromOffset(0, height)
+    end
+
+    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(syncCanvas)
+    content:GetPropertyChangedSignal("AbsoluteSize"):Connect(syncCanvas)
+    task.defer(syncCanvas)
+
+    tab.FeatureContent = content
+    return content
+end
+
 local function _JohnnyAddLabel(tab, value)
-    local label = text(tab.Page, tostring(value or ""), 13, Theme.Text, Enum.Font.Gotham)
-    label.Size = UDim2.new(1, -24, 0, 26)
-    label.Position = UDim2.fromOffset(12, 0)
+    local parent = _JohnnyGetFeatureContent(tab)
+    if not parent then return nil end
+
+    local label = text(parent, tostring(value or ""), 13, Theme.Text, Enum.Font.Gotham)
+    label.Size = UDim2.new(1, 0, 0, 28)
     label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextWrapped = true
     return label
 end
 
 local function _JohnnyAddButton(tab, labelText, callback)
+    local parent = _JohnnyGetFeatureContent(tab)
+    if not parent then return nil end
+
     local button = Instance.new("TextButton")
     button.Name = "JohnnyButton"
-    button.Size = UDim2.new(1, -24, 0, 34)
+    button.Size = UDim2.new(1, 0, 0, 40)
     button.BackgroundColor3 = Theme.Surface
+    button.BackgroundTransparency = 0.12
     button.BorderSizePixel = 0
     button.AutoButtonColor = false
     button.Text = tostring(labelText or "Button")
     button.TextColor3 = Theme.Text
     button.TextSize = 12
     button.Font = Enum.Font.GothamSemibold
-    button.Parent = tab.Page
-    corner(button, 8)
-    button.MouseEnter:Connect(function() tween(button, 0.10, {BackgroundColor3 = Theme.SurfaceHover}) end)
-    button.MouseLeave:Connect(function() tween(button, 0.10, {BackgroundColor3 = Theme.Surface}) end)
-    button.MouseButton1Click:Connect(function()
-        if type(callback) == "function" then pcall(callback) end
+    button.Parent = parent
+    corner(button, 9)
+    stroke(button, Theme.Border, 0.62)
+
+    button.MouseEnter:Connect(function()
+        tween(button, 0.10, {BackgroundColor3 = Theme.SurfaceHover})
     end)
+    button.MouseLeave:Connect(function()
+        tween(button, 0.10, {BackgroundColor3 = Theme.Surface})
+    end)
+    button.MouseButton1Click:Connect(function()
+        if type(callback) == "function" then
+            local ok, err = pcall(callback)
+            if not ok then warn("[Johnny] button error: " .. tostring(err)) end
+        end
+    end)
+
     return button
 end
 
 local function _JohnnyAddSwitch(tab, labelText, callback)
+    local parent = _JohnnyGetFeatureContent(tab)
+    if not parent then return nil end
+
+    local row = Instance.new("Frame")
+    row.Name = "JohnnyToggle"
+    row.Size = UDim2.new(1, 0, 0, 44)
+    row.BackgroundColor3 = Theme.Surface
+    row.BackgroundTransparency = 0.12
+    row.BorderSizePixel = 0
+    row.Parent = parent
+    corner(row, 9)
+    stroke(row, Theme.Border, 0.62)
+
+    local label = text(row, tostring(labelText or "Switch"), 12, Theme.Text, Enum.Font.GothamMedium)
+    label.Position = UDim2.fromOffset(13, 0)
+    label.Size = UDim2.new(1, -82, 1, 0)
+    label.TextXAlignment = Enum.TextXAlignment.Left
+
+    local toggle = Instance.new("TextButton")
+    toggle.Size = UDim2.fromOffset(50, 24)
+    toggle.Position = UDim2.new(1, -62, 0.5, -12)
+    toggle.BackgroundColor3 = Theme.Muted
+    toggle.BorderSizePixel = 0
+    toggle.AutoButtonColor = false
+    toggle.Text = "OFF"
+    toggle.TextColor3 = Theme.Text
+    toggle.TextSize = 9
+    toggle.Font = Enum.Font.GothamBold
+    toggle.Parent = row
+    corner(toggle, 12)
+
     local state = false
-    local button = _JohnnyAddButton(tab, tostring(labelText or "Switch") .. ": OFF", function()
-        state = not state
-        button.Text = tostring(labelText or "Switch") .. (state and ": ON" or ": OFF")
-        if type(callback) == "function" then pcall(callback, state) end
-    end)
-    local api = {}
-    function api:Set(value)
-        state = value and true or false
-        button.Text = tostring(labelText or "Switch") .. (state and ": ON" or ": OFF")
-        if type(callback) == "function" then pcall(callback, state) end
+    local switch = {}
+
+    local function apply(newState, fire)
+        state = newState and true or false
+        toggle.Text = state and "ON" or "OFF"
+        toggle.BackgroundColor3 = state and Theme.Green or Theme.Muted
+        if fire and type(callback) == "function" then
+            local ok, err = pcall(callback, state)
+            if not ok then warn("[Johnny] toggle error: " .. tostring(err)) end
+        end
     end
-    function api:Get() return state end
-    return api
+
+    function switch:Set(newState)
+        apply(newState, true)
+    end
+    function switch:Get()
+        return state
+    end
+
+    switch.Button = toggle
+    switch.Frame = row
+
+    toggle.MouseButton1Click:Connect(function()
+        apply(not state, true)
+    end)
+
+    return switch
 end
 
 local function _JohnnyAddTextBox(tab, labelText, callback, options)
+    local parent = _JohnnyGetFeatureContent(tab)
+    if not parent then return nil end
+
+    options = options or {}
+
     local holder = Instance.new("Frame")
-    holder.Size = UDim2.new(1, -24, 0, 54)
-    holder.BackgroundTransparency = 1
-    holder.Parent = tab.Page
+    holder.Name = "JohnnyInput"
+    holder.Size = UDim2.new(1, 0, 0, 54)
+    holder.BackgroundColor3 = Theme.Surface
+    holder.BackgroundTransparency = 0.12
+    holder.BorderSizePixel = 0
+    holder.Parent = parent
+    corner(holder, 9)
+    stroke(holder, Theme.Border, 0.62)
 
     local label = text(holder, tostring(labelText or ""), 11, Theme.SubText, Enum.Font.GothamSemibold)
-    label.Size = UDim2.new(0.42, 0, 1, 0)
+    label.Position = UDim2.fromOffset(13, 4)
+    label.Size = UDim2.new(0.42, 0, 1, -8)
     label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextWrapped = true
 
     local box = Instance.new("TextBox")
     box.Size = UDim2.new(0.55, 0, 0, 34)
     box.Position = UDim2.new(0.45, 0, 0.5, -17)
-    box.BackgroundColor3 = Theme.Surface
+    box.BackgroundColor3 = Theme.WindowTop
+    box.BackgroundTransparency = 0.08
     box.BorderSizePixel = 0
     box.ClearTextOnFocus = false
     box.Text = ""
-    box.PlaceholderText = (options and options.placeholder) or ""
+    box.PlaceholderText = options.placeholder or ""
     box.TextColor3 = Theme.Text
     box.PlaceholderColor3 = Theme.Muted
     box.TextSize = 12
     box.Font = Enum.Font.Gotham
     box.Parent = holder
     corner(box, 8)
+    stroke(box, Theme.Border, 0.60)
+
     box.FocusLost:Connect(function()
-        if type(callback) == "function" then pcall(callback, box.Text) end
+        if type(callback) == "function" then
+            local ok, err = pcall(callback, box.Text)
+            if not ok then warn("[Johnny] input error: " .. tostring(err)) end
+        end
     end)
+
     return box
 end
 
@@ -2204,8 +2329,6 @@ for _, _tab in pairs(createdTabs) do
     _JohnnyInstallTabCompat(_tab)
 end
 
--- The original v13 Info code called :Show(), which does not exist on
--- the Windows 11 tab object. It is intentionally not used here.
 
 -- ============================================================
 -- JOHNNY V13 FEATURE PACK — existing Windows 11 shell preserved
@@ -5894,7 +6017,7 @@ end)
 
 local infoTab = createdTabs.Info
 
-infoTab:Show()
+-- Windows 11 tabs are selected through Window:SelectTab; no :Show() call is needed.
 
 infoTab:AddButton(
     "Destroy Script + Anti AFK",
