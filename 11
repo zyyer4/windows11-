@@ -1,0 +1,332 @@
+-- Win11UI.lua
+-- Standalone Windows 11 / Fluent-inspired Roblox UI library.
+-- API: Window:AddTab -> Tab:AddSection -> Section:AddButton/AddToggle/AddSlider/AddInput/AddDropdown/AddLabel
+
+local Win11UI = {}
+Win11UI.__index = Win11UI
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UIS = game:GetService("UserInputService")
+local TS = game:GetService("TextService")
+local Player = Players.LocalPlayer
+
+local Themes = {
+    Dark = {
+        Window=Color3.fromRGB(24,24,27), Sidebar=Color3.fromRGB(29,29,32),
+        Surface=Color3.fromRGB(34,34,38), Surface2=Color3.fromRGB(41,41,46),
+        Hover=Color3.fromRGB(48,48,54), Pressed=Color3.fromRGB(55,55,62),
+        Stroke=Color3.fromRGB(67,67,74), Text=Color3.fromRGB(245,245,247),
+        Sub=Color3.fromRGB(166,166,174), Muted=Color3.fromRGB(120,120,128),
+        Accent=Color3.fromRGB(76,151,255), Danger=Color3.fromRGB(220,70,70)
+    },
+    Light = {
+        Window=Color3.fromRGB(248,248,250), Sidebar=Color3.fromRGB(243,243,246),
+        Surface=Color3.fromRGB(255,255,255), Surface2=Color3.fromRGB(247,247,249),
+        Hover=Color3.fromRGB(238,238,242), Pressed=Color3.fromRGB(229,229,234),
+        Stroke=Color3.fromRGB(220,220,226), Text=Color3.fromRGB(30,30,33),
+        Sub=Color3.fromRGB(93,93,101), Muted=Color3.fromRGB(125,125,134),
+        Accent=Color3.fromRGB(0,103,192), Danger=Color3.fromRGB(190,45,45)
+    }
+}
+
+local function parent()
+    local ok,h=pcall(function() return gethui and gethui() end)
+    if ok and h then return h end
+    return game:GetService("CoreGui") or Player:WaitForChild("PlayerGui")
+end
+local function new(c,p,par)
+    local x=Instance.new(c)
+    for k,v in pairs(p or {}) do x[k]=v end
+    x.Parent=par
+    return x
+end
+local function round(x,r)
+    new("UICorner",{CornerRadius=UDim.new(0,r)},x)
+end
+local function line(x,c,t,w)
+    new("UIStroke",{Color=c,Transparency=t or 0,Thickness=w or 1},x)
+end
+local function pad(x,a,b,c,d)
+    new("UIPadding",{PaddingLeft=UDim.new(0,a or 0),PaddingRight=UDim.new(0,b or a or 0),
+        PaddingTop=UDim.new(0,c or a or 0),PaddingBottom=UDim.new(0,d or a or 0)},x)
+end
+local function tw(x,ti,p) TweenService:Create(x,ti,p):Play() end
+local fast=TweenInfo.new(.12,Enum.EasingStyle.Quart,Enum.EasingDirection.Out)
+local normal=TweenInfo.new(.2,Enum.EasingStyle.Quart,Enum.EasingDirection.Out)
+local spring=TweenInfo.new(.28,Enum.EasingStyle.Back,Enum.EasingDirection.Out)
+
+local function hover(b,base,t1,t2)
+    b.MouseEnter:Connect(function() tw(b,fast,{BackgroundColor3=t1}) end)
+    b.MouseLeave:Connect(function() tw(b,fast,{BackgroundColor3=base}) end)
+    b.MouseButton1Down:Connect(function() tw(b,fast,{BackgroundColor3=t2 or t1}) end)
+    b.MouseButton1Up:Connect(function() tw(b,fast,{BackgroundColor3=t1}) end)
+end
+local function drag(handle,target)
+    local down,start,pos=false,nil,nil
+    handle.InputBegan:Connect(function(i)
+        if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
+            down=true;start=i.Position;pos=target.Position
+            i.Changed:Connect(function() if i.UserInputState==Enum.UserInputState.End then down=false end end)
+        end
+    end)
+    UIS.InputChanged:Connect(function(i)
+        if not down then return end
+        if i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch then
+            local d=i.Position-start
+            target.Position=UDim2.new(pos.X.Scale,pos.X.Offset+d.X,pos.Y.Scale,pos.Y.Offset+d.Y)
+        end
+    end)
+end
+
+function Win11UI:CreateWindow(o)
+    o=o or {}
+    local w=setmetatable({Tabs={},ThemeName=o.Theme or "Dark",_normalSize=o.Size or UDim2.fromOffset(760,520)},Win11UI)
+    w.Theme=Themes[w.ThemeName] or Themes.Dark
+    local g=new("ScreenGui",{Name=o.Name or "Win11UI",ResetOnSpawn=false,IgnoreGuiInset=true,
+        ZIndexBehavior=Enum.ZIndexBehavior.Global,DisplayOrder=o.DisplayOrder or 1000},parent())
+    w.Gui=g
+    local sh=new("Frame",{AnchorPoint=Vector2.new(.5,.5),Position=o.Position or UDim2.fromScale(.5,.5),
+        Size=w._normalSize,BackgroundColor3=Color3.new(0,0,0),BackgroundTransparency=.55,BorderSizePixel=0,ZIndex=1},g)
+    round(sh,14);w.Shadow=sh
+    local f=new("Frame",{Name="Window",AnchorPoint=Vector2.new(.5,.5),Position=o.Position or UDim2.fromScale(.5,.5),
+        Size=w._normalSize,BackgroundColor3=w.Theme.Window,BorderSizePixel=0,ZIndex=2,ClipsDescendants=true},g)
+    round(f,12);line(f,w.Theme.Stroke,.15,1);w.Frame=f
+    local bar=new("Frame",{Size=UDim2.new(1,0,0,52),BackgroundTransparency=1,ZIndex=5},f)
+    w.TitleBar=bar;drag(bar,f)
+    new("TextLabel",{Position=UDim2.fromOffset(18,8),Size=UDim2.new(1,-150,0,20),BackgroundTransparency=1,
+        Text=o.Title or "Windows 11",TextColor3=w.Theme.Text,Font=Enum.Font.GothamSemibold,TextSize=15,
+        TextXAlignment=Enum.TextXAlignment.Left,ZIndex=6},bar)
+    new("TextLabel",{Position=UDim2.fromOffset(18,28),Size=UDim2.new(1,-150,0,16),BackgroundTransparency=1,
+        Text=o.Subtitle or "Fluent-inspired interface",TextColor3=w.Theme.Sub,Font=Enum.Font.Gotham,TextSize=11,
+        TextXAlignment=Enum.TextXAlignment.Left,ZIndex=6},bar)
+    local controls=new("Frame",{AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,-7,0,7),
+        Size=UDim2.fromOffset(120,36),BackgroundTransparency=1,ZIndex=7},bar)
+    new("UIListLayout",{FillDirection=Enum.FillDirection.Horizontal,HorizontalAlignment=Enum.HorizontalAlignment.Right,
+        VerticalAlignment=Enum.VerticalAlignment.Center,Padding=UDim.new(0,2)},controls)
+    local function ctl(s,fn,red)
+        local b=new("TextButton",{Size=UDim2.fromOffset(38,32),BackgroundTransparency=1,Text=s,
+            TextColor3=w.Theme.Sub,Font=Enum.Font.Gotham,TextSize=13,AutoButtonColor=false,ZIndex=8},controls)
+        round(b,6)
+        b.MouseEnter:Connect(function() tw(b,fast,{BackgroundTransparency=0,BackgroundColor3=red and w.Theme.Danger or w.Theme.Hover,TextColor3=w.Theme.Text}) end)
+        b.MouseLeave:Connect(function() tw(b,fast,{BackgroundTransparency=1,TextColor3=w.Theme.Sub}) end)
+        b.MouseButton1Click:Connect(fn)
+    end
+    ctl("—",function() w:SetMinimized(not w.Minimized) end)
+    ctl("□",function() w:SetMaximized() end)
+    ctl("×",function() w:Destroy() end,true)
+
+    local body=new("Frame",{Position=UDim2.fromOffset(0,52),Size=UDim2.new(1,0,1,-52),BackgroundTransparency=1,ZIndex=3},f)
+    local nav=new("Frame",{Size=UDim2.fromOffset(190,1),AutomaticSize=Enum.AutomaticSize.Y,
+        BackgroundColor3=w.Theme.Sidebar,BorderSizePixel=0,ZIndex=4},body)
+    pad(nav,10);new("UIListLayout",{Padding=UDim.new(0,3),SortOrder=Enum.SortOrder.LayoutOrder},nav)
+    w.Navigation=nav
+    new("Frame",{Position=UDim2.fromOffset(190,0),Size=UDim2.new(0,1,1,0),
+        BackgroundColor3=w.Theme.Stroke,BackgroundTransparency=.45,BorderSizePixel=0,ZIndex=5},body)
+    w.Content=new("Frame",{Position=UDim2.fromOffset(191,0),Size=UDim2.new(1,-191,1,0),
+        BackgroundColor3=w.Theme.Window,BorderSizePixel=0,ZIndex=3},body)
+    w.Notifications=new("Frame",{AnchorPoint=Vector2.new(1,1),Position=UDim2.new(1,-18,1,-18),
+        Size=UDim2.fromOffset(330,400),BackgroundTransparency=1,ZIndex=200},g)
+    new("UIListLayout",{VerticalAlignment=Enum.VerticalAlignment.Bottom,HorizontalAlignment=Enum.HorizontalAlignment.Right,
+        Padding=UDim.new(0,8)},w.Notifications)
+    w.ToggleKey=o.ToggleKey or Enum.KeyCode.RightShift
+    w._key=UIS.InputBegan:Connect(function(i,p) if not p and i.KeyCode==w.ToggleKey then g.Enabled=not g.Enabled end end)
+    return w
+end
+
+function Win11UI:AddTab(o)
+    o=o or {};local w=self
+    local t={Window=w,Title=o.Title or "Tab",Icon=o.Icon or "•",Sections={}}
+    local b=new("TextButton",{Size=UDim2.new(1,0,0,38),BackgroundColor3=w.Theme.Sidebar,BorderSizePixel=0,
+        Text="",AutoButtonColor=false,ZIndex=6},w.Navigation);round(b,6)
+    local ic=new("TextLabel",{Position=UDim2.fromOffset(11,0),Size=UDim2.fromOffset(24,38),BackgroundTransparency=1,
+        Text=t.Icon,TextColor3=w.Theme.Sub,Font=Enum.Font.GothamSemibold,TextSize=15,ZIndex=7},b)
+    local lb=new("TextLabel",{Position=UDim2.fromOffset(39,0),Size=UDim2.new(1,-45,1,0),BackgroundTransparency=1,
+        Text=t.Title,TextColor3=w.Theme.Sub,Font=Enum.Font.GothamMedium,TextSize=12,
+        TextXAlignment=Enum.TextXAlignment.Left,ZIndex=7},b)
+    local ind=new("Frame",{Position=UDim2.fromOffset(0,8),Size=UDim2.fromOffset(3,22),
+        BackgroundColor3=w.Theme.Accent,BackgroundTransparency=1,BorderSizePixel=0,ZIndex=8},b);round(ind,2)
+    local p=new("ScrollingFrame",{Size=UDim2.new(1,0,1,0),BackgroundTransparency=1,BorderSizePixel=0,
+        ScrollBarThickness=3,ScrollBarImageColor3=w.Theme.Accent,ScrollBarImageTransparency=.35,
+        AutomaticCanvasSize=Enum.AutomaticSize.Y,CanvasSize=UDim2.new(),Visible=false,ZIndex=4},w.Content)
+    pad(p,20,20,18,24);local list=new("UIListLayout",{Padding=UDim.new(0,12)},p)
+    t.Button=b;t.Page=p;t.Indicator=ind;t.Label=lb;t.IconLabel=ic;t.Layout=list
+    function t:Select()
+        for _,x in ipairs(w.Tabs) do x.Page.Visible=false;tw(x.Button,fast,{BackgroundColor3=w.Theme.Sidebar})
+            tw(x.Label,fast,{TextColor3=w.Theme.Sub});tw(x.IconLabel,fast,{TextColor3=w.Theme.Sub})
+            tw(x.Indicator,fast,{BackgroundTransparency=1}) end
+        p.Visible=true;tw(b,fast,{BackgroundColor3=w.Theme.Hover});tw(lb,fast,{TextColor3=w.Theme.Text})
+        tw(ic,fast,{TextColor3=w.Theme.Accent});tw(ind,fast,{BackgroundTransparency=0});w.ActiveTab=t
+    end
+    b.MouseEnter:Connect(function() if w.ActiveTab~=t then tw(b,fast,{BackgroundColor3=w.Theme.Hover}) end end)
+    b.MouseLeave:Connect(function() if w.ActiveTab~=t then tw(b,fast,{BackgroundColor3=w.Theme.Sidebar}) end end)
+    b.MouseButton1Click:Connect(function() t:Select() end)
+
+    function t:AddSection(title)
+        local s={};local c=new("Frame",{Size=UDim2.new(1,0,0,0),AutomaticSize=Enum.AutomaticSize.Y,
+            BackgroundColor3=w.Theme.Surface,BorderSizePixel=0,ZIndex=5},p)
+        round(c,8);line(c,w.Theme.Stroke,.25,1);pad(c,14,14,12,14)
+        new("TextLabel",{Size=UDim2.new(1,0,0,22),BackgroundTransparency=1,Text=title or "Section",
+            TextColor3=w.Theme.Text,Font=Enum.Font.GothamSemibold,TextSize=13,TextXAlignment=Enum.TextXAlignment.Left,ZIndex=6},c)
+        local h=new("Frame",{Position=UDim2.fromOffset(0,29),Size=UDim2.new(1,0,0,0),
+            AutomaticSize=Enum.AutomaticSize.Y,BackgroundTransparency=1,ZIndex=6},c)
+        new("UIListLayout",{Padding=UDim.new(0,7)},h);s.Card=c;s.Holder=h
+
+        local function row(title,desc,height)
+            local r=new("Frame",{Size=UDim2.new(1,0,0,height or 44),BackgroundTransparency=1,ZIndex=7},h)
+            new("TextLabel",{Position=UDim2.fromOffset(2,5),Size=UDim2.new(1,-190,0,18),BackgroundTransparency=1,
+                Text=title or "",TextColor3=w.Theme.Text,Font=Enum.Font.GothamMedium,TextSize=12,
+                TextXAlignment=Enum.TextXAlignment.Left,ZIndex=8},r)
+            if desc then new("TextLabel",{Position=UDim2.fromOffset(2,23),Size=UDim2.new(1,-190,0,16),
+                BackgroundTransparency=1,Text=desc,TextColor3=w.Theme.Sub,Font=Enum.Font.Gotham,TextSize=10,
+                TextXAlignment=Enum.TextXAlignment.Left,ZIndex=8},r) end
+            return r
+        end
+
+        function s:AddButton(title,callback,desc)
+            local r=row(title,desc);local b=new("TextButton",{AnchorPoint=Vector2.new(1,.5),Position=UDim2.new(1,0,.5,0),
+                Size=UDim2.fromOffset(108,32),BackgroundColor3=w.Theme.Surface2,BorderSizePixel=0,Text="Run",
+                TextColor3=w.Theme.Text,Font=Enum.Font.GothamMedium,TextSize=11,AutoButtonColor=false,ZIndex=9},r)
+            round(b,6);line(b,w.Theme.Stroke,.18,1);hover(b,w.Theme.Surface2,w.Theme.Hover,w.Theme.Pressed)
+            b.MouseButton1Click:Connect(function() if callback then task.spawn(callback) end end)
+            return {Instance=b,SetText=function(_,x)b.Text=x end}
+        end
+
+        function s:AddToggle(title,default,callback,desc)
+            local value=default==true;local r=row(title,desc)
+            local track=new("TextButton",{AnchorPoint=Vector2.new(1,.5),Position=UDim2.new(1,0,.5,0),
+                Size=UDim2.fromOffset(42,24),BackgroundColor3=value and w.Theme.Accent or w.Theme.Surface2,
+                BorderSizePixel=0,Text="",AutoButtonColor=false,ZIndex=9},r);round(track,12)
+            local knob=new("Frame",{Size=UDim2.fromOffset(18,18),Position=value and UDim2.fromOffset(21,3) or UDim2.fromOffset(3,3),
+                BackgroundColor3=Color3.new(1,1,1),BorderSizePixel=0,ZIndex=10},track);round(knob,9)
+            local api={}
+            function api:Set(v,fire)
+                value=v==true;tw(track,fast,{BackgroundColor3=value and w.Theme.Accent or w.Theme.Surface2})
+                tw(knob,fast,{Position=value and UDim2.fromOffset(21,3) or UDim2.fromOffset(3,3)})
+                if fire~=false and callback then callback(value) end
+            end
+            function api:Get()return value end
+            track.MouseButton1Click:Connect(function()api:Set(not value)end)
+            if callback then task.defer(callback,value) end
+            return api
+        end
+
+        function s:AddSlider(title,min,max,default,callback,desc)
+            min,max=tonumber(min)or 0,tonumber(max)or 100;local value=math.clamp(tonumber(default)or min,min,max)
+            local r=row(title,desc,60)
+            local val=new("TextLabel",{AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,0,0,3),Size=UDim2.fromOffset(65,18),
+                BackgroundTransparency=1,Text=tostring(value),TextColor3=w.Theme.Sub,Font=Enum.Font.GothamMedium,TextSize=11,
+                TextXAlignment=Enum.TextXAlignment.Right,ZIndex=9},r)
+            local bar=new("Frame",{Position=UDim2.fromOffset(2,35),Size=UDim2.new(1,-2,0,5),
+                BackgroundColor3=w.Theme.Surface2,BorderSizePixel=0,ZIndex=8},r);round(bar,3)
+            local fill=new("Frame",{Size=UDim2.new((value-min)/math.max(max-min,1),0,1,0),
+                BackgroundColor3=w.Theme.Accent,BorderSizePixel=0,ZIndex=9},bar);round(fill,3)
+            local knob=new("Frame",{AnchorPoint=Vector2.new(.5,.5),Position=UDim2.new((value-min)/math.max(max-min,1),0,.5,0),
+                Size=UDim2.fromOffset(12,12),BackgroundColor3=w.Theme.Text,BorderSizePixel=0,ZIndex=10},bar);round(knob,6)
+            local moving=false;local api={}
+            local function setx(x,fire)
+                local q=math.clamp((x-bar.AbsolutePosition.X)/math.max(bar.AbsoluteSize.X,1),0,1);value=min+(max-min)*q
+                val.Text=string.format("%.2f",value):gsub("%.00$","");fill.Size=UDim2.new(q,0,1,0);knob.Position=UDim2.new(q,0,.5,0)
+                if fire~=false and callback then callback(value)end
+            end
+            function api:Set(v,fire)local q=math.clamp(tonumber(v)or min,min,max);setx(bar.AbsolutePosition.X+((q-min)/math.max(max-min,1))*bar.AbsoluteSize.X,fire)end
+            function api:Get()return value end
+            bar.InputBegan:Connect(function(i)if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then moving=true;setx(i.Position.X)end end)
+            UIS.InputChanged:Connect(function(i)if moving and(i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch)then setx(i.Position.X)end end)
+            UIS.InputEnded:Connect(function(i)if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then moving=false end end)
+            return api
+        end
+
+        function s:AddInput(title,placeholder,callback,desc)
+            local r=row(title,desc,58);local b=new("TextBox",{AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,0,0,4),
+                Size=UDim2.fromOffset(180,34),BackgroundColor3=w.Theme.Surface2,BorderSizePixel=0,Text="",
+                PlaceholderText=placeholder or "Enter value...",PlaceholderColor3=w.Theme.Muted,TextColor3=w.Theme.Text,
+                Font=Enum.Font.Gotham,TextSize=11,ClearTextOnFocus=false,ZIndex=9},r)
+            round(b,6);line(b,w.Theme.Stroke,.15,1);pad(b,10,10,0,0);b.FocusLost:Connect(function(e)if callback then callback(b.Text,e)end end)
+            return {Instance=b,Set=function(_,x)b.Text=tostring(x)end,Get=function()return b.Text end}
+        end
+
+        function s:AddDropdown(title,values,default,callback,desc)
+            values=values or {};local current=default;local r=row(title,desc,48)
+            local b=new("TextButton",{AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,0,0,4),Size=UDim2.fromOffset(180,34),
+                BackgroundColor3=w.Theme.Surface2,BorderSizePixel=0,Text=tostring(current or "Select...").."  ˅",
+                TextColor3=w.Theme.Text,Font=Enum.Font.Gotham,TextSize=11,AutoButtonColor=false,ZIndex=12},r)
+            round(b,6);line(b,w.Theme.Stroke,.15,1)
+            local pop=new("Frame",{Visible=false,AnchorPoint=Vector2.new(1,0),Position=UDim2.new(1,0,1,3),
+                Size=UDim2.fromOffset(180,0),AutomaticSize=Enum.AutomaticSize.Y,BackgroundColor3=w.Theme.Surface,
+                BorderSizePixel=0,ZIndex=50},b);round(pop,6);line(pop,w.Theme.Stroke,.05,1);pad(pop,5)
+            new("UIListLayout",{Padding=UDim.new(0,2)},pop)
+            local function rebuild()
+                for _,x in ipairs(pop:GetChildren())do if x:IsA("TextButton")then x:Destroy()end end
+                for _,item in ipairs(values)do
+                    local q=new("TextButton",{Size=UDim2.new(1,0,0,30),BackgroundColor3=w.Theme.Surface,BorderSizePixel=0,
+                        Text=tostring(item),TextColor3=w.Theme.Text,Font=Enum.Font.Gotham,TextSize=11,AutoButtonColor=false,ZIndex=51},pop)
+                    round(q,5);hover(q,w.Theme.Surface,w.Theme.Hover,w.Theme.Pressed)
+                    q.MouseButton1Click:Connect(function()current=item;b.Text=tostring(item).."  ˅";pop.Visible=false;if callback then callback(item)end end)
+                end
+            end
+            rebuild();b.MouseButton1Click:Connect(function()pop.Visible=not pop.Visible end)
+            return {Set=function(_,x,fire)current=x;b.Text=tostring(x).."  ˅";if fire~=false and callback then callback(x)end end,
+                Get=function()return current end,Refresh=function(_,x)values=x or {};rebuild()end}
+        end
+
+        function s:AddLabel(text,desc)
+            local r=new("Frame",{Size=UDim2.new(1,0,0,desc and 44 or 26),BackgroundTransparency=1,ZIndex=7},h)
+            new("TextLabel",{Position=UDim2.fromOffset(2,2),Size=UDim2.new(1,-4,0,20),BackgroundTransparency=1,
+                Text=text or "",TextColor3=w.Theme.Text,Font=Enum.Font.Gotham,TextSize=11,TextXAlignment=Enum.TextXAlignment.Left,ZIndex=8},r)
+            if desc then new("TextLabel",{Position=UDim2.fromOffset(2,21),Size=UDim2.new(1,-4,0,18),BackgroundTransparency=1,
+                Text=desc,TextColor3=w.Theme.Sub,Font=Enum.Font.Gotham,TextSize=10,TextXAlignment=Enum.TextXAlignment.Left,ZIndex=8},r)end
+            return r
+        end
+
+        function s:AddDivider()
+            return new("Frame",{Size=UDim2.new(1,0,0,1),BackgroundColor3=w.Theme.Stroke,BackgroundTransparency=.35,BorderSizePixel=0,ZIndex=8},h)
+        end
+
+        table.insert(t.Sections,s);return s
+    end
+
+    table.insert(w.Tabs,t);if not w.ActiveTab then t:Select() end;return t
+end
+
+function Win11UI:SetTheme(name)
+    if not Themes[name]then return end
+    self.ThemeName=name;self.Theme=Themes[name]
+    -- Rebuilding is intentionally avoided: existing element references remain valid.
+    -- Call SetTheme before adding tabs for a completely token-consistent tree.
+    self.Frame.BackgroundColor3=self.Theme.Window;self.Content.BackgroundColor3=self.Theme.Window
+    self.Navigation.BackgroundColor3=self.Theme.Sidebar
+end
+
+function Win11UI:SetMinimized(v)
+    self.Minimized=v==true
+    if self.Minimized then self.BodyVisible=self.Content.Parent;self.Content.Parent.Visible=false
+        self._oldSize=self.Frame.Size;self.Frame.Size=UDim2.fromOffset(self.Frame.AbsoluteSize.X,52);self.Shadow.Size=self.Frame.Size
+    else self.Content.Parent.Visible=true;self.Frame.Size=self._oldSize or UDim2.fromOffset(760,520);self.Shadow.Size=self.Frame.Size end
+end
+
+function Win11UI:SetMaximized()
+    if self._max then self._max=false;self.Frame.Size=self._normalSize;self.Shadow.Size=self.Frame.Size;return end
+    self._max=true;self._normalSize=self.Frame.Size;self.Frame.Size=UDim2.new(1,-16,1,-16);self.Shadow.Size=self.Frame.Size
+end
+
+function Win11UI:Notify(o)
+    o=o or {};local c=new("Frame",{Size=UDim2.fromOffset(320,72),BackgroundColor3=self.Theme.Surface,
+        BorderSizePixel=0,ZIndex=201},self.Notifications);round(c,8);line(c,self.Theme.Stroke,.15,1)
+    new("TextLabel",{Position=UDim2.fromOffset(14,10),Size=UDim2.new(1,-28,0,18),BackgroundTransparency=1,
+        Text=o.Title or "Notification",TextColor3=self.Theme.Text,Font=Enum.Font.GothamSemibold,TextSize=13,
+        TextXAlignment=Enum.TextXAlignment.Left,ZIndex=202},c)
+    new("TextLabel",{Position=UDim2.fromOffset(14,31),Size=UDim2.new(1,-28,0,30),BackgroundTransparency=1,
+        Text=o.Content or "",TextColor3=self.Theme.Sub,Font=Enum.Font.Gotham,TextSize=11,TextWrapped=true,
+        TextXAlignment=Enum.TextXAlignment.Left,ZIndex=202},c)
+    c.Position=UDim2.fromOffset(360,0);tw(c,spring,{Position=UDim2.fromOffset(0,0)})
+    task.delay(o.Duration or 4,function()if c.Parent then tw(c,normal,{BackgroundTransparency=1,Position=UDim2.fromOffset(360,0)});task.wait(.22);c:Destroy()end end)
+end
+
+function Win11UI:Destroy()
+    if self._key then self._key:Disconnect()end
+    if self.Gui then self.Gui:Destroy()end
+end
+
+Win11UI.Themes=Themes
+return Win11UI
