@@ -894,8 +894,9 @@ function UI:AddTab(config)
     page.BackgroundTransparency = 1
     page.BorderSizePixel = 0
     page.Size = UDim2.new(1, 0, 1, 0)
-    page.CanvasSize = UDim2.new()
+    page.CanvasSize = UDim2.new(0, 0, 0, 0)
     page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    page.ScrollingDirection = Enum.ScrollingDirection.Y
     page.ScrollBarThickness = 3
     page.ScrollBarImageColor3 = Theme.Border
     page.Visible = false
@@ -2112,37 +2113,37 @@ local function _JohnnyGetFeatureContent(tab)
     local page = tab.Page
     if not page then return nil end
 
-    local content = Instance.new("Frame")
-    content.Name = "FeatureContent"
-    content.BackgroundTransparency = 1
-    content.BorderSizePixel = 0
-    content.Position = UDim2.fromOffset(0, 0)
-    content.Size = UDim2.new(1, 0, 0, 0)
-    content.AutomaticSize = Enum.AutomaticSize.Y
-    content.Parent = page
+    -- IMPORTANT: use the ScrollingFrame itself as the layout container.
+    -- The previous version nested an AutomaticSize Frame inside the
+    -- ScrollingFrame, which could resolve to a zero-height canvas at runtime
+    -- in some Roblox/executor UI environments.
+    page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    page.ScrollingDirection = Enum.ScrollingDirection.Y
+    page.CanvasSize = UDim2.new(0, 0, 0, 0)
 
-    local pad = Instance.new("UIPadding")
-    pad.PaddingTop = UDim.new(0, 10)
-    pad.PaddingLeft = UDim.new(0, 16)
-    pad.PaddingRight = UDim.new(0, 16)
-    pad.PaddingBottom = UDim.new(0, 18)
-    pad.Parent = content
-
-    local layout = Instance.new("UIListLayout")
-    layout.Name = "FeatureSectionLayout"
-    layout.SortOrder = Enum.SortOrder.LayoutOrder
-    layout.Padding = UDim.new(0, 8)
-    layout.Parent = content
-
-    local function syncCanvas()
-        page.CanvasSize = UDim2.fromOffset(0, math.max(0, content.AbsoluteSize.Y + 12))
+    local pad = page:FindFirstChild("JohnnyFeaturePadding")
+    if not pad then
+        pad = Instance.new("UIPadding")
+        pad.Name = "JohnnyFeaturePadding"
+        pad.PaddingTop = UDim.new(0, 10)
+        pad.PaddingLeft = UDim.new(0, 16)
+        pad.PaddingRight = UDim.new(0, 16)
+        pad.PaddingBottom = UDim.new(0, 18)
+        pad.Parent = page
     end
-    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(syncCanvas)
-    content:GetPropertyChangedSignal("AbsoluteSize"):Connect(syncCanvas)
-    task.defer(syncCanvas)
 
-    tab.FeatureContent = content
-    return content
+    local layout = page:FindFirstChild("JohnnyFeatureLayout")
+    if not layout then
+        layout = Instance.new("UIListLayout")
+        layout.Name = "JohnnyFeatureLayout"
+        layout.SortOrder = Enum.SortOrder.LayoutOrder
+        layout.Padding = UDim.new(0, 8)
+        layout.Parent = page
+    end
+
+    -- The page itself is now the reliable content container.
+    tab.FeatureContent = page
+    return page
 end
 
 local function _JohnnySectionParent(tab)
@@ -2431,6 +2432,10 @@ end
 
 for _, _tab in pairs(createdTabs) do
     _JohnnyInstallTabCompat(_tab)
+    if _tab.Page then
+        _tab.Page.Visible = (_tab == Window.ActiveTab)
+        _tab.Page.ClipsDescendants = true
+    end
 end
 
 
