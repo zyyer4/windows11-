@@ -1,5 +1,5 @@
 --[[
-    AstrarServices / Windows 11 Fluent Layout Shell
+    Empire / Windows 11 Glass Layout Shell
     ------------------------------------------------
     Layout-only UI foundation.
 
@@ -14,6 +14,8 @@
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local GuiService = game:GetService("GuiService")
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
 
 local UI = {}
 UI.__index = UI
@@ -37,15 +39,16 @@ local Theme = {
 }
 
 local Tabs = {
-    {Title = "Farming", Emoji = "⌁", Description = "Automation and farming."},
-    {Title = "Rebirth", Emoji = "↻", Description = "Rebirth tools and settings."},
-    {Title = "Pets", Emoji = "♢", Description = "Pet management."},
-    {Title = "Player", Emoji = "◉", Description = "Player settings."},
-    {Title = "Killing", Emoji = "⚔", Description = "Combat tools."},
-    {Title = "Stats", Emoji = "▥", Description = "Statistics and session information."},
-    {Title = "Tickets", Emoji = "▤", Description = "Tickets and rewards."},
-    {Title = "Perf", Emoji = "▣", Description = "Performance settings."},
-    {Title = "Misc", Emoji = "⚙", Description = "Miscellaneous settings."},
+    {Title = "Farming", Emoji = "💪", Description = "Strength grinding and farming."},
+    {Title = "Rebirth", Emoji = "🔄", Description = "Rebirth tools and settings."},
+    {Title = "Pets", Emoji = "🐾", Description = "Pet management."},
+    {Title = "Player", Emoji = "👤", Description = "Player settings."},
+    {Title = "Killing", Emoji = "⚔️", Description = "Combat tools."},
+    {Title = "Stats", Emoji = "📊", Description = "Statistics and session information."},
+    {Title = "Admin", Emoji = "🛡️", Description = "Global execution monitoring and admin tools."},
+    {Title = "Perf", Emoji = "💻", Description = "Performance settings."},
+    {Title = "Misc", Emoji = "⚙️", Description = "Miscellaneous settings."},
+    {Title = "Info", Emoji = "ℹ️", Description = "Credits and community links."},
 }
 
 local function tween(object, duration, properties)
@@ -100,6 +103,17 @@ local function text(parent, value, size, color, font)
     return l
 end
 
+local function addGradient(parent, colorA, colorB, rotation)
+    local g = Instance.new("UIGradient")
+    g.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, colorA),
+        ColorSequenceKeypoint.new(1, colorB),
+    })
+    g.Rotation = rotation or 90
+    g.Parent = parent
+    return g
+end
+
 local function makeDraggable(handle, object)
     local dragging = false
     local dragStart
@@ -148,7 +162,7 @@ function UI:CreateWindow(config)
 
     local parent = (gethui and gethui()) or game:GetService("CoreGui")
 
-    local old = parent:FindFirstChild("AstrarServices_Win11")
+    local old = parent:FindFirstChild("Empire_Win11")
     if old then
         old:Destroy()
     end
@@ -160,7 +174,7 @@ function UI:CreateWindow(config)
     self.IsMaximized = false
 
     local gui = Instance.new("ScreenGui")
-    gui.Name = "AstrarServices_Win11"
+    gui.Name = "Empire_Win11"
     gui.ResetOnSpawn = false
     gui.IgnoreGuiInset = true
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -174,8 +188,8 @@ function UI:CreateWindow(config)
     root.AnchorPoint = Vector2.new(0.5, 0.5)
     root.Position = UDim2.fromScale(0.5, 0.5)
     root.Size = config.Size or UDim2.fromScale(0.70, 0.76)
-    root.BackgroundColor3 = Theme.Window
-    root.BackgroundTransparency = 0.12
+    root.BackgroundColor3 = Color3.fromRGB(4, 5, 7)
+    root.BackgroundTransparency = 0.18
     root.BorderSizePixel = 0
     root.ClipsDescendants = true
     root.Parent = gui
@@ -183,14 +197,25 @@ function UI:CreateWindow(config)
     stroke(root, Theme.Border, 0.28, 1)
     self.Root = root
 
-    -- Very subtle black glass gradient.
+    -- Scale controller used for the polished minimize/restore transformation.
+    local rootScale = Instance.new("UIScale")
+    rootScale.Scale = 1
+    rootScale.Parent = root
+    self.RootScale = rootScale
+
+    -- Black-glass gradient: visible depth while remaining translucent.
     local gradient = Instance.new("UIGradient")
     gradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Theme.WindowTop),
-        ColorSequenceKeypoint.new(0.48, Theme.Window),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(4, 5, 7)),
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(24, 27, 32)),
+        ColorSequenceKeypoint.new(0.42, Color3.fromRGB(10, 12, 15)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(2, 3, 5)),
     })
-    gradient.Rotation = 90
+    gradient.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.12),
+        NumberSequenceKeypoint.new(0.48, 0.02),
+        NumberSequenceKeypoint.new(1, 0.10),
+    })
+    gradient.Rotation = 115
     gradient.Parent = root
 
     -- Header
@@ -232,25 +257,118 @@ function UI:CreateWindow(config)
     local minimizeButton = trafficButton(Theme.Yellow, "Minimize")
     local maximizeButton = trafficButton(Theme.Green, "Maximize")
 
+    addGradient(closeButton, Color3.fromRGB(255, 128, 120), Color3.fromRGB(210, 48, 44), 90)
+    addGradient(minimizeButton, Color3.fromRGB(255, 222, 106), Color3.fromRGB(221, 145, 20), 90)
+    addGradient(maximizeButton, Color3.fromRGB(105, 238, 122), Color3.fromRGB(22, 155, 47), 90)
+
+    for _, b in ipairs({closeButton, minimizeButton, maximizeButton}) do
+        stroke(b, Color3.fromRGB(255,255,255), 0.72, 1)
+    end
+
     self.CloseButton = closeButton
     self.MinimizeButton = minimizeButton
     self.MaximizeButton = maximizeButton
 
+    -- Roblox does not guarantee Unicode/emoji glyphs in TextLabels; many fonts simply
+    -- omit them or render a tofu box. Use reliable vector UI marks for the brand instead.
+    local function makeBuildingMark(parentObject, x, y, scale)
+        scale = scale or 1
+        local holder = Instance.new("Frame")
+        holder.Name = "BuildingMark"
+        holder.BackgroundTransparency = 1
+        holder.Position = UDim2.fromOffset(x, y)
+        holder.Size = UDim2.fromOffset(math.floor(30 * scale), math.floor(30 * scale))
+        holder.Parent = parentObject
+
+        local bodyMark = Instance.new("Frame")
+        bodyMark.BackgroundColor3 = Color3.fromRGB(225, 231, 240)
+        bodyMark.BorderSizePixel = 0
+        bodyMark.Position = UDim2.fromOffset(math.floor(5 * scale), math.floor(6 * scale))
+        bodyMark.Size = UDim2.fromOffset(math.floor(20 * scale), math.floor(18 * scale))
+        bodyMark.Parent = holder
+        corner(bodyMark, math.max(2, math.floor(3 * scale)))
+
+        local roof = Instance.new("Frame")
+        roof.BackgroundColor3 = Color3.fromRGB(160, 169, 184)
+        roof.BorderSizePixel = 0
+        roof.Position = UDim2.fromOffset(math.floor(3 * scale), math.floor(3 * scale))
+        roof.Size = UDim2.fromOffset(math.floor(24 * scale), math.max(2, math.floor(3 * scale)))
+        roof.Parent = holder
+        corner(roof, math.max(1, math.floor(1.5 * scale)))
+
+        for row = 0, 1 do
+            for col = 0, 2 do
+                local windowMark = Instance.new("Frame")
+                windowMark.BackgroundColor3 = Color3.fromRGB(22, 28, 36)
+                windowMark.BorderSizePixel = 0
+                windowMark.Position = UDim2.fromOffset(
+                    math.floor((8 + col * 5) * scale),
+                    math.floor((9 + row * 6) * scale)
+                )
+                windowMark.Size = UDim2.fromOffset(math.max(2, math.floor(3 * scale)), math.max(2, math.floor(3 * scale)))
+                windowMark.Parent = holder
+                corner(windowMark, 1)
+            end
+        end
+
+        local door = Instance.new("Frame")
+        door.BackgroundColor3 = Color3.fromRGB(22, 28, 36)
+        door.BorderSizePixel = 0
+        door.Position = UDim2.fromOffset(math.floor(13 * scale), math.floor(18 * scale))
+        door.Size = UDim2.fromOffset(math.max(2, math.floor(4 * scale)), math.floor(6 * scale))
+        door.Parent = holder
+        corner(door, 1)
+
+        return holder
+    end
+
+    local leftBuilding = makeBuildingMark(header, 88, 10, 1.0)
+    self.LeftBrandMark = leftBuilding
+
+    -- Emoji overlay: Roblox supports emoji text, but glyph availability can vary;
+    -- the vector mark underneath keeps the branding visible if the emoji font is missing.
+    local leftBuildingEmoji = text(header, "", 23, Theme.Text, Enum.Font.Gotham)
+    leftBuildingEmoji.Position = UDim2.fromOffset(87, 8)
+    leftBuildingEmoji.Size = UDim2.fromOffset(32, 32)
+    leftBuildingEmoji.TextXAlignment = Enum.TextXAlignment.Center
+    leftBuildingEmoji.TextYAlignment = Enum.TextYAlignment.Center
+    leftBuildingEmoji.ZIndex = 3
+    self.LeftBrandEmoji = leftBuildingEmoji
+
     local title = text(
         header,
-        config.Title or "♛ .johnnyfronny's script • V3.2.2",
-        18,
+        config.Title or "Empire",
+        20,
         Theme.Text,
         Enum.Font.GothamBold
     )
-    title.Position = UDim2.fromOffset(96, 12)
-    title.Size = UDim2.new(1, -118, 0, 26)
-    title.TextTruncate = Enum.TextTruncate.AtEnd
+    title.Position = UDim2.fromOffset(122, 8)
+    title.Size = UDim2.new(0, 210, 0, 30)
+    title.TextTruncate = Enum.TextTruncate.None
     self.TitleLabel = title
+
+    local rightBuilding = makeBuildingMark(header, 0, 10, 0.82)
+    self.RightBrandMark = rightBuilding
+
+    local rightBuildingEmoji = text(header, "", 20, Theme.Text, Enum.Font.Gotham)
+    rightBuildingEmoji.Position = UDim2.fromOffset(0, 10)
+    rightBuildingEmoji.Size = UDim2.fromOffset(28, 28)
+    rightBuildingEmoji.TextXAlignment = Enum.TextXAlignment.Center
+    rightBuildingEmoji.TextYAlignment = Enum.TextYAlignment.Center
+    rightBuildingEmoji.ZIndex = 3
+    self.RightBrandEmoji = rightBuildingEmoji
+
+    local function updateBrandMark()
+        local x = 122 + title.TextBounds.X + 8
+        rightBuilding.Position = UDim2.fromOffset(x, 12)
+        rightBuildingEmoji.Position = UDim2.fromOffset(x - 1, 10)
+    end
+    title:GetPropertyChangedSignal("TextBounds"):Connect(updateBrandMark)
+    task.defer(updateBrandMark)
 
     local subtitle = text(
         header,
-        config.Subtitle or "Windows 11 • Private",
+        config.Subtitle or ("Logged in as : " .. ((Players.LocalPlayer and Players.LocalPlayer.Name) or "Unknown") .. "  -  V3.2.2"),
         12,
         Theme.SubText
     )
@@ -258,6 +376,30 @@ function UI:CreateWindow(config)
     subtitle.Size = UDim2.new(1, -118, 0, 20)
     subtitle.TextTruncate = Enum.TextTruncate.AtEnd
     self.SubtitleLabel = subtitle
+
+    local statusBadge = Instance.new("Frame")
+    statusBadge.Name = "StatusBadge"
+    statusBadge.BackgroundColor3 = Theme.Green
+    statusBadge.BackgroundTransparency = 0.84
+    statusBadge.BorderSizePixel = 0
+    statusBadge.Position = UDim2.new(1, -126, 0, 13)
+    statusBadge.Size = UDim2.fromOffset(76, 24)
+    statusBadge.Parent = header
+    corner(statusBadge, 12)
+    stroke(statusBadge, Theme.Green, 0.72, 1)
+
+    local statusDot = Instance.new("Frame")
+    statusDot.BackgroundColor3 = Theme.Green
+    statusDot.BorderSizePixel = 0
+    statusDot.Position = UDim2.fromOffset(9, 8)
+    statusDot.Size = UDim2.fromOffset(8, 8)
+    statusDot.Parent = statusBadge
+    corner(statusDot, 4)
+
+    local statusText = text(statusBadge, "ONLINE", 9, Theme.Text, Enum.Font.GothamBold)
+    statusText.Position = UDim2.fromOffset(22, 0)
+    statusText.Size = UDim2.fromOffset(46, 24)
+    self.StatusBadge = statusBadge
 
     local line = Instance.new("Frame")
     line.BackgroundColor3 = Theme.Border
@@ -421,7 +563,7 @@ function UI:CreateWindow(config)
     end
 
     root.BackgroundTransparency = 1
-    tween(root, 0.18, {BackgroundTransparency = 0.12})
+    tween(root, 0.18, {BackgroundTransparency = 0.18})
 
     return self
 end
@@ -435,8 +577,28 @@ function UI:Minimize()
 
     local root = self.Root
     local gui = self.Gui
+    local rootScale = self.RootScale
 
-    -- Hide the shell and leave a compact dark "Open" pill.
+    -- The shell physically transforms into the top-center pill instead of simply disappearing.
+    root.Visible = true
+    root.ZIndex = 20
+    rootScale.Scale = 1
+
+    local shrink = TweenService:Create(
+        rootScale,
+        TweenInfo.new(0.34, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut),
+        {Scale = 0.085}
+    )
+    local move = TweenService:Create(
+        root,
+        TweenInfo.new(0.34, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut),
+        {Position = UDim2.fromScale(0.5, 0.045)}
+    )
+
+    shrink:Play()
+    move:Play()
+    move.Completed:Wait()
+
     root.Visible = false
 
     if self.MinimizedButton then
@@ -446,46 +608,119 @@ function UI:Minimize()
     local open = Instance.new("TextButton")
     open.Name = "Open"
     open.AnchorPoint = Vector2.new(0.5, 0)
-    open.Position = UDim2.fromScale(0.5, 0.045)
-    open.Size = UDim2.fromOffset(122, 38)
-    open.BackgroundColor3 = Color3.fromRGB(5, 7, 9)
-    open.BackgroundTransparency = 0.04
+    open.Position = UDim2.fromScale(0.5, 0.035)
+    open.Size = UDim2.fromOffset(238, 44)
+    open.BackgroundColor3 = Color3.fromRGB(3, 4, 6)
+    open.BackgroundTransparency = 0.28
     open.BorderSizePixel = 0
     open.AutoButtonColor = false
-    open.Text = "Open"
-    open.TextColor3 = Theme.Text
-    open.TextSize = 14
-    open.Font = Enum.Font.GothamSemibold
+    open.Text = ""
     open.Parent = gui
     corner(open, 18)
-    stroke(open, Theme.Green, 0.25, 1)
+    stroke(open, Color3.fromRGB(110, 255, 135), 0.18, 1)
+    addGradient(open, Color3.fromRGB(28, 32, 38), Color3.fromRGB(2, 4, 6), 90)
     self.MinimizedButton = open
     makeDraggable(open, open)
-
-    local openStroke = open:FindFirstChildOfClass("UIStroke")
-    if openStroke then
-        openStroke.Transparency = 0.12
-    end
 
     local indicator = Instance.new("Frame")
     indicator.BackgroundColor3 = Theme.Green
     indicator.BorderSizePixel = 0
-    indicator.Position = UDim2.fromOffset(12, 13)
-    indicator.Size = UDim2.fromOffset(9, 9)
+    indicator.Position = UDim2.fromOffset(14, 17)
+    indicator.Size = UDim2.fromOffset(10, 10)
     indicator.Parent = open
     corner(indicator, 5)
 
-    local crown = Instance.new("TextLabel")
-    crown.BackgroundTransparency = 1
-    crown.Text = "♛"
-    crown.TextColor3 = Theme.Text
-    crown.TextSize = 13
-    crown.Font = Enum.Font.GothamBold
-    crown.TextXAlignment = Enum.TextXAlignment.Center
-    crown.TextYAlignment = Enum.TextYAlignment.Center
-    crown.Position = UDim2.fromOffset(27, 0)
-    crown.Size = UDim2.fromOffset(20, 38)
-    crown.Parent = open
+    -- Compact pill uses the same vector building mark so the full Empire name
+    -- remains visible even on executors/fonts without emoji glyph support.
+    local function makePillBuilding(parentObject)
+        local holder = Instance.new("Frame")
+        holder.Name = "EmpireMark"
+        holder.BackgroundTransparency = 1
+        holder.Position = UDim2.fromOffset(34, 7)
+        holder.Size = UDim2.fromOffset(30, 30)
+        holder.Parent = parentObject
+
+        local bodyMark = Instance.new("Frame")
+        bodyMark.BackgroundColor3 = Color3.fromRGB(225, 231, 240)
+        bodyMark.BorderSizePixel = 0
+        bodyMark.Position = UDim2.fromOffset(5, 6)
+        bodyMark.Size = UDim2.fromOffset(20, 18)
+        bodyMark.Parent = holder
+        corner(bodyMark, 3)
+
+        local roof = Instance.new("Frame")
+        roof.BackgroundColor3 = Color3.fromRGB(160, 169, 184)
+        roof.BorderSizePixel = 0
+        roof.Position = UDim2.fromOffset(3, 3)
+        roof.Size = UDim2.fromOffset(24, 3)
+        roof.Parent = holder
+        corner(roof, 2)
+
+        for row = 0, 1 do
+            for col = 0, 2 do
+                local w = Instance.new("Frame")
+                w.BackgroundColor3 = Color3.fromRGB(22, 28, 36)
+                w.BorderSizePixel = 0
+                w.Position = UDim2.fromOffset(8 + col * 5, 9 + row * 6)
+                w.Size = UDim2.fromOffset(3, 3)
+                w.Parent = holder
+                corner(w, 1)
+            end
+        end
+        return holder
+    end
+
+    makePillBuilding(open)
+
+    local pillEmoji = text(open, "", 20, Theme.Text, Enum.Font.Gotham)
+    pillEmoji.Position = UDim2.fromOffset(32, 7)
+    pillEmoji.Size = UDim2.fromOffset(32, 30)
+    pillEmoji.TextXAlignment = Enum.TextXAlignment.Center
+    pillEmoji.TextYAlignment = Enum.TextYAlignment.Center
+    pillEmoji.ZIndex = 3
+
+    local rightPillEmoji = text(open, "", 20, Theme.Text, Enum.Font.Gotham)
+    rightPillEmoji.Position = UDim2.fromOffset(149, 7)
+    rightPillEmoji.Size = UDim2.fromOffset(30, 30)
+    rightPillEmoji.TextXAlignment = Enum.TextXAlignment.Center
+    rightPillEmoji.TextYAlignment = Enum.TextYAlignment.Center
+    rightPillEmoji.ZIndex = 3
+
+    local empireLabel = Instance.new("TextLabel")
+    empireLabel.BackgroundTransparency = 1
+    empireLabel.Text = "Empire"
+    empireLabel.TextColor3 = Theme.Text
+    empireLabel.TextSize = 15
+    empireLabel.Font = Enum.Font.GothamBold
+    empireLabel.TextXAlignment = Enum.TextXAlignment.Left
+    empireLabel.TextYAlignment = Enum.TextYAlignment.Center
+    empireLabel.Position = UDim2.fromOffset(68, 4)
+    empireLabel.Size = UDim2.fromOffset(82, 20)
+    empireLabel.Parent = open
+
+    local versionLabel = Instance.new("TextLabel")
+    versionLabel.BackgroundTransparency = 1
+    versionLabel.Text = "V3.2.2"
+    versionLabel.TextColor3 = Theme.SubText
+    versionLabel.TextSize = 10
+    versionLabel.Font = Enum.Font.GothamMedium
+    versionLabel.TextXAlignment = Enum.TextXAlignment.Left
+    versionLabel.TextYAlignment = Enum.TextYAlignment.Center
+    versionLabel.Position = UDim2.fromOffset(69, 23)
+    versionLabel.Size = UDim2.fromOffset(65, 15)
+    versionLabel.Parent = open
+
+    local openHint = Instance.new("TextLabel")
+    openHint.BackgroundTransparency = 1
+    openHint.Text = "RESTORE"
+    openHint.TextColor3 = Theme.Muted
+    openHint.TextSize = 10
+    openHint.Font = Enum.Font.Gotham
+    openHint.TextXAlignment = Enum.TextXAlignment.Right
+    openHint.TextYAlignment = Enum.TextYAlignment.Center
+    openHint.Position = UDim2.fromOffset(181, 0)
+    openHint.Size = UDim2.fromOffset(48, 44)
+    openHint.Parent = open
 
     open.MouseButton1Click:Connect(function()
         self:Restore()
@@ -498,11 +733,43 @@ function UI:Restore()
     self.IsMinimized = false
 
     if self.MinimizedButton then
-        self.MinimizedButton:Destroy()
+        local pill = self.MinimizedButton
+        local pillScale = pill:FindFirstChildOfClass("UIScale") or Instance.new("UIScale")
+        pillScale.Scale = 1
+        pillScale.Parent = pill
+
+        local pillTween = TweenService:Create(
+            pillScale,
+            TweenInfo.new(0.16, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
+            {Scale = 0.82}
+        )
+        pillTween:Play()
+        pillTween.Completed:Wait()
+        pill:Destroy()
         self.MinimizedButton = nil
     end
 
-    self.Root.Visible = true
+    local root = self.Root
+    local rootScale = self.RootScale
+
+    root.Visible = true
+    root.ZIndex = 1
+    root.Position = UDim2.fromScale(0.5, 0.045)
+    rootScale.Scale = 0.085
+
+    local move = TweenService:Create(
+        root,
+        TweenInfo.new(0.38, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut),
+        {Position = self.SavedPosition or UDim2.fromScale(0.5, 0.5)}
+    )
+    local expand = TweenService:Create(
+        rootScale,
+        TweenInfo.new(0.38, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut),
+        {Scale = 1}
+    )
+
+    move:Play()
+    expand:Play()
 end
 
 function UI:ToggleMaximize()
@@ -542,15 +809,12 @@ function UI:_filterTabs(query)
 end
 
 function UI:AddTab(config)
-    if type(config) == "string" then
-        config = {Title = config}
-    end
     config = config or {}
 
     local tab = {
         Window = self,
         Title = config.Title or ("Tab " .. tostring(#self.Tabs + 1)),
-        Emoji = config.Emoji or "•",
+        Emoji = config.Emoji or "-",
         Description = config.Description or "",
         Accent = config.Accent or Theme.Green,
     }
@@ -583,6 +847,12 @@ function UI:AddTab(config)
     icon.Size = UDim2.fromOffset(27, 27)
     icon.Parent = button
     corner(icon, 7)
+    addGradient(
+        icon,
+        tab.Accent:Lerp(Color3.fromRGB(255,255,255), 0.12),
+        tab.Accent:Lerp(Color3.fromRGB(0,0,0), 0.20),
+        135
+    )
     tab.Icon = icon
 
     local tabLabel = text(
@@ -624,119 +894,6 @@ function UI:AddTab(config)
 
     padding(page, 18, 10, 18, 18)
 
-    local pageLayout = Instance.new("UIListLayout")
-    pageLayout.Padding = UDim.new(0, 7)
-    pageLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    pageLayout.Parent = page
-
-    -- Lightweight Fluent-style compatibility controls.
-    function tab:AddLabel(value)
-        local label = text(page, value or "", 13, Theme.SubText, Enum.Font.GothamMedium)
-        label.Size = UDim2.new(1, 0, 0, 30)
-        label.TextWrapped = true
-        return label
-    end
-
-    function tab:AddButton(labelText, callback)
-        local button = Instance.new("TextButton")
-        button.Name = tostring(labelText or "Button")
-        button.Size = UDim2.new(1, 0, 0, 42)
-        button.BackgroundColor3 = Theme.Surface
-        button.BackgroundTransparency = 0.18
-        button.BorderSizePixel = 0
-        button.AutoButtonColor = false
-        button.Text = tostring(labelText or "Button")
-        button.TextColor3 = Theme.Text
-        button.TextSize = 13
-        button.Font = Enum.Font.GothamSemibold
-        button.Parent = page
-        corner(button, 10)
-        stroke(button, Theme.Border, 0.68)
-        button.MouseEnter:Connect(function() tween(button, 0.10, {BackgroundTransparency = 0.04}) end)
-        button.MouseLeave:Connect(function() tween(button, 0.10, {BackgroundTransparency = 0.18}) end)
-        button.MouseButton1Click:Connect(function()
-            if callback then callback() end
-        end)
-        return button
-    end
-
-    function tab:AddSwitch(labelText, callback)
-        local row = Instance.new("Frame")
-        row.Name = tostring(labelText or "Switch")
-        row.Size = UDim2.new(1, 0, 0, 44)
-        row.BackgroundColor3 = Theme.Surface
-        row.BackgroundTransparency = 0.18
-        row.BorderSizePixel = 0
-        row.Parent = page
-        corner(row, 10)
-        stroke(row, Theme.Border, 0.68)
-
-        local label = text(row, tostring(labelText or "Switch"), 13, Theme.Text, Enum.Font.GothamMedium)
-        label.Position = UDim2.fromOffset(13, 0)
-        label.Size = UDim2.new(1, -75, 1, 0)
-
-        local toggle = Instance.new("TextButton")
-        toggle.Size = UDim2.fromOffset(48, 24)
-        toggle.Position = UDim2.new(1, -60, 0.5, -12)
-        toggle.BackgroundColor3 = Theme.Muted
-        toggle.BorderSizePixel = 0
-        toggle.AutoButtonColor = false
-        toggle.Text = "OFF"
-        toggle.TextColor3 = Theme.Text
-        toggle.TextSize = 10
-        toggle.Font = Enum.Font.GothamBold
-        toggle.Parent = row
-        corner(toggle, 12)
-
-        local state = false
-        local switch = {}
-        local function apply(newState, fire)
-            state = newState and true or false
-            toggle.Text = state and "ON" or "OFF"
-            toggle.BackgroundColor3 = state and Theme.Green or Theme.Muted
-            if fire and callback then callback(state) end
-        end
-
-        function switch:Set(newState)
-            apply(newState, true)
-        end
-
-        function switch:Get() return state end
-        switch.Button = toggle
-        switch.Frame = row
-        toggle.MouseButton1Click:Connect(function() apply(not state, true) end)
-        return switch
-    end
-
-    function tab:AddTextBox(labelText, callback, options)
-        local box = Instance.new("TextBox")
-        box.Name = tostring(labelText or "TextBox")
-        box.Size = UDim2.new(1, 0, 0, 52)
-        box.BackgroundColor3 = Theme.Surface
-        box.BackgroundTransparency = 0.18
-        box.BorderSizePixel = 0
-        box.ClearTextOnFocus = false
-        box.Text = ""
-        box.PlaceholderText = (options and options.placeholder) or ""
-        box.PlaceholderColor3 = Theme.Muted
-        box.TextColor3 = Theme.Text
-        box.TextSize = 13
-        box.Font = Enum.Font.Gotham
-        box.TextXAlignment = Enum.TextXAlignment.Left
-        box.Parent = page
-        corner(box, 10)
-        stroke(box, Theme.Border, 0.68)
-        padding(box, 13, 0, 13, 0)
-        box.FocusLost:Connect(function()
-            if callback then callback(box.Text) end
-        end)
-        return box
-    end
-
-    function tab:Show()
-        self.Window:SelectTab(self)
-    end
-
     -- Fluent-style foundation for future content.
     function tab:AddSection(titleValue)
         local section = {
@@ -769,6 +926,73 @@ function UI:AddTab(config)
 
         return section
     end
+
+    -- Feature controls added to the existing Windows 11 shell; shell visuals are unchanged.
+    function tab:AddLabel(value)
+        local label = text(page, value or "", 13, Theme.SubText, Enum.Font.GothamMedium)
+        label.Size = UDim2.new(1, 0, 0, 30)
+        label.TextWrapped = true
+        return label
+    end
+    function tab:AddButton(labelText, callback)
+        local button = Instance.new("TextButton")
+        button.Name = tostring(labelText or "Button")
+        button.Size = UDim2.new(1, 0, 0, 42)
+        button.BackgroundColor3 = Theme.Surface
+        button.BackgroundTransparency = 0.18
+        button.BorderSizePixel = 0
+        button.AutoButtonColor = false
+        button.Text = tostring(labelText or "Button")
+        button.TextColor3 = Theme.Text
+        button.TextSize = 13
+        button.Font = Enum.Font.GothamSemibold
+        button.Parent = page
+        corner(button, 10); stroke(button, Theme.Border, 0.68)
+        button.MouseEnter:Connect(function() tween(button, 0.10, {BackgroundTransparency = 0.04}) end)
+        button.MouseLeave:Connect(function() tween(button, 0.10, {BackgroundTransparency = 0.18}) end)
+        button.MouseButton1Click:Connect(function()
+            local ok, err = pcall(function() if callback then callback() end end)
+            if not ok then warn("[Johnny] button error: " .. tostring(err)) end
+        end)
+        return button
+    end
+    function tab:AddSwitch(labelText, callback)
+        local row = Instance.new("Frame")
+        row.Name = tostring(labelText or "Switch"); row.Size = UDim2.new(1,0,0,44)
+        row.BackgroundColor3 = Theme.Surface; row.BackgroundTransparency = 0.18; row.BorderSizePixel = 0; row.Parent = page
+        corner(row,10); stroke(row,Theme.Border,0.68)
+        local label=text(row,tostring(labelText or "Switch"),13,Theme.Text,Enum.Font.GothamMedium)
+        label.Position=UDim2.fromOffset(13,0); label.Size=UDim2.new(1,-75,1,0)
+        local toggle=Instance.new("TextButton")
+        toggle.Size=UDim2.fromOffset(48,24); toggle.Position=UDim2.new(1,-60,0.5,-12)
+        toggle.BackgroundColor3=Theme.Muted; toggle.BorderSizePixel=0; toggle.AutoButtonColor=false; toggle.Text="OFF"
+        toggle.TextColor3=Theme.Text; toggle.TextSize=10; toggle.Font=Enum.Font.GothamBold; toggle.Parent=row; corner(toggle,12)
+        local state=false; local switch={}
+        local function apply(newState,fire)
+            state=newState and true or false; toggle.Text=state and "ON" or "OFF"; toggle.BackgroundColor3=state and Theme.Green or Theme.Muted
+            if fire and callback then pcall(callback,state) end
+        end
+        function switch:Set(newState) apply(newState,true) end
+        function switch:Get() return state end
+        switch.Button=toggle; switch.Frame=row
+        toggle.MouseButton1Click:Connect(function() apply(not state,true) end)
+        return switch
+    end
+    function tab:AddTextBox(labelText, callback, options)
+        options=options or {}
+        local row=Instance.new("Frame")
+        row.Name=tostring(labelText or "TextBox"); row.Size=UDim2.new(1,0,0,54); row.BackgroundColor3=Theme.Surface; row.BackgroundTransparency=0.18; row.BorderSizePixel=0; row.Parent=page
+        corner(row,10); stroke(row,Theme.Border,0.68)
+        local label=text(row,tostring(labelText or "Input"),12,Theme.Text,Enum.Font.GothamMedium)
+        label.Position=UDim2.fromOffset(13,4); label.Size=UDim2.new(1,-150,0,20)
+        local box=Instance.new("TextBox")
+        box.Size=UDim2.fromOffset(125,30); box.Position=UDim2.new(1,-138,0.5,-15); box.BackgroundColor3=Theme.Surface2; box.BackgroundTransparency=0.08
+        box.BorderSizePixel=0; box.ClearTextOnFocus=false; box.PlaceholderText=options.placeholder or ""; box.PlaceholderColor3=Theme.Muted; box.Text=""
+        box.TextColor3=Theme.Text; box.TextSize=12; box.Font=Enum.Font.Gotham; box.Parent=row; corner(box,8); stroke(box,Theme.Border,0.60)
+        box.FocusLost:Connect(function() pcall(function() if callback then callback(box.Text) end end) end)
+        return box
+    end
+
 
     button.MouseEnter:Connect(function()
         if self.ActiveTab ~= tab then
@@ -812,7 +1036,7 @@ function UI:SelectTab(tab)
 
         if active then
             tween(item.Button, 0.14, {
-                BackgroundTransparency = 0.14,
+                BackgroundTransparency = 0.10,
             })
             tween(item.Label, 0.14, {
                 TextColor3 = Theme.Text,
@@ -843,6 +1067,7 @@ function UI:SetTitle(titleValue, subtitleValue)
 end
 
 function UI:Destroy()
+    self:StopGlobalExecutionFeed()
     if self._inputConnection then
         self._inputConnection:Disconnect()
         self._inputConnection = nil
@@ -853,44 +1078,22 @@ function UI:Destroy()
     end
 end
 
-
---========================================================--
--- JOHNNY | FARMING
--- Cleaned / Organized Version
---========================================================--
-
---========================================================--
--- SERVICES
---========================================================--
-
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Lighting = game:GetService("Lighting")
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-local TeleportService = game:GetService("TeleportService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
-local Stats = game:GetService("Stats")
-
-local Player = Players.LocalPlayer
-
---========================================================--
-
 -- ============================================================
--- JOHNNY FEATURE INTEGRATION INTO THE WINDOWS 11 SHELL
+-- DEFAULT LAYOUT
 -- ============================================================
 
-local window = UI:CreateWindow({
-    Title = "♛ .johnnyfronny's script • V3.2.2",
-    Subtitle = "Windows 11 • Farming Edition",
-    Size = UDim2.fromScale(0.74, 0.80),
-    ContentTitle = "Farming",
-    ContentSubtitle = "Johnny farming controls integrated into the Windows 11 layout.",
+local Window = UI:CreateWindow({
+    Title = "Empire",
+    Subtitle = "Logged in as : " .. ((Players.LocalPlayer and Players.LocalPlayer.Name) or "Unknown") .. " - V3.2.2",
+    Size = UDim2.fromScale(0.70, 0.76),
+    ContentTitle = "Stats",
+    ContentSubtitle = "Select a tab to begin building your interface.",
 })
 
 local createdTabs = {}
+
 for _, info in ipairs(Tabs) do
-    createdTabs[info.Title] = window:AddTab({
+    createdTabs[info.Title] = Window:AddTab({
         Title = info.Title,
         Emoji = info.Emoji,
         Description = info.Description,
@@ -901,13 +1104,1142 @@ for _, info in ipairs(Tabs) do
             Player = Color3.fromRGB(71, 205, 150),
             Killing = Color3.fromRGB(255, 82, 82),
             Stats = Color3.fromRGB(86, 145, 255),
-            Tickets = Color3.fromRGB(255, 211, 71),
+            Admin = Color3.fromRGB(255, 196, 70),
             Perf = Color3.fromRGB(115, 121, 132),
             Misc = Color3.fromRGB(169, 176, 188),
+            Info = Color3.fromRGB(95, 177, 255),
         })[info.Title],
     })
 end
 
+Window:SelectTab(createdTabs.Stats)
+
+-- ============================================================
+-- INFO / CREDITS PAGE
+-- ============================================================
+local InfoTab = createdTabs.Info
+if InfoTab then
+    local infoPage = InfoTab.Page
+
+    local credits = Instance.new("Frame")
+    credits.Name = "CreditsCard"
+    credits.BackgroundColor3 = Theme.Surface
+    credits.BackgroundTransparency = 0.24
+    credits.BorderSizePixel = 0
+    credits.Size = UDim2.new(1, 0, 0, 170)
+    credits.Parent = infoPage
+    corner(credits, 13)
+    stroke(credits, Theme.Border, 0.64)
+
+    local heading = text(credits, "Empire", 22, Theme.Text, Enum.Font.GothamBold)
+    heading.Position = UDim2.fromOffset(18, 14)
+    heading.Size = UDim2.new(1, -36, 0, 30)
+
+    local madeBy = text(credits, "Made by JohnnyFronny", 14, Theme.SubText, Enum.Font.GothamMedium)
+    madeBy.Position = UDim2.fromOffset(18, 45)
+    madeBy.Size = UDim2.new(1, -36, 0, 22)
+
+    local desc = text(credits, "Empire is a compact Windows 11-inspired script interface.", 12, Theme.Muted, Enum.Font.Gotham)
+    desc.Position = UDim2.fromOffset(18, 68)
+    desc.Size = UDim2.new(1, -36, 0, 20)
+
+    
+local function empireTabIcon(parent, token)
+    local holder = Instance.new("Frame")
+    holder.Name = "EmpireTabIcon"
+    holder.BackgroundTransparency = 1
+    holder.Size = UDim2.fromOffset(22, 22)
+    holder.Position = UDim2.new(0, 7, 0.5, -11)
+    holder.Parent = parent
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(155, 160, 170)
+    stroke.Thickness = 1.4
+    stroke.Transparency = 0.15
+
+    local box = Instance.new("Frame")
+    box.Name = "IconShape"
+    box.BackgroundColor3 = Color3.fromRGB(35, 38, 44)
+    box.BackgroundTransparency = 0.15
+    box.Size = UDim2.fromOffset(18, 18)
+    box.Position = UDim2.fromOffset(2, 2)
+    box.Parent = holder
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 5)
+    corner.Parent = box
+    stroke.Parent = box
+
+    local label = Instance.new("TextLabel")
+    label.BackgroundTransparency = 1
+    label.Size = UDim2.fromScale(1, 1)
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 10
+    label.TextColor3 = Color3.fromRGB(220, 224, 230)
+    label.Text = tostring(token or "")
+    label.Parent = box
+
+    return holder
+end
+
+local function socialButton(parentObject, x, labelText, handleText, accent, symbol)
+        local b = Instance.new("TextButton")
+        b.BackgroundColor3 = Theme.WindowTop
+        b.BackgroundTransparency = 0.10
+        b.BorderSizePixel = 0
+        b.AutoButtonColor = false
+        b.Text = ""
+        b.Position = UDim2.fromOffset(x, 101)
+        b.Size = UDim2.fromOffset(170, 54)
+        b.Parent = parentObject
+        corner(b, 11)
+        stroke(b, Theme.Border, 0.70)
+        addGradient(b, accent:Lerp(Color3.fromRGB(255,255,255), 0.06), Theme.Window, 90)
+
+        local icon = Instance.new("Frame")
+        icon.BackgroundColor3 = accent
+        icon.BackgroundTransparency = 0.05
+        icon.BorderSizePixel = 0
+        icon.Position = UDim2.fromOffset(10, 11)
+        icon.Size = UDim2.fromOffset(32, 32)
+        icon.Parent = b
+        corner(icon, 9)
+
+        if labelText == "YouTube" then
+            local play = Instance.new("Frame")
+            play.BackgroundColor3 = Color3.fromRGB(255,255,255)
+            play.BorderSizePixel = 0
+            play.Position = UDim2.fromOffset(11, 8)
+            play.Size = UDim2.fromOffset(12, 16)
+            play.Parent = icon
+            corner(play, 2)
+            local cut = Instance.new("Frame")
+            cut.BackgroundColor3 = accent
+            cut.BorderSizePixel = 0
+            cut.Position = UDim2.fromOffset(11, 11)
+            cut.Size = UDim2.fromOffset(7, 10)
+            cut.Rotation = 45
+            cut.Parent = icon
+        else
+            -- Simple Discord-like glyph built from reliable UI primitives.
+            local head = Instance.new("Frame")
+            head.BackgroundColor3 = Color3.fromRGB(255,255,255)
+            head.BorderSizePixel = 0
+            head.Position = UDim2.fromOffset(6, 9)
+            head.Size = UDim2.fromOffset(20, 15)
+            head.Parent = icon
+            corner(head, 7)
+
+            local eye1 = Instance.new("Frame")
+            eye1.BackgroundColor3 = accent
+            eye1.BorderSizePixel = 0
+            eye1.Position = UDim2.fromOffset(11, 14)
+            eye1.Size = UDim2.fromOffset(3, 3)
+            eye1.Parent = icon
+            corner(eye1, 2)
+
+            local eye2 = eye1:Clone()
+            eye2.Position = UDim2.fromOffset(18, 14)
+            eye2.Parent = icon
+        end
+
+        local name = text(b, labelText, 12, Theme.Text, Enum.Font.GothamSemibold)
+        name.Position = UDim2.fromOffset(51, 7)
+        name.Size = UDim2.fromOffset(105, 18)
+
+        local handle = text(b, handleText, 10, Theme.SubText, Enum.Font.Gotham)
+        handle.Position = UDim2.fromOffset(51, 26)
+        handle.Size = UDim2.fromOffset(105, 18)
+
+        b.MouseEnter:Connect(function()
+            tween(b, 0.12, {BackgroundTransparency = 0})
+        end)
+        b.MouseLeave:Connect(function()
+            tween(b, 0.12, {BackgroundTransparency = 0.10})
+        end)
+
+        return b
+    end
+
+    socialButton(credits, 18, "YouTube", "JohnnyFronnyYT", Color3.fromRGB(255, 70, 70), "")
+    socialButton(credits, 198, "Discord", "JohnnyFronny", Color3.fromRGB(88, 101, 242), "")
+end
+
+
+-- ============================================================
+-- ADMIN PAGE
+-- ============================================================
+-- Backend-ready admin dashboard. The UI accepts execution records from
+-- a trusted server/backend through UI:SetAdminExecutions(entries).
+-- It intentionally does not collect hardware IDs or precise location.
+local AdminTab = createdTabs.Admin
+if AdminTab then
+    local adminPage = AdminTab.Page
+    local ADMIN_PASSWORD = "yader45"
+    local adminUnlocked = false
+    local adminExecutions = {}
+    local filteredExecutions = {}
+
+    local gate = Instance.new("Frame")
+    gate.Name = "AdminGate"
+    gate.BackgroundColor3 = Theme.Surface
+    gate.BackgroundTransparency = 0.18
+    gate.BorderSizePixel = 0
+    gate.Size = UDim2.new(1, 0, 0, 190)
+    gate.Parent = adminPage
+    corner(gate, 13)
+    stroke(gate, Theme.Border, 0.64)
+
+    local gateTitle = text(gate, "Admin Access", 17, Theme.Text, Enum.Font.GothamBold)
+    gateTitle.Position = UDim2.fromOffset(18, 15)
+    gateTitle.Size = UDim2.new(1, -36, 0, 26)
+
+    local gateDesc = text(gate, "Enter the admin password to unlock the Empire execution dashboard.", 12, Theme.SubText, Enum.Font.Gotham)
+    gateDesc.Position = UDim2.fromOffset(18, 43)
+    gateDesc.Size = UDim2.new(1, -36, 0, 20)
+
+    local passwordBox = Instance.new("TextBox")
+    passwordBox.Name = "PasswordBox"
+    passwordBox.BackgroundColor3 = Theme.WindowTop
+    passwordBox.BackgroundTransparency = 0.10
+    passwordBox.BorderSizePixel = 0
+    passwordBox.ClearTextOnFocus = false
+    passwordBox.PlaceholderText = "Admin password"
+    passwordBox.PlaceholderColor3 = Theme.Muted
+    passwordBox.Text = ""
+    passwordBox.TextColor3 = Theme.Text
+    passwordBox.TextSize = 13
+    passwordBox.Font = Enum.Font.Gotham
+    passwordBox.TextXAlignment = Enum.TextXAlignment.Left
+    passwordBox.Position = UDim2.fromOffset(18, 76)
+    passwordBox.Size = UDim2.new(1, -140, 0, 40)
+    passwordBox.Parent = gate
+    corner(passwordBox, 9)
+    stroke(passwordBox, Theme.Border, 0.70)
+    padding(passwordBox, 12, 0, 12, 0)
+
+    local unlock = Instance.new("TextButton")
+    unlock.Name = "Unlock"
+    unlock.BackgroundColor3 = Color3.fromRGB(255, 196, 70)
+    unlock.BackgroundTransparency = 0.05
+    unlock.BorderSizePixel = 0
+    unlock.AutoButtonColor = false
+    unlock.Text = "Unlock"
+    unlock.TextColor3 = Color3.fromRGB(20, 17, 8)
+    unlock.TextSize = 12
+    unlock.Font = Enum.Font.GothamBold
+    unlock.Position = UDim2.new(1, -108, 0, 76)
+    unlock.Size = UDim2.fromOffset(90, 40)
+    unlock.Parent = gate
+    corner(unlock, 9)
+
+    local status = text(gate, "Locked", 11, Theme.Muted, Enum.Font.GothamMedium)
+    status.Position = UDim2.fromOffset(18, 127)
+    status.Size = UDim2.new(1, -36, 0, 20)
+
+    local dashboard = Instance.new("Frame")
+    dashboard.Name = "ExecutionDashboard"
+    dashboard.BackgroundColor3 = Theme.Surface
+    dashboard.BackgroundTransparency = 0.18
+    dashboard.BorderSizePixel = 0
+    dashboard.Size = UDim2.new(1, 0, 0, 470)
+    dashboard.Visible = false
+    dashboard.Parent = adminPage
+    corner(dashboard, 13)
+    stroke(dashboard, Theme.Border, 0.64)
+
+    local dashTitle = text(dashboard, "Global Current Executions", 17, Theme.Text, Enum.Font.GothamBold)
+    dashTitle.Position = UDim2.fromOffset(18, 14)
+    dashTitle.Size = UDim2.new(1, -160, 0, 25)
+
+    local dashNote = text(dashboard, "Backend-ready - username, UserId, game, server, version and public stats", 10, Theme.SubText, Enum.Font.Gotham)
+    dashNote.Position = UDim2.fromOffset(18, 39)
+    dashNote.Size = UDim2.new(1, -36, 0, 18)
+
+    local countBadge = text(dashboard, "0 RECORDS", 9, Theme.Green, Enum.Font.GothamBold)
+    countBadge.BackgroundColor3 = Theme.WindowTop
+    countBadge.BackgroundTransparency = 0.10
+    countBadge.TextXAlignment = Enum.TextXAlignment.Center
+    countBadge.Position = UDim2.new(1, -112, 0, 17)
+    countBadge.Size = UDim2.fromOffset(94, 24)
+    corner(countBadge, 8)
+
+    local searchBox = Instance.new("TextBox")
+    searchBox.Name = "ExecutionSearch"
+    searchBox.BackgroundColor3 = Theme.WindowTop
+    searchBox.BackgroundTransparency = 0.10
+    searchBox.BorderSizePixel = 0
+    searchBox.ClearTextOnFocus = false
+    searchBox.PlaceholderText = "Search username, UserId, game or server..."
+    searchBox.PlaceholderColor3 = Theme.Muted
+    searchBox.Text = ""
+    searchBox.TextColor3 = Theme.Text
+    searchBox.TextSize = 11
+    searchBox.Font = Enum.Font.Gotham
+    searchBox.TextXAlignment = Enum.TextXAlignment.Left
+    searchBox.Position = UDim2.fromOffset(18, 67)
+    searchBox.Size = UDim2.new(1, -124, 0, 34)
+    searchBox.Parent = dashboard
+    corner(searchBox, 8)
+    stroke(searchBox, Theme.Border, 0.75)
+    padding(searchBox, 11, 0, 11, 0)
+
+    local refresh = Instance.new("TextButton")
+    refresh.Name = "Refresh"
+    refresh.BackgroundColor3 = Theme.WindowTop
+    refresh.BackgroundTransparency = 0.05
+    refresh.BorderSizePixel = 0
+    refresh.AutoButtonColor = false
+    refresh.Text = "🔄"
+    refresh.TextColor3 = Theme.Text
+    refresh.TextSize = 17
+    refresh.Font = Enum.Font.GothamBold
+    refresh.Position = UDim2.new(1, -94, 0, 67)
+    refresh.Size = UDim2.fromOffset(76, 34)
+    refresh.Parent = dashboard
+    corner(refresh, 8)
+    stroke(refresh, Theme.Border, 0.72)
+
+    local list = Instance.new("ScrollingFrame")
+    list.Name = "ExecutionList"
+    list.BackgroundTransparency = 1
+    list.BorderSizePixel = 0
+    list.Position = UDim2.fromOffset(14, 112)
+    list.Size = UDim2.new(1, -28, 1, -126)
+    list.CanvasSize = UDim2.new()
+    list.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    list.ScrollBarThickness = 3
+    list.ScrollBarImageColor3 = Theme.Border
+    list.Parent = dashboard
+
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 7)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = list
+
+    local function clearList()
+        for _, child in ipairs(list:GetChildren()) do
+            if child:IsA("Frame") then
+                child:Destroy()
+            end
+        end
+    end
+
+    local function abbreviateNumber(value)
+        local n = tonumber(value)
+        if not n then return tostring(value) end
+        local units = {"", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No"}
+        local index = 1
+        while math.abs(n) >= 1000 and index < #units do
+            n = n / 1000
+            index = index + 1
+        end
+        if index == 1 then
+            return tostring(math.floor(n + 0.5))
+        end
+        local formatted = string.format("%.2f", n):gsub("0+$", ""):gsub("\.$", "")
+        return formatted .. units[index]
+    end
+
+    local function stringifyStats(stats)
+        if type(stats) ~= "table" then
+            return "No public stats supplied"
+        end
+        local parts = {}
+        local preferred = {"Strength", "Durability", "Rebirths"}
+        local used = {}
+        for _, key in ipairs(preferred) do
+            if stats[key] ~= nil then
+                local value = stats[key]
+                if key == "Strength" or key == "Durability" then
+                    value = abbreviateNumber(value)
+                end
+                table.insert(parts, key .. ": " .. tostring(value))
+                used[key] = true
+            end
+        end
+        local extra = {}
+        for key, value in pairs(stats) do
+            if not used[key] then
+                table.insert(extra, tostring(key) .. ": " .. tostring(value))
+            end
+        end
+        table.sort(extra)
+        for _, line in ipairs(extra) do table.insert(parts, line) end
+        return #parts > 0 and table.concat(parts, "  -  ") or "No public stats supplied"
+    end
+
+    local function matches(record, query)
+        if query == "" then return true end
+        local haystack = table.concat({
+            tostring(record.Username or ""),
+            tostring(record.DisplayName or ""),
+            tostring(record.UserId or ""),
+            tostring(record.Game or ""),
+            tostring(record.PlaceId or ""),
+            tostring(record.Server or ""),
+            tostring(record.JobId or ""),
+            tostring(record.Version or ""),
+        }, " "):lower()
+        return string.find(haystack, query:lower(), 1, true) ~= nil
+    end
+
+    local function renderExecutions()
+        if not adminUnlocked then return end
+        clearList()
+        local query = searchBox.Text or ""
+        filteredExecutions = {}
+        for _, record in ipairs(adminExecutions) do
+            if matches(record, query) then
+                table.insert(filteredExecutions, record)
+            end
+        end
+
+        countBadge.Text = tostring(#filteredExecutions) .. " RECORDS"
+
+        if #filteredExecutions == 0 then
+            local empty = Instance.new("Frame")
+            empty.BackgroundColor3 = Theme.WindowTop
+            empty.BackgroundTransparency = 0.20
+            empty.BorderSizePixel = 0
+            empty.Size = UDim2.new(1, -2, 0, 92)
+            empty.Parent = list
+            corner(empty, 10)
+
+            local emptyTitle = text(empty, "No executions yet", 13, Theme.Text, Enum.Font.GothamSemibold)
+            emptyTitle.Position = UDim2.fromOffset(14, 18)
+            emptyTitle.Size = UDim2.new(1, -28, 0, 20)
+            emptyTitle.TextXAlignment = Enum.TextXAlignment.Center
+
+            local emptyMessage = UI.ExecutionLogger.LastError and ("Feed: " .. tostring(UI.ExecutionLogger.LastError)) or "No current global executions were returned by Pipedream."
+            local emptyNote = text(empty, emptyMessage, 10, Theme.Muted, Enum.Font.Gotham)
+            emptyNote.Position = UDim2.fromOffset(14, 44)
+            emptyNote.Size = UDim2.new(1, -28, 0, 18)
+            emptyNote.TextXAlignment = Enum.TextXAlignment.Center
+            return
+        end
+
+        for index, record in ipairs(filteredExecutions) do
+            local row = Instance.new("Frame")
+            row.Name = "Execution_" .. index
+            row.BackgroundColor3 = Theme.WindowTop
+            row.BackgroundTransparency = 0.14
+            row.BorderSizePixel = 0
+            row.Size = UDim2.new(1, -2, 0, 86)
+            row.Parent = list
+            corner(row, 9)
+
+            local user = text(row, tostring(record.Username or "Unknown"), 12, Theme.Text, Enum.Font.GothamSemibold)
+            user.Position = UDim2.fromOffset(12, 8)
+            user.Size = UDim2.new(0.42, 0, 0, 18)
+
+            local display = record.DisplayName and ("Display: " .. tostring(record.DisplayName)) or ""
+            local uid = record.UserId and ("UserId: " .. tostring(record.UserId)) or ""
+            local identity = text(row, display .. ((display ~= "" and uid ~= "") and "  -  " or "") .. uid, 9, Theme.SubText, Enum.Font.Gotham)
+            identity.Position = UDim2.fromOffset(12, 29)
+            identity.Size = UDim2.new(0.62, 0, 0, 15)
+            identity.TextTruncate = Enum.TextTruncate.AtEnd
+
+            local gameInfo = text(row, tostring(record.Game or "Unknown game") .. "  -  Place " .. tostring(record.PlaceId or "?"), 9, Theme.SubText, Enum.Font.Gotham)
+            gameInfo.Position = UDim2.new(0.44, 0, 8, 0)
+            gameInfo.Size = UDim2.new(0.54, -12, 0, 18)
+            gameInfo.TextXAlignment = Enum.TextXAlignment.Right
+            gameInfo.TextTruncate = Enum.TextTruncate.AtEnd
+
+            local server = text(row, "Server: " .. tostring(record.Server or record.JobId or "Unknown"), 9, Theme.Muted, Enum.Font.Gotham)
+            server.Position = UDim2.fromOffset(12, 48)
+            server.Size = UDim2.new(0.58, 0, 0, 15)
+            server.TextTruncate = Enum.TextTruncate.AtEnd
+
+            local version = text(row, "V" .. tostring(record.Version or "3.2.2") .. "  -  " .. tostring(record.Timestamp or ""), 9, Theme.Muted, Enum.Font.Gotham)
+            version.Position = UDim2.new(0.42, 0, 48, 0)
+            version.Size = UDim2.new(0.56, -12, 0, 15)
+            version.TextXAlignment = Enum.TextXAlignment.Right
+            version.TextTruncate = Enum.TextTruncate.AtEnd
+
+            local stats = text(row, stringifyStats(record.Stats), 9, Theme.Muted, Enum.Font.Gotham)
+            stats.Position = UDim2.fromOffset(12, 67)
+            stats.Size = UDim2.new(1, -24, 0, 14)
+            stats.TextTruncate = Enum.TextTruncate.AtEnd
+        end
+    end
+
+    function UI:SetAdminExecutions(entries)
+        if type(entries) ~= "table" then
+            entries = {}
+        end
+        adminExecutions = {}
+        for _, record in ipairs(entries) do
+            if type(record) == "table" then
+                table.insert(adminExecutions, record)
+            end
+        end
+        if adminUnlocked then
+            renderExecutions()
+        end
+    end
+
+    function UI:AddAdminExecution(record)
+        if type(record) ~= "table" then return end
+        table.insert(adminExecutions, 1, record)
+        if adminUnlocked then
+            renderExecutions()
+        end
+    end
+
+    local function unlockAdmin()
+        if passwordBox.Text == ADMIN_PASSWORD then
+            adminUnlocked = true
+            status.Text = "Unlocked - loading global executions..."
+            status.TextColor3 = Theme.Yellow
+            gate.Visible = false
+            dashboard.Visible = true
+            renderExecutions()
+
+            task.spawn(function()
+                local ok, result = UI:FetchGlobalExecutions()
+                if ok then
+                    status.Text = "Global feed connected - " .. tostring(#result) .. " current execution(s)"
+                    status.TextColor3 = Theme.Green
+                else
+                    status.Text = "Global feed error: " .. tostring(result)
+                    status.TextColor3 = Theme.Red
+                end
+                renderExecutions()
+            end)
+        else
+            status.Text = "Incorrect password"
+            status.TextColor3 = Theme.Red
+            task.delay(0.8, function()
+                if status.Parent then
+                    status.Text = "Locked"
+                    status.TextColor3 = Theme.Muted
+                end
+            end)
+        end
+    end
+
+    unlock.MouseButton1Click:Connect(unlockAdmin)
+    passwordBox.FocusLost:Connect(function(enterPressed)
+        if enterPressed then unlockAdmin() end
+    end)
+
+    searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+        if adminUnlocked then renderExecutions() end
+    end)
+
+    refresh.MouseButton1Click:Connect(function()
+        if adminUnlocked then
+            refresh.Text = "⟳"
+            task.spawn(function()
+                local ok = false
+                if UI.ExecutionLogger.PollEndpoint ~= "" then
+                    ok = UI:FetchGlobalExecutions()
+                end
+                if not ok then
+                    renderExecutions()
+                end
+                refresh.Text = "🔄"
+            end)
+        end
+    end)
+end
+
+-- ============================================================
+-- DISCORD EXECUTION LOGGER + GLOBAL CURRENT FEED
+-- ============================================================
+-- Discord webhook = execution reporting.
+-- Tiny Discord bridge = reads the same channel for the Admin tab.
+-- No database is used.
+--
+-- IMPORTANT: replace the two placeholder URLs below with your own values.
+-- The Discord webhook is used only to POST the execution embed.
+-- The bridge URL is the public URL of the tiny Discord bot's /executions endpoint.
+
+UI.ExecutionLogger = {
+    Enabled = false,
+    Webhook = "",
+    PollEndpoint = "",
+    Timeout = 8,
+    PollInterval = 8,
+    LastError = nil,
+    LastResponse = nil,
+}
+
+local function findRequestFunction()
+    local candidates = {
+        rawget(getgenv and getgenv() or _G, "request"),
+        rawget(getgenv and getgenv() or _G, "http_request"),
+        rawget(getgenv and getgenv() or _G, "http") and rawget(getgenv and getgenv() or _G, "http").request,
+        rawget(getgenv and getgenv() or _G, "syn") and rawget(getgenv and getgenv() or _G, "syn").request,
+    }
+    for _, fn in ipairs(candidates) do
+        if type(fn) == "function" then
+            return fn
+        end
+    end
+    return nil
+end
+
+local function safeJson(value)
+    local ok, encoded = pcall(function()
+        return HttpService:JSONEncode(value)
+    end)
+    return ok and encoded or nil
+end
+
+local function isoTimestamp()
+    return os.date("!%Y-%m-%dT%H:%M:%SZ")
+end
+
+local function normaliseRecord(record)
+    record = type(record) == "table" and record or {}
+    local localPlayer = Players.LocalPlayer
+
+    return {
+        Username = record.Username or (localPlayer and localPlayer.Name) or "Unknown",
+        DisplayName = record.DisplayName or (localPlayer and localPlayer.DisplayName) or "Unknown",
+        UserId = tonumber(record.UserId) or (localPlayer and localPlayer.UserId) or 0,
+        Game = record.Game or "Unknown",
+        PlaceId = tonumber(record.PlaceId) or game.PlaceId,
+        Server = record.Server or record.JobId or game.JobId or "Unknown",
+        JobId = record.JobId or game.JobId or "Unknown",
+        Executor = record.Executor or "Unknown",
+        Version = record.Version or "3.2.2",
+        Timestamp = record.Timestamp or isoTimestamp(),
+        Stats = type(record.Stats) == "table" and record.Stats or {},
+    }
+end
+
+function UI:ConfigureExecutionLogger(config)
+    config = type(config) == "table" and config or {}
+    self.ExecutionLogger.Webhook = tostring(config.Webhook or self.ExecutionLogger.Webhook or "")
+    self.ExecutionLogger.PollEndpoint = tostring(config.PollEndpoint or self.ExecutionLogger.PollEndpoint or "")
+    self.ExecutionLogger.Enabled = config.Enabled == true
+    self.ExecutionLogger.Timeout = tonumber(config.Timeout) or 8
+    self.ExecutionLogger.PollInterval = tonumber(config.PollInterval) or 8
+    self.ExecutionLogger.LastError = nil
+    return self.ExecutionLogger
+end
+
+function UI:BuildDiscordEmbed(record)
+    record = normaliseRecord(record)
+
+    local statLines = {}
+    for key, value in pairs(record.Stats) do
+        table.insert(statLines, tostring(key) .. ": " .. tostring(value))
+    end
+    table.sort(statLines)
+
+    local fields = {
+        {
+            name = "Player",
+            value = string.format("%s (@%s)", tostring(record.DisplayName), tostring(record.Username)),
+            inline = true,
+        },
+        {
+            name = "UserId",
+            value = tostring(record.UserId),
+            inline = true,
+        },
+        {
+            name = "Game",
+            value = string.format("%s\nPlaceId: `%s`", tostring(record.Game), tostring(record.PlaceId)),
+            inline = true,
+        },
+        {
+            name = "Server / JobId",
+            value = "`" .. tostring(record.JobId or record.Server) .. "`",
+            inline = false,
+        },
+        {
+            name = "Executor",
+            value = tostring(record.Executor),
+            inline = true,
+        },
+    }
+
+    if #statLines > 0 then
+        table.insert(fields, {
+            name = "Public Stats",
+            value = table.concat(statLines, "\n"):sub(1, 1024),
+            inline = false,
+        })
+    end
+
+    return {
+        title = "EMPIRE | SCRIPT EXECUTED",
+        description = string.format("**%s** executed Empire.", tostring(record.Username)),
+        color = 16761930,
+        fields = fields,
+        footer = {text = "Empire V" .. tostring(record.Version)},
+        timestamp = record.Timestamp,
+    }
+end
+
+function UI:BuildDiscordWebhookPayload(record)
+    return {
+        username = "Empire Logger",
+        embeds = {self:BuildDiscordEmbed(record)},
+    }
+end
+
+function UI:SendExecutionLog(record)
+    local logger = self.ExecutionLogger
+    if not logger.Enabled then
+        return false, "Execution logger is disabled."
+    end
+
+    local requestFn = findRequestFunction()
+    if not requestFn then
+        return false, "No executor HTTP request function is available."
+    end
+
+    record = normaliseRecord(record)
+    local payload = {
+        Username = record.Username,
+        DisplayName = record.DisplayName,
+        UserId = record.UserId,
+        Game = record.Game,
+        PlaceId = record.PlaceId,
+        JobId = record.JobId,
+        Server = record.Server,
+        Executor = record.Executor,
+        Version = record.Version,
+        Timestamp = record.Timestamp,
+        Strength = record.Stats and record.Stats.Strength or nil,
+        Durability = record.Stats and record.Stats.Durability or nil,
+        Rebirths = record.Stats and record.Stats.Rebirths or nil,
+        Stats = record.Stats or {},
+    }
+
+    local body = safeJson(payload)
+    if not body then
+        return false, "Unable to JSON-encode execution payload."
+    end
+
+    local sentAny = false
+    local lastError = nil
+
+    -- Send the execution to Pipedream for the global Admin feed.
+    if logger.PollEndpoint ~= "" then
+        local ok, response = pcall(function()
+            return requestFn({
+                Url = logger.PollEndpoint,
+                Method = "POST",
+                Headers = {
+                    ["Content-Type"] = "application/json",
+                    ["Accept"] = "application/json",
+                },
+                Body = body,
+            })
+        end)
+        if ok then
+            logger.LastResponse = response
+            local statusCode = type(response) == "table" and (response.StatusCode or response.status_code or response.Code or response.code) or nil
+            if statusCode and tonumber(statusCode) and tonumber(statusCode) >= 400 then
+                lastError = "Pipedream POST returned HTTP " .. tostring(statusCode)
+            else
+                sentAny = true
+            end
+        else
+            lastError = "Pipedream POST failed: " .. tostring(response)
+        end
+    end
+
+    -- Keep the Discord notification as well.
+    if logger.Webhook ~= "" then
+        local discordBody = safeJson(self:BuildDiscordWebhookPayload(record))
+        if discordBody then
+            local ok, response = pcall(function()
+                return requestFn({
+                    Url = logger.Webhook,
+                    Method = "POST",
+                    Headers = {
+                        ["Content-Type"] = "application/json",
+                    },
+                    Body = discordBody,
+                })
+            end)
+            if ok then
+                sentAny = true
+            else
+                lastError = tostring(response)
+            end
+        end
+    end
+
+    if sentAny then
+        logger.LastError = nil
+        return true, "Execution sent."
+    end
+
+    logger.LastError = lastError or "No execution endpoint is configured."
+    return false, logger.LastError
+end
+
+function UI:FetchGlobalExecutions()
+    local logger = self.ExecutionLogger
+    if not logger.Enabled or logger.PollEndpoint == "" then
+        return false, "Global current feed is disabled or has no bridge endpoint."
+    end
+
+    local requestFn = findRequestFunction()
+    if not requestFn then
+        return false, "No executor HTTP request function is available."
+    end
+
+    local ok, response = pcall(function()
+        return requestFn({
+            Url = logger.PollEndpoint,
+            Method = "GET",
+            Headers = { ["Accept"] = "application/json" },
+        })
+    end)
+
+    if not ok then
+        logger.LastError = tostring(response)
+        return false, logger.LastError
+    end
+
+    local statusCode = type(response) == "table" and (response.StatusCode or response.status_code or response.Code or response.code) or nil
+    if statusCode and tonumber(statusCode) and tonumber(statusCode) >= 400 then
+        logger.LastError = "Global feed returned HTTP " .. tostring(statusCode)
+        return false, logger.LastError
+    end
+
+    local body = type(response) == "table" and (response.Body or response.body or response.ResponseBody or response.responseBody) or response
+    if type(body) ~= "string" then
+        return false, "Global current feed returned no response body."
+    end
+
+    local decodedOk, data = pcall(function()
+        return HttpService:JSONDecode(body)
+    end)
+    if not decodedOk or type(data) ~= "table" then
+        logger.LastError = "Global current feed returned invalid JSON: " .. tostring(body):sub(1, 120)
+        return false, logger.LastError
+    end
+
+    -- Accept Pipedream's direct object response, an array, or common wrappers.
+    local entries = data.executions or data.entries or data.records or data.data
+    if type(entries) == "string" then
+        local nestedOk, nested = pcall(function()
+            return HttpService:JSONDecode(entries)
+        end)
+        if nestedOk then entries = nested end
+    end
+
+    if type(entries) ~= "table" or (type(entries) == "table" and next(entries) == nil) then
+        entries = data
+    end
+
+    local flattened = {}
+    if type(entries) == "table" then
+        for key, value in pairs(entries) do
+            if type(value) == "table" then
+                local record = {}
+                for field, fieldValue in pairs(value) do
+                    record[field] = fieldValue
+                end
+                if record.JobId == nil and record.Server == nil and type(key) ~= "number" then
+                    record.JobId = tostring(key)
+                    record.Server = tostring(key)
+                end
+                table.insert(flattened, record)
+            end
+        end
+    end
+
+    -- If the endpoint returned a normal JSON array, pairs() above preserves its records.
+    entries = flattened
+
+    if type(entries) == "table" then
+        self:SetAdminExecutions(entries)
+        logger.LastError = nil
+        return true, entries
+    end
+
+    return false, "Global current feed returned no execution records."
+end
+
+function UI:StartGlobalExecutionFeed()
+    if self._globalFeedRunning then return end
+    self._globalFeedRunning = true
+    task.spawn(function()
+        while self._globalFeedRunning and self.Gui and self.Gui.Parent do
+            pcall(function() self:FetchGlobalExecutions() end)
+            task.wait(self.ExecutionLogger.PollInterval or 8)
+        end
+    end)
+end
+
+function UI:StopGlobalExecutionFeed()
+    self._globalFeedRunning = false
+end
+
+function UI:LogExecution(record)
+    record = normaliseRecord(record)
+    if self.ExecutionLogger.Enabled then
+        task.spawn(function()
+            self:SendExecutionLog(record)
+        end)
+    end
+    return record
+end
+
+UI.AdminRecordSchema = {
+    "Username", "DisplayName", "UserId", "Game", "PlaceId",
+    "Server", "JobId", "Executor", "Version", "Timestamp", "Stats"
+}
+
+-- ============================================================
+-- AUTO GLOBAL CURRENT TELEMETRY
+-- ============================================================
+-- Discord webhook: paste your webhook URL here.
+local EMPIRE_DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1552367569300889601/MMBAd0HKUQgqzc-cn2kl7VdbueIn7k02gwb0n_vXP7_YRdQULNGaYyLgCdUxEtZ1wjEJ"
+
+-- Public URL of the tiny Discord bridge, ending in /executions.
+local EMPIRE_POLL_ENDPOINT = "https://eoqj0chxad43q4c.m.pipedream.net"
+
+UI:ConfigureExecutionLogger({
+    Enabled = EMPIRE_DISCORD_WEBHOOK ~= "" and EMPIRE_DISCORD_WEBHOOK ~= "YOUR_DISCORD_WEBHOOK_URL",
+    Webhook = EMPIRE_DISCORD_WEBHOOK,
+    PollEndpoint = EMPIRE_POLL_ENDPOINT,
+    PollInterval = 8,
+})
+
+local function collectPublicStats()
+    local result = {}
+    local player = Players.LocalPlayer
+    local leaderstats = player and player:FindFirstChild("leaderstats")
+    if leaderstats then
+        for _, value in ipairs(leaderstats:GetChildren()) do
+            if value:IsA("ValueBase") then
+                result[value.Name] = value.Value
+            end
+        end
+    end
+
+    -- Explicitly include Durability if the game exposes it outside leaderstats.
+    if result.Durability == nil and player then
+        local aliases = {"Durability", "durability", "Defense", "defense"}
+        for _, alias in ipairs(aliases) do
+            local attr = player:GetAttribute(alias)
+            if attr ~= nil then
+                result.Durability = attr
+                break
+            end
+        end
+    end
+
+    if result.Durability == nil and player then
+        local containers = {"Stats", "Data", "PlayerData"}
+        for _, containerName in ipairs(containers) do
+            local container = player:FindFirstChild(containerName)
+            if container then
+                for _, alias in ipairs(aliases) do
+                    local value = container:FindFirstChild(alias)
+                    if value and value:IsA("ValueBase") then
+                        result.Durability = value.Value
+                        break
+                    end
+                end
+            end
+            if result.Durability ~= nil then break end
+        end
+    end
+
+    return result
+end
+
+if UI.ExecutionLogger.Enabled then
+    local player = Players.LocalPlayer
+    local gameName = "Roblox"
+    pcall(function()
+        local info = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
+        if info and info.Name then
+            gameName = info.Name
+        end
+    end)
+
+    local executor = "Unknown"
+    pcall(function()
+        if type(identifyexecutor) == "function" then
+            executor = identifyexecutor()
+        end
+    end)
+
+    UI:LogExecution({
+        Username = player and player.Name or "Unknown",
+        DisplayName = player and player.DisplayName or "Unknown",
+        UserId = player and player.UserId or 0,
+        Game = gameName,
+        PlaceId = game.PlaceId,
+        JobId = game.JobId,
+        Executor = tostring(executor),
+        Stats = collectPublicStats(),
+    })
+
+    if EMPIRE_POLL_ENDPOINT ~= "" and not string.find(EMPIRE_POLL_ENDPOINT, "YOUR%-PUBLIC%-BRIDGE%-DOMAIN", 1, false) then
+        UI:StartGlobalExecutionFeed()
+    end
+end
+
+
+
+-- ============================================================
+-- JOHNNY V13 FEATURE PACK — existing Windows 11 shell preserved
+-- ============================================================
+
+-- COMMON REFERENCES
+--========================================================--
+
+local muscleEvent = Player:WaitForChild("muscleEvent")
+local leaderstats = Player:WaitForChild("leaderstats")
+local rebirthsStat = leaderstats:WaitForChild("Rebirths")
+local strengthStat = leaderstats:WaitForChild("Strength")
+local durabilityStat = Player:WaitForChild("Durability")
+
+local rEvents = ReplicatedStorage:WaitForChild("rEvents")
+local equipPetEvent = rEvents:WaitForChild("equipPetEvent")
+local rebirthRemote = rEvents:WaitForChild("rebirthRemote")
+local changeSpeedSizeRemote = rEvents:WaitForChild("changeSpeedSizeRemote")
+
+--========================================================--
+-- GLOBAL STATE
+--========================================================--
+
+_G.JohnnyScriptDestroyed = false
+
+_G.AutoSpeed = false
+_G.AutoSize = false
+
+_G.JohnnyPortalConnection = nil
+_G.AdRemovalConnection = nil
+
+_G.JohnnyAutoSpinWheel = false
+_G.JohnnyMuscleKingTP = false
+_G.JohnnyAutoSize1 = false
+_G.JohnnyAutoEgg60 = false
+
+_G.JohnnyFastTools = false
+
+_G.JohnnyAntiAfkConnection = nil
+_G.JohnnyAntiAfkGui = nil
+
+--========================================================--
+-- UTILITY FUNCTIONS
+--========================================================--
+
+local function getCharacter()
+    return Player.Character or Player.CharacterAdded:Wait()
+end
+
+local function getHumanoid()
+    local character = Player.Character
+    return character and character:FindFirstChildOfClass("Humanoid")
+end
+
+local function getRootPart()
+    local character = Player.Character
+    return character and character:FindFirstChild("HumanoidRootPart")
+end
+
+local function getTool(toolName)
+    local character = Player.Character
+    local backpack = Player:FindFirstChild("Backpack")
+
+    return
+        (character and character:FindFirstChild(toolName))
+        or
+        (backpack and backpack:FindFirstChild(toolName))
+end
+
+local function formatRebirthNumber(number)
+    if number >= 1e15 then
+        return string.format("%.2fQ", number / 1e15)
+    elseif number >= 1e12 then
+        return string.format("%.2fT", number / 1e12)
+    elseif number >= 1e9 then
+        return string.format("%.2fB", number / 1e9)
+    elseif number >= 1e6 then
+        return string.format("%.2fM", number / 1e6)
+    elseif number >= 1e3 then
+        return string.format("%.2fK", number / 1e3)
+    end
+
+    return string.format("%.0f", number)
+end
+
+local function formatStatNumber(number)
+    local negative = number < 0
+    number = math.abs(number)
+
+    local result
+
+    if number >= 1e15 then
+        result = string.format("%.2fQa", number / 1e15)
+    elseif number >= 1e12 then
+        result = string.format("%.2fT", number / 1e12)
+    elseif number >= 1e9 then
+        result = string.format("%.2fB", number / 1e9)
+    elseif number >= 1e6 then
+        result = string.format("%.2fM", number / 1e6)
+    elseif number >= 1e3 then
+        result = string.format("%.2fK", number / 1e3)
+    else
+        result = string.format("%.2f", number)
+    end
+
+    return negative and "-" .. result or result
+end
+
+local function sendNotification(title, text)
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = title,
+            Text = text,
+            Duration = 3
+        })
+    end)
+end
+
+--========================================================--
+-- HIDE STAT FRAMES
+--========================================================--
+
+local blockedFrames = {
+    "strengthFrame",
+    "durabilityFrame",
+    "agilityFrame"
+}
+
+local function hideBlockedFrame(child)
+    if table.find(blockedFrames, child.Name)
+        and child:IsA("GuiObject") then
+
+        child.Visible = false
+    end
+end
+
+for _, name in ipairs(blockedFrames) do
+    local frame = ReplicatedStorage:FindFirstChild(name)
+
+    if frame and frame:IsA("GuiObject") then
+        frame.Visible = false
+    end
+end
+
+ReplicatedStorage.ChildAdded:Connect(function(child)
+    hideBlockedFrame(child)
+end)
+
+--========================================================--
+-- WINDOWS 11 SECTION MAPPINGS
+--========================================================--
+
+local window = Window
 local MainTab = createdTabs.Player
 local FarmingTab = createdTabs.Farming
 local FastRebTab = createdTabs.Rebirth
@@ -915,11 +2247,8 @@ local RebirthTab = createdTabs.Rebirth
 local ToolsTab = createdTabs.Misc
 local openCompactMode
 
-window:SelectTab(FarmingTab)
-
-
 --========================================================--
--- FAST FARM TAB
+-- FAST FARM TAB / FARMING SECTION
 --========================================================--
 
 --========================================================--
@@ -2558,6 +3887,8 @@ end)
 -- FAST REBIRTH TAB
 --========================================================--
 
+-- Fast Rebirth uses the existing Windows 11 Rebirth section.
+
 -- Forward declarations: these are referenced by the mode button callback
 -- before the main Fast Rebirth state/loop is declared below.
 local fastRebirthLoop
@@ -3545,6 +4876,8 @@ FastRebTab:AddButton(
 -- REBIRTH TAB
 --========================================================--
 
+-- Rebirth uses the existing Windows 11 Rebirth section.
+
 --========================================================--
 -- REBIRTH OPTIONS
 --========================================================--
@@ -3694,6 +5027,8 @@ infiniteToggle =
 -- TOOLS TAB
 --========================================================--
 
+
+-- Tools uses the existing Windows 11 Misc section.
 
 --========================================================--
 -- AUTO EXERCISES
@@ -3958,132 +5293,495 @@ for name, target in pairs(
 end
 
 --========================================================--
-
-
---========================================================--
--- WINDOWS 11 FEATURE PRESENTATION / CROSS-SECTION EXTRAS
+-- COMPACT MODE UI
 --========================================================--
 
--- Fast Farm mode controls that were previously only exposed by the compact panel.
-local function getFarmPaceNumbers()
-    local sh, sd, sw = "0", "0", "0"
-    local dh, dd, dw = "0", "0", "0"
-    local ok1, sv = pcall(function() return projectedStrengthLabel.Text end)
-    local ok2, dv = pcall(function() return projectedDurabilityLabel.Text end)
-    if ok1 and type(sv) == "string" then
-        local a,b,c = sv:match("Strength Pace:%s*([^/]+)%s*/Hour%s*|%s*([^/]+)%s*/Day%s*|%s*([^/]+)%s*/Week")
-        if a then sh,sd,sw = a:gsub("%s+", ""), b:gsub("%s+", ""), c:gsub("%s+", "") end
+local compactModeGui = nil
+local compactModePaceFormat = "Full"
+local compactNightMode = false
+local compactRainbowToken = 0
+local compactThemeGradients = {}
+local compactThemeButtons = {}
+local compactActiveModeTheme = nil
+local compactPanel = nil
+local compactOpenButton = nil
+
+-- The compact panel uses a visible rainbow acrylic-style surface in normal mode.
+-- The colors are deliberately on the PANEL, while buttons stay small and solid.
+local rainbowColors = ColorSequence.new({
+    ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 55, 125)),
+    ColorSequenceKeypoint.new(0.14, Color3.fromRGB(255, 120, 45)),
+    ColorSequenceKeypoint.new(0.28, Color3.fromRGB(255, 225, 55)),
+    ColorSequenceKeypoint.new(0.43, Color3.fromRGB(65, 235, 125)),
+    ColorSequenceKeypoint.new(0.58, Color3.fromRGB(50, 210, 255)),
+    ColorSequenceKeypoint.new(0.73, Color3.fromRGB(85, 105, 255)),
+    ColorSequenceKeypoint.new(0.87, Color3.fromRGB(190, 70, 255)),
+    ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 55, 150))
+})
+
+local rainbowTransparency = NumberSequence.new({
+    NumberSequenceKeypoint.new(0.00, 0.02),
+    NumberSequenceKeypoint.new(0.50, 0.10),
+    NumberSequenceKeypoint.new(1.00, 0.02)
+})
+
+local modeThemeColors = {
+    ["Fast Farm"] = {
+        normal = ColorSequence.new(Color3.fromRGB(40, 220, 175), Color3.fromRGB(70, 105, 235)),
+        night = ColorSequence.new(Color3.fromRGB(8, 48, 42), Color3.fromRGB(16, 28, 62)),
+        button = Color3.fromRGB(35, 125, 112),
+        stroke = Color3.fromRGB(85, 225, 190)
+    },
+    ["Fast Rebirth"] = {
+        normal = ColorSequence.new(Color3.fromRGB(150, 75, 240), Color3.fromRGB(50, 150, 235)),
+        night = ColorSequence.new(Color3.fromRGB(38, 18, 70), Color3.fromRGB(18, 35, 68)),
+        button = Color3.fromRGB(82, 68, 145),
+        stroke = Color3.fromRGB(165, 140, 255)
+    }
+}
+
+local compactPaceFormats = {
+    Full = { reb = "Pace: %s / Hour | %s / Day | %s / Week", farm = "Strength: %s/H | %s/D | %s/W" },
+    Short = { reb = "Pace: %s/H | %s/D | %s/W", farm = "STR %s/H | %s/D | %s/W" },
+    Compact = { reb = "P: %sH | %sD | %sW", farm = "S %sH | %sD | %sW" },
+    Mini = { reb = "%sH / %sD / %sW", farm = "S %s/%s/%s" }
+}
+
+local function getJohnnyGuiRoot()
+    local root
+    if type(gethui) == "function" then
+        local ok, result = pcall(gethui)
+        if ok and typeof(result) == "Instance" then root = result end
     end
-    if ok2 and type(dv) == "string" then
-        local a,b,c = dv:match("Durability Pace:%s*([^/]+)%s*/Hour%s*|%s*([^/]+)%s*/Day%s*|%s*([^/]+)%s*/Week")
-        if a then dh,dd,dw = a:gsub("%s+", ""), b:gsub("%s+", ""), c:gsub("%s+", "") end
+    if not root then
+        local ok, result = pcall(function() return game:GetService("CoreGui") end)
+        if ok and typeof(result) == "Instance" then root = result end
     end
-    return sh, sd, sw, dh, dd, dw
+    if not root then root = Player:WaitForChild("PlayerGui") end
+    return root
 end
 
-FarmingTab:AddLabel("Fast Farm Mode Controls")
-local farmPaceFormat = "Full"
-local farmPaceLabel = FarmingTab:AddLabel("Pace display: Full")
-
-local function setFarmPaceFormat(name)
-    farmPaceFormat = name
-    farmPaceLabel.Text = "Pace display: " .. name
-    local h, d, w, dh, dd, dw = getFarmPaceNumbers()
-    if name == "Short" then
-        projectedStrengthLabel.Text = string.format("Strength: %s/h | %s/d | %s/w", h, d, w)
-        projectedDurabilityLabel.Text = string.format("Durability: %s/h | %s/d | %s/w", dh, dd, dw)
-    elseif name == "Compact" then
-        projectedStrengthLabel.Text = string.format("STR %s / %s / %s", h, d, w)
-        projectedDurabilityLabel.Text = string.format("DUR %s / %s / %s", dh, dd, dw)
-    elseif name == "Mini" then
-        projectedStrengthLabel.Text = string.format("STR %s/h", h)
-        projectedDurabilityLabel.Text = string.format("DUR %s/h", dh)
+local function findMainJohnnyGui()
+    local roots = { getJohnnyGuiRoot() }
+    pcall(function() table.insert(roots, game:GetService("CoreGui")) end)
+    pcall(function() table.insert(roots, Player:WaitForChild("PlayerGui")) end)
+    for _, root in ipairs(roots) do
+        if root and typeof(root) == "Instance" then
+            local found = root:FindFirstChild("imgui", true)
+            if found then return found end
+        end
     end
+    return nil
 end
 
-local farmPaceRow = FarmingTab:AddSection("Pace Format")
-for _, name in ipairs({"Full", "Short", "Compact", "Mini"}) do
-    FarmingTab:AddButton("Pace: " .. name, function()
-        setFarmPaceFormat(name)
+local function destroyMainUiForCompactMode()
+    local imgui = findMainJohnnyGui()
+    if imgui then pcall(function() imgui:Destroy() end) end
+end
+
+-- Supports common executor local-asset functions. The supplied image should be
+-- placed in the executor's workspace as "johnny_custom_icon.png".
+local function getJohnnyCustomAsset(fileName)
+    local funcs = { getcustomasset, getsynasset }
+    for _, fn in ipairs(funcs) do
+        if type(fn) == "function" then
+            local ok, result = pcall(fn, fileName)
+            if ok and type(result) == "string" and result ~= "" then
+                return result
+            end
+        end
+    end
+    return nil
+end
+
+local function destroyCompactMode()
+    compactRainbowToken += 1
+    compactNightMode = false
+    compactThemeGradients = {}
+    compactThemeButtons = {}
+    compactPanel = nil
+    compactOpenButton = nil
+    if compactModeGui then
+        pcall(function() compactModeGui:Destroy() end)
+        compactModeGui = nil
+    end
+    local root = getJohnnyGuiRoot()
+    pcall(function()
+        local old = root:FindFirstChild("JohnnyCompactMode")
+        if old then old:Destroy() end
     end)
 end
 
-FarmingTab:AddButton("Night Mode", function()
-    Lighting.ClockTime = 0
-    sendNotification("Night Mode", "Night mode applied.")
-end)
-FarmingTab:AddButton("Day Mode", function()
-    Lighting.ClockTime = 12
-    sendNotification("Day Mode", "Day mode applied.")
-end)
-FarmingTab:AddButton("Midnight Time", function()
-    Lighting.ClockTime = 6
-    sendNotification("Time", "Midnight preset applied.")
-end)
+local function makeModeButton(parent, text, callback, width)
+    local button = Instance.new("TextButton")
+    button.Name = "ModeButton"
+    button.Size = UDim2.fromOffset(width or 88, 23)
+    button.BackgroundColor3 = (compactActiveModeTheme and compactActiveModeTheme.button) or Color3.fromRGB(55, 70, 105)
+    button.BackgroundTransparency = 0.08
+    button.BorderSizePixel = 0
+    button.Text = text
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.TextSize = 10
+    button.Font = Enum.Font.GothamSemibold
+    button.AutoButtonColor = true
+    button.Active = true
+    button.ZIndex = 10
+    button.Parent = parent
+    table.insert(compactThemeButtons, button)
 
--- The square Game Pass thumbnail from v13 is retained as a Windows 11 shell shortcut.
-local gamepassShortcut = Instance.new("ImageButton")
-gamepassShortcut.Name = "JohnnyGamePassShortcut"
-gamepassShortcut.Size = UDim2.fromOffset(42, 42)
-gamepassShortcut.Position = UDim2.fromOffset(18, 85)
-gamepassShortcut.BackgroundColor3 = Theme.Surface
-gamepassShortcut.BackgroundTransparency = 0.05
-gamepassShortcut.BorderSizePixel = 0
-gamepassShortcut.Image = "rbxthumb://type=GamePass&id=176454015&w=150&h=150"
-gamepassShortcut.ScaleType = Enum.ScaleType.Crop
-gamepassShortcut.Parent = window.Gui
-corner(gamepassShortcut, 9)
-stroke(gamepassShortcut, Theme.Border, 0.15, 1.5)
-makeDraggable(gamepassShortcut, gamepassShortcut)
-gamepassShortcut.MouseButton1Click:Connect(function()
-    window:Restore()
-    window:SelectTab(FarmingTab)
-end)
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 5)
+    corner.Parent = button
 
--- Put v13's player/pet visibility controls in their natural Windows 11 sections.
-local petsTab = createdTabs.Pets
-petsTab:AddLabel("Pet Visibility")
-petsTab:AddSwitch("Show Pets", function(state)
-    local value = Player:FindFirstChild("hidePets")
-    if value then value.Value = state end
-end)
-petsTab:AddSwitch("Show Other Pets", function(state)
-    local value = Player:FindFirstChild("showOtherPetsOn")
-    if value then value.Value = state end
-end)
-petsTab:AddButton("Equip Swift Samurai", function()
-    equipPetsByName("Swift Samurai")
-end)
-petsTab:AddLabel("Titanium Hydra remains protected by the Fast Rebirth pet manager.")
+    local stroke = Instance.new("UIStroke")
+    stroke.Thickness = 1
+    stroke.Transparency = 0.38
+    stroke.Color = Color3.fromRGB(220, 235, 255)
+    stroke.Parent = button
 
--- Performance section receives the Anti-Lag action used by v13.
-local perfTab = createdTabs.Perf
-perfTab:AddLabel("Performance")
-perfTab:AddButton("Anti Lag", activateAntiLag)
-perfTab:AddLabel("Fast Farm Ping Adjuster is kept in the Farming section because it directly controls the farm loop.")
+    button.MouseButton1Click:Connect(function()
+        local ok, err = pcall(callback)
+        if not ok then warn("[Johnny Compact] button error: " .. tostring(err)) end
+    end)
+    return button
+end
 
--- Session statistics surface.
-local statsTab = createdTabs.Stats
-statsTab:AddLabel("Live Stats")
-local statsLive = statsTab:AddLabel("Loading...")
-task.spawn(function()
-    while not _G.JohnnyScriptDestroyed and statsLive.Parent do
-        statsLive.Text = string.format(
-            "Strength: %s\nDurability: %s\nRebirths: %s",
-            formatStatNumber(strengthStat.Value),
-            formatStatNumber(durabilityStat.Value),
-            formatRebirthNumber(rebirthsStat.Value)
-        )
-        task.wait(0.5)
+local function getFarmPaceNumbers()
+    local h,d,w = "0","0","0"
+    local ok, value = pcall(function() return projectedStrengthLabel.Text end)
+    if ok and type(value) == "string" then
+        local a,b,c = value:match("Strength Pace:%s*([^/]+)%/Hour%s*|%s*([^/]+)%/Day%s*|%s*([^/]+)%/Week")
+        if a then h=a:gsub("%s+","") end
+        if b then d=b:gsub("%s+","") end
+        if c then w=c:gsub("%s+","") end
     end
+    return h,d,w
+end
+
+openCompactMode = function(modeName)
+    compactActiveModeTheme = modeThemeColors[modeName] or modeThemeColors["Fast Farm"]
+
+    -- Never start automation just by entering a mode.
+    if modeName == "Fast Farm" then
+        fastRepRunning = false
+    elseif modeName == "Fast Rebirth" then
+        isFastRebirthRunning = false
+    end
+    compactNightMode = false
+    destroyCompactMode()
+
+    local root = getJohnnyGuiRoot()
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "JohnnyCompactMode"
+    gui.ResetOnSpawn = false
+    gui.IgnoreGuiInset = true
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    gui.DisplayOrder = 1000000
+    gui.Enabled = true
+    local parented = pcall(function() gui.Parent = root end)
+    if not parented or not gui.Parent then
+        gui.Parent = Player:FindFirstChildOfClass("PlayerGui") or Player:WaitForChild("PlayerGui")
+    end
+    compactModeGui = gui
+
+    -- Smaller Fluent-inspired acrylic panel.
+    local frame = Instance.new("Frame")
+    frame.Name = "ModePanel"
+    frame.Size = UDim2.fromOffset(310, modeName == "Fast Farm" and 305 or 275)
+    frame.Position = UDim2.fromOffset(18, 85)
+    frame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    frame.BackgroundTransparency = 0.02
+    frame.BorderSizePixel = 0
+    frame.ClipsDescendants = false
+    frame.Active = true
+    frame.Draggable = true
+    frame.ZIndex = 2
+    frame.Parent = gui
+    compactPanel = frame
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 12)
+    corner.Parent = frame
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Thickness = 1.5
+    stroke.Color = Color3.fromRGB(210, 225, 255)
+    stroke.Transparency = 0.18
+    stroke.Parent = frame
+
+    local gradient = Instance.new("UIGradient")
+    gradient.Name = "RainbowAcrylic"
+    gradient.Color = rainbowColors
+    gradient.Transparency = rainbowTransparency
+    gradient.Rotation = 0
+    gradient.Offset = Vector2.new(0, 0)
+    gradient.Parent = frame
+    table.insert(compactThemeGradients, gradient)
+
+    -- Animated rainbow movement across the PANEL itself.
+    compactRainbowToken += 1
+    local rainbowToken = compactRainbowToken
+    task.spawn(function()
+        local offset = 0
+        while compactModeGui == gui and gui.Parent and rainbowToken == compactRainbowToken do
+            if not compactNightMode and gradient.Parent then
+                offset = (offset + 0.006) % 1
+                gradient.Offset = Vector2.new(offset, 0)
+            end
+            task.wait(0.03)
+        end
+    end)
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1,-50,0,27)
+    title.Position = UDim2.fromOffset(10,6)
+    title.BackgroundTransparency = 1
+    title.Text = "JOHNNY | " .. string.upper(modeName)
+    title.TextColor3 = Color3.new(1,1,1)
+    title.TextSize = 13
+    title.Font = Enum.Font.GothamBold
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.ZIndex = 10
+    title.Parent = frame
+
+    local close = Instance.new("TextButton")
+    close.Size = UDim2.fromOffset(25,23)
+    close.Position = UDim2.new(1,-32,0,6)
+    close.BackgroundColor3 = compactActiveModeTheme.button
+    close.BackgroundTransparency = 0.05
+    close.BorderSizePixel = 0
+    close.Text = "×"
+    close.TextColor3 = Color3.new(1,1,1)
+    close.TextSize = 16
+    close.Font = Enum.Font.GothamBold
+    close.ZIndex = 11
+    close.Parent = frame
+    Instance.new("UICorner", close).CornerRadius = UDim.new(0,6)
+
+    -- Small square reopen button. It stays alive when the panel is hidden.
+    local open = Instance.new("ImageButton")
+    open.Name = "JohnnyOpenButton"
+    open.Size = UDim2.fromOffset(42,42)
+    open.Position = UDim2.fromOffset(18,85)
+    open.BackgroundColor3 = Color3.fromRGB(24,27,38)
+    open.BackgroundTransparency = 0.08
+    open.BorderSizePixel = 0
+    open.Visible = false
+    open.Active = true
+    open.Draggable = true
+    open.ZIndex = 100
+    open.Parent = gui
+    compactOpenButton = open
+    Instance.new("UICorner", open).CornerRadius = UDim.new(0,9)
+    local openStroke = Instance.new("UIStroke")
+    openStroke.Thickness = 1.5
+    openStroke.Transparency = 0.15
+    openStroke.Color = compactActiveModeTheme.stroke
+    openStroke.Parent = open
+
+    -- Use the actual Roblox Game Pass thumbnail as the square reopen button icon.
+    -- Roblox supports rbxthumb thumbnails for GamePass assets.
+    local GAMEPASS_ID = 176454015
+    open.Image = "rbxthumb://type=GamePass&id=" .. tostring(GAMEPASS_ID) .. "&w=150&h=150"
+    open.ScaleType = Enum.ScaleType.Crop
+    open.ImageTransparency = 0
+    open.AutoButtonColor = true
+
+    local function showCompactPanel()
+        frame.Visible = true
+        open.Visible = false
+    end
+    local function hideCompactPanel()
+        frame.Visible = false
+        open.Visible = true
+    end
+    close.MouseButton1Click:Connect(hideCompactPanel)
+    open.MouseButton1Click:Connect(showCompactPanel)
+
+    local content = Instance.new("Frame")
+    content.Size = UDim2.new(1,-18,1,-40)
+    content.Position = UDim2.fromOffset(9,35)
+    content.BackgroundTransparency = 1
+    content.ZIndex = 5
+    content.Parent = frame
+
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0,3)
+    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = content
+
+    local status = Instance.new("TextLabel")
+    status.Size = UDim2.new(1,0,0,20)
+    status.BackgroundTransparency = 1
+    status.TextSize = 10.5
+    status.Font = Enum.Font.GothamBold
+    status.ZIndex = 10
+    status.Parent = content
+
+    local pace = Instance.new("TextLabel")
+    pace.Size = UDim2.new(1,0,0,25)
+    pace.BackgroundTransparency = 1
+    pace.TextColor3 = Color3.fromRGB(255,250,220)
+    pace.TextSize = 10.5
+    pace.Font = Enum.Font.GothamSemibold
+    pace.TextWrapped = true
+    pace.ZIndex = 10
+    pace.Parent = content
+
+    local stats = Instance.new("TextLabel")
+    stats.Size = UDim2.new(1,0,0,34)
+    stats.BackgroundTransparency = 1
+    stats.TextColor3 = Color3.fromRGB(245,248,255)
+    stats.TextSize = 10
+    stats.Font = Enum.Font.Gotham
+    stats.TextWrapped = true
+    stats.ZIndex = 10
+    stats.Parent = content
+
+    local function refreshFarm()
+        local ping = getPing()
+        status.Text = string.format("Fast Farm: %s | %dms | PA: %s", fastRepRunning and "ON" or "OFF", math.floor(ping+0.5), pingAdjusterEnabled and "ON" or "OFF")
+        status.TextColor3 = fastRepRunning and Color3.fromRGB(100,255,145) or Color3.fromRGB(255,150,160)
+        local h,d,w = getFarmPaceNumbers()
+        pace.Text = string.format(compactPaceFormats[compactModePaceFormat].farm,h,d,w)
+        stats.Text = string.format("Strength: %s | +%s\nDurability: %s | +%s", formatStatNumber(strengthStat.Value), formatStatNumber(strengthStat.Value-initialStrength), formatStatNumber(durabilityStat.Value), formatStatNumber(durabilityStat.Value-initialDurability))
+    end
+
+    local function refreshReb()
+        status.Text = isFastRebirthRunning and "Fast Rebirth: ON" or "Fast Rebirth: OFF"
+        status.TextColor3 = isFastRebirthRunning and Color3.fromRGB(100,255,145) or Color3.fromRGB(255,150,160)
+        pace.Text = string.format(compactPaceFormats[compactModePaceFormat].reb,formatRebirthNumber(averageTable(paceHistoryHour)),formatRebirthNumber(averageTable(paceHistoryDay)),formatRebirthNumber(averageTable(paceHistoryWeek)))
+        stats.Text = string.format("Rebirths: %s | Gained: %s", formatRebirthNumber(rebirthsStat.Value), formatRebirthNumber(rebirthsStat.Value-initialRebirths))
+    end
+
+    local startButton
+    if modeName == "Fast Farm" then
+        startButton = makeModeButton(content, "FAST FARM: OFF", function()
+            fastRepRunning = not fastRepRunning
+            if fastRepRunning then
+                startButton.Text = "FAST FARM: ON"
+                task.spawn(fastRepLoop)
+            else
+                startButton.Text = "FAST FARM: OFF"
+            end
+        end, 190)
+    else
+        startButton = makeModeButton(content, "FAST REBIRTH: OFF", function()
+            isFastRebirthRunning = not isFastRebirthRunning
+            if isFastRebirthRunning then
+                fastRebirthStartTime = tick()
+                startButton.Text = "FAST REBIRTH: ON"
+                task.spawn(fastRebirthLoop)
+            else
+                if fastRebirthStartTime then
+                    fastRebirthTotalElapsed = fastRebirthTotalElapsed + (tick() - fastRebirthStartTime)
+                end
+                startButton.Text = "FAST REBIRTH: OFF"
+            end
+        end, 190)
+    end
+
+    local theme = compactActiveModeTheme
+    local function applyCompactTheme()
+        if compactNightMode then
+            gradient.Color = theme.night
+            gradient.Transparency = NumberSequence.new(0.03)
+            frame.BackgroundColor3 = Color3.fromRGB(12,14,20)
+            frame.BackgroundTransparency = 0.05
+            stroke.Color = theme.stroke
+            stroke.Transparency = 0.18
+        else
+            gradient.Color = rainbowColors
+            gradient.Transparency = rainbowTransparency
+            frame.BackgroundColor3 = Color3.fromRGB(255,255,255)
+            frame.BackgroundTransparency = 0.02
+            stroke.Color = Color3.fromRGB(225,235,255)
+            stroke.Transparency = 0.10
+        end
+        for _, b in ipairs(compactThemeButtons) do
+            if b and b.Parent then
+                b.BackgroundColor3 = compactNightMode and theme.button:Lerp(Color3.fromRGB(7,9,15),0.30) or theme.button
+                b.BackgroundTransparency = compactNightMode and 0.12 or 0.08
+            end
+        end
+        close.BackgroundColor3 = theme.button
+        openStroke.Color = theme.stroke
+    end
+
+    local nightButton = makeModeButton(content, "NIGHT: OFF", function()
+        compactNightMode = not compactNightMode
+        nightButton.Text = compactNightMode and "NIGHT: ON" or "NIGHT: OFF"
+        applyCompactTheme()
+    end, 88)
+
+    -- Time controls are available in BOTH compact modes.
+    local timeRow = Instance.new("Frame")
+    timeRow.Size = UDim2.new(1,0,0,23)
+    timeRow.BackgroundTransparency = 1
+    timeRow.Parent = content
+    local tl = Instance.new("UIListLayout")
+    tl.FillDirection = Enum.FillDirection.Horizontal
+    tl.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    tl.Padding = UDim.new(0,3)
+    tl.Parent = timeRow
+    makeModeButton(timeRow, "NIGHT", function() Lighting.ClockTime = 0 end, 58)
+    makeModeButton(timeRow, "DAY", function() Lighting.ClockTime = 12 end, 58)
+    makeModeButton(timeRow, "MIDNIGHT", function() Lighting.ClockTime = 6 end, 72)
+
+    if modeName == "Fast Farm" then
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1,0,0,23); row.BackgroundTransparency=1; row.Parent=content
+        local rl=Instance.new("UIListLayout",row); rl.FillDirection=Enum.FillDirection.Horizontal; rl.HorizontalAlignment=Enum.HorizontalAlignment.Center; rl.Padding=UDim.new(0,3)
+        for _,name in ipairs({"Full","Short","Compact","Mini"}) do
+            makeModeButton(row,name,function() compactModePaceFormat=name; refreshFarm() end,61)
+        end
+
+        makeModeButton(content,"REGULAR SQUAT",function() local r=getRootPart(); if r then r.CFrame=CFrame.new(-5218,61,5412); task.wait(.2); pressE() end end,135)
+        makeModeButton(content,"ANTI-LAG",function() activateAntiLag() end,135)
+        task.spawn(function() while compactModeGui==gui and gui.Parent do refreshFarm(); task.wait(.5) end end)
+        refreshFarm()
+    else
+        local row=Instance.new("Frame"); row.Size=UDim2.new(1,0,0,23); row.BackgroundTransparency=1; row.Parent=content
+        local rl=Instance.new("UIListLayout",row); rl.FillDirection=Enum.FillDirection.Horizontal; rl.HorizontalAlignment=Enum.HorizontalAlignment.Center; rl.Padding=UDim.new(0,3)
+        for _,name in ipairs({"Full","Short","Compact","Mini"}) do makeModeButton(row,name,function() compactModePaceFormat=name; refreshReb() end,61) end
+        makeModeButton(content,"SUPER SQUAT",function() local r=getRootPart(); if r then r.CFrame=CFrame.new(-5488,61,4641); task.wait(.2); pressE() end end,135)
+        makeModeButton(content,"ANTI-LAG",function() activateAntiLag() end,135)
+        task.spawn(function() while compactModeGui==gui and gui.Parent do refreshReb(); task.wait(.5) end end)
+        refreshReb()
+    end
+
+    applyCompactTheme()
+    destroyMainUiForCompactMode()
+end
+
+-- The Elerium main UI buttons are registered only after the custom UI
+-- function exists. This removes the old forward-reference/timing problem.
+FarmingTab:AddButton("Fast Farm Mode", function()
+    openCompactMode("Fast Farm")
 end)
 
+FastRebTab:AddButton("Fast Reb Mode", function()
+    openCompactMode("Fast Rebirth")
+end)
 
+-- The Elerium main UI buttons are registered only after the custom UI
+-- function exists. This removes the old forward-reference/timing problem.
+FarmingTab:AddButton("Fast Farm Mode", function()
+    openCompactMode("Fast Farm")
+end)
+
+FastRebTab:AddButton("Fast Reb Mode", function()
+    openCompactMode("Fast Rebirth")
+end)
+
+--========================================================--
+-- INFO TAB
 
 --========================================================--
 
 
-local infoTab = createdTabs.Misc
+local infoTab = createdTabs.Info
 
 infoTab:Show()
 
@@ -4182,9 +5880,25 @@ infoTab:AddButton(
         end
 
         -- Destroy UI.
-        pcall(function()
-            window:Destroy()
-        end)
+        local guiRoot =
+            (gethui and gethui())
+            or
+            game:GetService(
+                "CoreGui"
+            )
+
+        local imgui =
+            guiRoot:FindFirstChild(
+                "imgui"
+            )
+
+        if imgui then
+
+            pcall(function()
+                imgui:Destroy()
+            end)
+
+        end
 
         if script then
 
@@ -4469,5 +6183,53 @@ _G.JohnnyAntiAfkConnection =
     )
 
 --========================================================--
+-- FINAL UI SIZE FIX
+--========================================================--
+
+task.defer(function()
+
+    local guiRoot =
+        (gethui and gethui())
+        or
+        game:GetService(
+            "CoreGui"
+        )
+
+    local imgui =
+        guiRoot:FindFirstChild(
+            "imgui"
+        )
+
+    local windows =
+        imgui
+        and
+        imgui:FindFirstChild(
+            "Windows"
+        )
+
+    local uiWindow =
+        windows
+        and
+        windows:FindFirstChild(
+            "Window"
+        )
+
+    if uiWindow then
+
+        uiWindow.Size =
+            UDim2.fromOffset(
+                900,
+                900
+            )
+
+        uiWindow.ClipsDescendants =
+            true
+
+    end
+end)
+
+--========================================================--
 -- END
 --========================================================--
+
+return UI
