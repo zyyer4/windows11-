@@ -37,15 +37,15 @@ local Theme = {
 }
 
 local Tabs = {
-    {Title = "Farming", Emoji = "⌁", Description = "Automation and farming."},
-    {Title = "Rebirth", Emoji = "↻", Description = "Rebirth tools and settings."},
-    {Title = "Pets", Emoji = "♢", Description = "Pet management."},
-    {Title = "Player", Emoji = "◉", Description = "Player settings."},
-    {Title = "Killing", Emoji = "⚔", Description = "Combat tools."},
-    {Title = "Stats", Emoji = "▥", Description = "Statistics and session information."},
-    {Title = "Tickets", Emoji = "▤", Description = "Tickets and rewards."},
-    {Title = "Perf", Emoji = "▣", Description = "Performance settings."},
-    {Title = "Misc", Emoji = "⚙", Description = "Miscellaneous settings."},
+    {Title = "Farming", Emoji = "⚒️", Description = "Automation and farming."},
+    {Title = "Rebirth", Emoji = "🔄", Description = "Rebirth tools and settings."},
+    {Title = "Pets", Emoji = "🐾", Description = "Pet management."},
+    {Title = "Player", Emoji = "👤", Description = "Player settings."},
+    {Title = "Killing", Emoji = "⚔️", Description = "Combat tools."},
+    {Title = "Stats", Emoji = "📊", Description = "Statistics and session information."},
+    {Title = "Tickets", Emoji = "🎟️", Description = "Tickets and rewards."},
+    {Title = "Perf", Emoji = "💻", Description = "Performance settings."},
+    {Title = "Misc", Emoji = "⚙️", Description = "Miscellaneous settings."},
 }
 
 local function tween(object, duration, properties)
@@ -98,6 +98,17 @@ local function text(parent, value, size, color, font)
     l.TextYAlignment = Enum.TextYAlignment.Center
     l.Parent = parent
     return l
+end
+
+local function addGradient(parent, colorA, colorB, rotation)
+    local g = Instance.new("UIGradient")
+    g.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, colorA),
+        ColorSequenceKeypoint.new(1, colorB),
+    })
+    g.Rotation = rotation or 90
+    g.Parent = parent
+    return g
 end
 
 local function makeDraggable(handle, object)
@@ -174,8 +185,8 @@ function UI:CreateWindow(config)
     root.AnchorPoint = Vector2.new(0.5, 0.5)
     root.Position = UDim2.fromScale(0.5, 0.5)
     root.Size = config.Size or UDim2.fromScale(0.70, 0.76)
-    root.BackgroundColor3 = Theme.Window
-    root.BackgroundTransparency = 0.12
+    root.BackgroundColor3 = Color3.fromRGB(4, 5, 7)
+    root.BackgroundTransparency = 0.18
     root.BorderSizePixel = 0
     root.ClipsDescendants = true
     root.Parent = gui
@@ -183,14 +194,19 @@ function UI:CreateWindow(config)
     stroke(root, Theme.Border, 0.28, 1)
     self.Root = root
 
-    -- Very subtle black glass gradient.
+    -- Black-glass gradient: visible depth while remaining translucent.
     local gradient = Instance.new("UIGradient")
     gradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Theme.WindowTop),
-        ColorSequenceKeypoint.new(0.48, Theme.Window),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(4, 5, 7)),
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(24, 27, 32)),
+        ColorSequenceKeypoint.new(0.42, Color3.fromRGB(10, 12, 15)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(2, 3, 5)),
     })
-    gradient.Rotation = 90
+    gradient.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.12),
+        NumberSequenceKeypoint.new(0.48, 0.02),
+        NumberSequenceKeypoint.new(1, 0.10),
+    })
+    gradient.Rotation = 115
     gradient.Parent = root
 
     -- Header
@@ -231,6 +247,14 @@ function UI:CreateWindow(config)
     local closeButton = trafficButton(Theme.Red, "Close")
     local minimizeButton = trafficButton(Theme.Yellow, "Minimize")
     local maximizeButton = trafficButton(Theme.Green, "Maximize")
+
+    addGradient(closeButton, Color3.fromRGB(255, 128, 120), Color3.fromRGB(210, 48, 44), 90)
+    addGradient(minimizeButton, Color3.fromRGB(255, 222, 106), Color3.fromRGB(221, 145, 20), 90)
+    addGradient(maximizeButton, Color3.fromRGB(105, 238, 122), Color3.fromRGB(22, 155, 47), 90)
+
+    for _, b in ipairs({closeButton, minimizeButton, maximizeButton}) do
+        stroke(b, Color3.fromRGB(255,255,255), 0.72, 1)
+    end
 
     self.CloseButton = closeButton
     self.MinimizeButton = minimizeButton
@@ -421,7 +445,7 @@ function UI:CreateWindow(config)
     end
 
     root.BackgroundTransparency = 1
-    tween(root, 0.18, {BackgroundTransparency = 0.12})
+    tween(root, 0.18, {BackgroundTransparency = 0.18})
 
     return self
 end
@@ -448,8 +472,8 @@ function UI:Minimize()
     open.AnchorPoint = Vector2.new(0.5, 0)
     open.Position = UDim2.fromScale(0.5, 0.045)
     open.Size = UDim2.fromOffset(122, 38)
-    open.BackgroundColor3 = Color3.fromRGB(5, 7, 9)
-    open.BackgroundTransparency = 0.04
+    open.BackgroundColor3 = Color3.fromRGB(3, 4, 6)
+    open.BackgroundTransparency = 0.38
     open.BorderSizePixel = 0
     open.AutoButtonColor = false
     open.Text = "Open"
@@ -458,7 +482,8 @@ function UI:Minimize()
     open.Font = Enum.Font.GothamSemibold
     open.Parent = gui
     corner(open, 18)
-    stroke(open, Theme.Green, 0.25, 1)
+    stroke(open, Color3.fromRGB(110, 255, 135), 0.22, 1)
+    addGradient(open, Color3.fromRGB(28, 32, 38), Color3.fromRGB(2, 4, 6), 90)
     self.MinimizedButton = open
     makeDraggable(open, open)
 
@@ -580,6 +605,12 @@ function UI:AddTab(config)
     icon.Size = UDim2.fromOffset(27, 27)
     icon.Parent = button
     corner(icon, 7)
+    addGradient(
+        icon,
+        tab.Accent:Lerp(Color3.fromRGB(255,255,255), 0.12),
+        tab.Accent:Lerp(Color3.fromRGB(0,0,0), 0.20),
+        135
+    )
     tab.Icon = icon
 
     local tabLabel = text(
@@ -696,7 +727,7 @@ function UI:SelectTab(tab)
 
         if active then
             tween(item.Button, 0.14, {
-                BackgroundTransparency = 0.14,
+                BackgroundTransparency = 0.10,
             })
             tween(item.Label, 0.14, {
                 TextColor3 = Theme.Text,
