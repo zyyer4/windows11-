@@ -228,7 +228,7 @@ function GlassUI.new(opts)
 		Position = UDim2.new(0.5, -360, 0.5, -240),
 		AnchorPoint = Vector2.new(0, 0),
 		BackgroundColor3 = COLOR.windowBg,
-		BackgroundTransparency = 0.35, -- <- the "glass": see through to the blurred world
+		BackgroundTransparency = 0.16, -- readable glass; the world is still blurred behind it
 		BorderSizePixel = 0,
 		ClipsDescendants = true,
 	}, {
@@ -237,18 +237,18 @@ function GlassUI.new(opts)
 		gradient(Color3.fromRGB(70, 55, 110), Color3.fromRGB(20, 70, 95), 160),
 	})
 	window.UIGradient.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.55),
-		NumberSequenceKeypoint.new(1, 0.85),
+		NumberSequenceKeypoint.new(0, 0.18),
+		NumberSequenceKeypoint.new(1, 0.52),
 	})
 
 	local titlebar = new("Frame", {
 		Name = "Titlebar",
 		Size = UDim2.new(1, 0, 0, 40),
 		BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-		BackgroundTransparency = 0.94,
+		BackgroundTransparency = 0.78,
 		BorderSizePixel = 0,
 	})
-	new("UIStroke", { Color = COLOR.stroke, Transparency = 0.93, Thickness = 1 }).Parent = titlebar
+	new("UIStroke", { Color = COLOR.stroke, Transparency = 0.78, Thickness = 1 }).Parent = titlebar
 	titlebar.Parent = window
 
 	-- traffic light dots: red = close, amber = minimize, green = maximize
@@ -314,7 +314,7 @@ function GlassUI.new(opts)
 		Name = "Sidebar",
 		Size = UDim2.new(0, 190, 1, 0),
 		BackgroundColor3 = COLOR.sidebarBg,
-		BackgroundTransparency = 0.55,
+		BackgroundTransparency = 0.20,
 		BorderSizePixel = 0,
 	}, {
 		new("UIStroke", { Color = COLOR.stroke, Transparency = 0.93, Thickness = 1 }),
@@ -351,6 +351,7 @@ function GlassUI.new(opts)
 	self.sidebar = sidebar
 	self.content = content
 	self._navCount = 0
+	self._navItems = {}
 	self._statGrid = nil
 	self._baseSize = opts.size or UDim2.fromOffset(720, 480)
 	self._basePos = window.Position
@@ -358,7 +359,7 @@ function GlassUI.new(opts)
 	self._maximized = false
 	self._gradient = window:FindFirstChildOfClass("UIGradient")
 	self._themeId = "violet"
-	self._opacity = 0.65
+	self._opacity = 0.84
 	self._configName = opts.configName or opts.title or "GlassUI"
 
 	window.Parent = screenGui
@@ -372,7 +373,7 @@ function GlassUI.new(opts)
 	window.Size = UDim2.new(target.X.Scale, target.X.Offset * 0.85, target.Y.Scale, target.Y.Offset * 0.85)
 	window.Position = self._basePos + UDim2.fromOffset(target.X.Offset * 0.075, target.Y.Offset * 0.075)
 	window.BackgroundTransparency = 1
-	tween(window, { Size = target, Position = self._basePos, BackgroundTransparency = 0.35 }, 0.35, Enum.EasingStyle.Back)
+	tween(window, { Size = target, Position = self._basePos, BackgroundTransparency = 0.16 }, 0.35, Enum.EasingStyle.Back)
 
 	-- a small pill shown after closing, to bring the window back
 	local reopen = new("TextButton", {
@@ -408,7 +409,7 @@ function GlassUI.new(opts)
 		self._minimized = false
 		self._maximized = false
 		body.Visible = true
-		tween(window, { Size = self._baseSize, BackgroundTransparency = 0.35 }, 0.3, Enum.EasingStyle.Back)
+		tween(window, { Size = self._baseSize, BackgroundTransparency = 0.16 }, 0.3, Enum.EasingStyle.Back)
 	end)
 
 	dots[2].MouseButton1Click:Connect(function() -- amber: minimize
@@ -516,7 +517,7 @@ local function buildSlider(parent, opts)
 		Size = UDim2.new(1, 0, 0, 6),
 		Position = UDim2.new(0, 0, 0, 24),
 		BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-		BackgroundTransparency = 0.85,
+		BackgroundTransparency = 0.72,
 		BorderSizePixel = 0,
 	}, { corner(3) })
 
@@ -599,7 +600,7 @@ function GlassUI:BuildThemesPage(container)
 			Text = "",
 			AutoButtonColor = false,
 			BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-			BackgroundTransparency = 0.95,
+			BackgroundTransparency = 0.88,
 			BorderSizePixel = 0,
 			LayoutOrder = i,
 		}, { corner(9), stroke(0.9, 1) })
@@ -760,7 +761,7 @@ function GlassUI:BuildSettingsPage(container)
 		end
 	end)
 	makeBtn("Reset").MouseButton1Click:Connect(function()
-		self_:ApplySettingsSnapshot({ theme = "violet", opacity = 0.65, reduceMotion = false })
+		self_:ApplySettingsSnapshot({ theme = "violet", opacity = 0.84, reduceMotion = false })
 		opacityValue.Text = math.floor(self_._opacity * 100) .. "%"
 		status.Text = "Reset to defaults."
 	end)
@@ -779,28 +780,46 @@ function GlassUI:AddNavItem(opts)
 		Text = "",
 		Size = UDim2.new(1, 0, 0, 32),
 		BackgroundColor3 = opts.active and iconColor or Color3.fromRGB(255, 255, 255),
-		BackgroundTransparency = opts.active and 0.85 or 1,
+		BackgroundTransparency = opts.active and 0.72 or 1,
 		AutoButtonColor = false,
 		BorderSizePixel = 0,
 		LayoutOrder = self._navCount,
 	}, { corner(7) })
+
 	local activeGradient = gradient(lighten(iconColor, 0.1), Color3.fromRGB(18, 18, 20), 115)
 	activeGradient.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.3),
-		NumberSequenceKeypoint.new(1, 0.92),
+		NumberSequenceKeypoint.new(0, 0.16),
+		NumberSequenceKeypoint.new(1, 0.86),
 	})
 	activeGradient.Enabled = opts.active == true
 	activeGradient.Parent = btn
 
-	local icon = new("Frame", {
-		Size = UDim2.fromOffset(22, 22),
-		Position = UDim2.new(0, 6, 0.5, -11),
+	-- The icon is a real TextLabel now. SourceSans has broader Unicode coverage
+	-- than the previous blank Frame, so the supplied emoji/symbol is actually shown.
+	local iconBox = new("Frame", {
+		Size = UDim2.fromOffset(24, 24),
+		Position = UDim2.new(0, 5, 0.5, -12),
 		BackgroundColor3 = iconColor,
+		BackgroundTransparency = 0.12,
 		BorderSizePixel = 0,
 	}, { corner(6), gradient(lighten(iconColor, 0.3), darken(iconColor, 0.12), 135) })
-	icon.Parent = btn
+	iconBox.Parent = btn
 
-	new("TextLabel", {
+	local icon = new("TextLabel", {
+		Text = opts.emoji or opts.icon or "•",
+		Font = Enum.Font.SourceSansBold,
+		TextSize = 16,
+		TextColor3 = Color3.fromRGB(255, 255, 255),
+		TextStrokeTransparency = 0.75,
+		TextXAlignment = Enum.TextXAlignment.Center,
+		TextYAlignment = Enum.TextYAlignment.Center,
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		ZIndex = 3,
+	}, {})
+	icon.Parent = iconBox
+
+	local label = new("TextLabel", {
 		Text = opts.label or "Item",
 		Font = Enum.Font.GothamMedium,
 		TextSize = 13,
@@ -809,17 +828,27 @@ function GlassUI:AddNavItem(opts)
 		Size = UDim2.new(1, -40, 1, 0),
 		Position = UDim2.new(0, 36, 0, 0),
 		BackgroundTransparency = 1,
-	}).Parent = btn
+	}, {})
+	label.Parent = btn
+
+	self._navItems[opts.id or tostring(self._navCount)] = {
+		button = btn,
+		icon = iconBox,
+		label = label,
+		gradient = activeGradient,
+		color = iconColor,
+		active = opts.active == true,
+	}
 
 	btn.MouseEnter:Connect(function()
-		tween(icon, { Size = UDim2.fromOffset(24, 24), Position = UDim2.new(0, 5, 0.5, -12) }, 0.15, Enum.EasingStyle.Back)
-		if not opts.active then
-			tween(btn, { BackgroundTransparency = 0.95 }, 0.12)
+		tween(iconBox, { Size = UDim2.fromOffset(26, 26), Position = UDim2.new(0, 4, 0.5, -13) }, 0.15, Enum.EasingStyle.Back)
+		if not (self._navItems[opts.id] and self._navItems[opts.id].active) then
+			tween(btn, { BackgroundTransparency = 0.94 }, 0.12)
 		end
 	end)
 	btn.MouseLeave:Connect(function()
-		tween(icon, { Size = UDim2.fromOffset(22, 22), Position = UDim2.new(0, 6, 0.5, -11) }, 0.15)
-		if not opts.active then
+		tween(iconBox, { Size = UDim2.fromOffset(24, 24), Position = UDim2.new(0, 5, 0.5, -12) }, 0.15)
+		if not (self._navItems[opts.id] and self._navItems[opts.id].active) then
 			tween(btn, { BackgroundTransparency = 1 }, 0.12)
 		end
 	end)
@@ -861,7 +890,7 @@ function GlassUI:AddStat(opts)
 		BorderSizePixel = 0,
 	}, {
 		corner(9),
-		stroke(0.93, 1),
+		stroke(0.82, 1),
 		new("UIPadding", {
 			PaddingTop = UDim.new(0, 10), PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12),
 		}),
@@ -908,7 +937,7 @@ function GlassUI:AddPanel(opts)
 		BackgroundTransparency = 0.95,
 		BorderSizePixel = 0,
 		ClipsDescendants = true,
-	}, { corner(10), stroke(0.93, 1) })
+	}, { corner(10), stroke(0.82, 1) })
 
 	local header = new("TextButton", {
 		Text = "",
@@ -1098,6 +1127,7 @@ function Panel:AddToggleRow(opts)
 end
 
 -- ===================== demo / runner =====================
+
 local window = GlassUI.new({
 	title = "Panel",
 	subtitle = "UI Kit Demo",
@@ -1106,54 +1136,195 @@ local window = GlassUI.new({
 	autoLoad = true,
 })
 
-local function buildOverviewPage()
+local function addPageHeader(title, description)
+	local header = new("Frame", {
+		Size = UDim2.new(1, 0, 0, 46),
+		BackgroundTransparency = 1,
+	})
+	new("TextLabel", {
+		Text = title,
+		Font = Enum.Font.GothamBold,
+		TextSize = 20,
+		TextColor3 = COLOR.text,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Size = UDim2.new(1, 0, 0, 24),
+		BackgroundTransparency = 1,
+	}).Parent = header
+	new("TextLabel", {
+		Text = description,
+		Font = Enum.Font.Gotham,
+		TextSize = 11,
+		TextColor3 = COLOR.textFaint,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Size = UDim2.new(1, 0, 0, 18),
+		Position = UDim2.fromOffset(0, 25),
+		BackgroundTransparency = 1,
+	}).Parent = header
+	header.Parent = window.content
+end
+
+local function buildFarmingPage()
+	addPageHeader("Farming", "Automation controls and farming status")
+	window:AddStat({ label = "Farm status", value = "Ready", accent = true })
+	window:AddStat({ label = "Collected", value = "3,204" })
+	window:AddStat({ label = "Per minute", value = "212" })
+	window:AddStat({ label = "Session time", value = "18m" })
+
+	local panel = window:AddPanel({ title = "Farming controls", open = true })
+	panel:AddToggleRow({ label = "Auto Farm", on = false })
+	panel:AddToggleRow({ label = "Fast Farm", on = false })
+	panel:AddToggleRow({ label = "Collect Drops", on = true })
+
+	local status = window:AddPanel({ title = "Farm status", open = true })
+	status:AddRow({ label = "Current zone", value = "Starter" })
+	status:AddRow({ label = "Target", value = "Nearest" })
+	status:AddRow({ label = "Errors", value = "0", checked = true })
+end
+
+local function buildRebirthPage()
+	addPageHeader("Rebirth", "Rebirth controls and progression")
+	window:AddStat({ label = "Current rebirths", value = "128" })
+	window:AddStat({ label = "Next requirement", value = "250K" })
+	window:AddStat({ label = "Progress", value = "72%", accent = true })
+	window:AddStat({ label = "Auto status", value = "Off" })
+
+	local panel = window:AddPanel({ title = "Rebirth controls", open = true })
+	panel:AddToggleRow({ label = "Auto Rebirth", on = false })
+	panel:AddToggleRow({ label = "Rebirth when ready", on = true })
+	panel:AddRow({ label = "Next rebirth", value = "250K" })
+end
+
+local function buildPetsPage()
+	addPageHeader("Pets", "Pet inventory and equip controls")
+	window:AddStat({ label = "Pets owned", value = "42" })
+	window:AddStat({ label = "Equipped", value = "6" })
+	window:AddStat({ label = "Best rarity", value = "Legendary", accent = true })
+	window:AddStat({ label = "Hatches", value = "1,284" })
+
+	local panel = window:AddPanel({ title = "Pet controls", open = true })
+	panel:AddToggleRow({ label = "Equip Best", on = true })
+	panel:AddToggleRow({ label = "Auto Hatch", on = false })
+	panel:AddToggleRow({ label = "Auto Delete Common", on = false })
+
+	local inventory = window:AddPanel({ title = "Inventory", open = true })
+	inventory:AddRow({ label = "Legendary", value = "4", checked = true })
+	inventory:AddRow({ label = "Epic", value = "12" })
+	inventory:AddRow({ label = "Rare", value = "26" })
+end
+
+local function buildPlayerPage()
+	addPageHeader("Player", "Player information and controls")
+	window:AddStat({ label = "Display name", value = "Player" })
+	window:AddStat({ label = "Health", value = "100 / 100", accent = true })
+	window:AddStat({ label = "Walk speed", value = "16" })
+	window:AddStat({ label = "Jump power", value = "50" })
+
+	local panel = window:AddPanel({ title = "Player options", open = true })
+	panel:AddToggleRow({ label = "Auto Collect", on = false })
+	panel:AddToggleRow({ label = "Keep UI on respawn", on = true })
+	panel:AddRow({ label = "Character", value = "Loaded", checked = true })
+end
+
+local function buildKillingPage()
+	addPageHeader("Killing", "Combat status and tracking")
+	window:AddStat({ label = "Eliminations", value = "318", accent = true })
+	window:AddStat({ label = "Targets", value = "61" })
+	window:AddStat({ label = "Success rate", value = "99.2%" })
+	window:AddStat({ label = "Status", value = "Idle" })
+
+	local panel = window:AddPanel({ title = "Combat controls", open = true })
+	panel:AddToggleRow({ label = "Auto Target", on = false })
+	panel:AddToggleRow({ label = "Track Nearest", on = true })
+	panel:AddToggleRow({ label = "Pause when player is low", on = true })
+end
+
+local function buildStatsPage()
+	addPageHeader("Stats", "Session and performance statistics")
 	window:AddStat({ label = "Active sessions", value = "128" })
 	window:AddStat({ label = "New this week", value = "+42", accent = true })
 	window:AddStat({ label = "Avg. response", value = "212ms" })
 	window:AddStat({ label = "Uptime", value = "99.98%" })
 
-	local sessionPanel = window:AddPanel({ title = "Gained this session", open = true })
-	sessionPanel:AddRow({ label = "Requests handled", value = "3,204", checked = true })
-	sessionPanel:AddRow({ label = "Errors", value = "0", checked = true })
-	sessionPanel:AddRow({ label = "Peak concurrency", value = "61" })
+	local panel = window:AddPanel({ title = "Session details", open = true })
+	panel:AddRow({ label = "Requests handled", value = "3,204", checked = true })
+	panel:AddRow({ label = "Errors", value = "0", checked = true })
+	panel:AddRow({ label = "Peak concurrency", value = "61" })
 
 	local notifPanel = window:AddPanel({ title = "Notifications", open = false })
 	notifPanel:AddToggleRow({ label = "Email digests", on = true })
 	notifPanel:AddToggleRow({ label = "Desktop alerts", on = false })
 end
 
+local function buildAdminPage()
+	addPageHeader("Admin", "Administrative options")
+	window:AddStat({ label = "Access", value = "Enabled", accent = true })
+	window:AddStat({ label = "Role", value = "Admin" })
+	window:AddStat({ label = "Commands", value = "24" })
+	window:AddStat({ label = "Audit entries", value = "1,024" })
+
+	local panel = window:AddPanel({ title = "Admin options", open = true })
+	panel:AddToggleRow({ label = "Show admin notifications", on = true })
+	panel:AddToggleRow({ label = "Confirm destructive actions", on = true })
+	panel:AddToggleRow({ label = "Log actions", on = true })
+end
+
+local function buildPerfPage()
+	addPageHeader("Perf", "Performance and rendering information")
+	window:AddStat({ label = "FPS", value = "60", accent = true })
+	window:AddStat({ label = "Ping", value = "42ms" })
+	window:AddStat({ label = "Memory", value = "512 MB" })
+	window:AddStat({ label = "Render time", value = "4.2ms" })
+
+	local panel = window:AddPanel({ title = "Performance options", open = true })
+	panel:AddToggleRow({ label = "Reduce motion", on = GlassUI._reduceMotion })
+	panel:AddToggleRow({ label = "UI blur", on = true })
+	panel:AddToggleRow({ label = "Show performance overlay", on = false })
+end
+
 local NAV = {
-	{ id = "farming", label = "Farming", color = "green" },
-	{ id = "rebirth", label = "Rebirth", color = "amber" },
-	{ id = "pets", label = "Pets", color = "purple" },
-	{ id = "player", label = "Player", color = "blue" },
-	{ id = "killing", label = "Killing", color = "red" },
-	{ id = "stats", label = "Stats", color = "green" },
-	{ id = "admin", label = "Admin", color = "gray" },
-	{ id = "perf", label = "Perf", color = "blue" },
-	{ id = "themes", label = "Themes", color = "purple" },
-	{ id = "misc", label = "Misc", color = "gray" },
+	{ id = "farming", label = "Farming", emoji = "🌾", color = "green" },
+	{ id = "rebirth", label = "Rebirth", emoji = "🔄", color = "amber" },
+	{ id = "pets", label = "Pets", emoji = "🐾", color = "purple" },
+	{ id = "player", label = "Player", emoji = "👤", color = "blue" },
+	{ id = "killing", label = "Killing", emoji = "⚔", color = "red" },
+	{ id = "stats", label = "Stats", emoji = "📊", color = "green" },
+	{ id = "admin", label = "Admin", emoji = "🛡", color = "gray" },
+	{ id = "perf", label = "Perf", emoji = "⚡", color = "blue" },
+	{ id = "themes", label = "Themes", emoji = "🎨", color = "purple" },
+	{ id = "misc", label = "Misc", emoji = "⚙", color = "gray" },
+}
+
+local pages = {
+	farming = buildFarmingPage,
+	rebirth = buildRebirthPage,
+	pets = buildPetsPage,
+	player = buildPlayerPage,
+	killing = buildKillingPage,
+	stats = buildStatsPage,
+	admin = buildAdminPage,
+	perf = buildPerfPage,
+	themes = function() window:BuildThemesPage() end,
+	misc = function() window:BuildSettingsPage() end,
 }
 
 for i, item in ipairs(NAV) do
 	window:AddNavItem({
+		id = item.id,
 		label = item.label,
+		emoji = item.emoji,
 		color = item.color,
 		active = i == 1,
 		onClick = function()
+			window:SetActiveNav(item.id)
 			window:ClearContent()
-			if item.id == "themes" then
-				window:BuildThemesPage()
-			elseif item.id == "misc" then
-				window:BuildSettingsPage()
-			else
-				buildOverviewPage()
-			end
+			local page = pages[item.id]
+			if page then page() end
 		end,
 	})
 end
 
-buildOverviewPage()
-
+window:SetActiveNav("farming")
+window:ClearContent()
+pages.farming()
 
 return GlassUI
