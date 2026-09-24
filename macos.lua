@@ -452,6 +452,19 @@ function Tab:AddToggle(text, default, callback)
     }
 end
 
+function Tab:AddSwitch(text, callback)
+    local control = self:AddToggle(text, false, callback)
+    return {
+        Instance = control.Instance,
+        Set = function(_, value)
+            control:SetValue(value)
+        end,
+        Get = function()
+            return control:GetValue()
+        end,
+    }
+end
+
 function Tab:AddSection(text)
     local section = Instance.new("Frame")
     section.Name = "Section"
