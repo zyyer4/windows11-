@@ -2370,9 +2370,6 @@ function FeatureWindow:AddTab(rawName)
     local name = tostring(rawName or "Tab"):gsub("^%s+", ""):gsub("%s+$", "")
     local id = "feature_" .. tostring(#self._tabs + 1) .. "_" .. name:gsub("%W", "_")
     local navButton, page = Window:AddNavItem({id=id,label=name,color=tabColors[name] or "blue",icon=tabIcons[name] or "•",active=(#self._tabs==0)})
-    if name ~= "Main" and name ~= "Fast Farm" then
-        navButton.Visible = false
-    end
     local tab={Name=name,Page=page,Features={}}
     function tab:AddLabel(text) local x=addLabel(page,text); return x end
     function tab:AddButton(n,cb) local x=addButton(page,n,cb); local f={Name=n,Type="Button",Button=x,Callback=cb}; function f:Run(...) if self.Callback then return self.Callback(...) end end; tab.Features[n]=f; Johnny.Features[n]=f; return f end
