@@ -198,8 +198,9 @@ function Window:SetTheme(name)
 
     if self.AccentGradient then
         self.AccentGradient.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0, theme.accent),
-            ColorSequenceKeypoint.new(1, theme.accent2),
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(27, 32, 40)),
+            ColorSequenceKeypoint.new(0.5, Color3.fromRGB(15, 19, 25)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(8, 10, 13)),
         })
     end
 
@@ -317,6 +318,21 @@ function Tab:_refresh()
 
     self.Nav.BackgroundColor3 = theme.accent
     self.Nav.BackgroundTransparency = selected and 0.72 or 1
+    if self.NavGradient then
+        self.NavGradient.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, theme.accent),
+            ColorSequenceKeypoint.new(1, theme.accent2),
+        })
+        self.NavGradient.Transparency = selected
+            and NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 0.02),
+                NumberSequenceKeypoint.new(1, 0.52),
+            })
+            or NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 1),
+                NumberSequenceKeypoint.new(1, 1),
+            })
+    end
     self.Nav.TextColor3 = selected
         and Color3.fromRGB(248,248,250)
         or Color3.fromRGB(155,155,163)
@@ -360,6 +376,15 @@ function Tab:AddButton(text, callback)
     button.Parent = self.Content
     corner(button, 8)
     addPadding(button, 12, 12)
+
+    local buttonGradient = Instance.new("UIGradient")
+    buttonGradient.Rotation = 0
+    buttonGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(38, 45, 55)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(25, 30, 38)),
+    })
+    buttonGradient.Parent = button
+    button._MacOSGradient = buttonGradient
 
     local outline = addStroke(button, Color3.fromRGB(255,255,255), 0.90, 1)
 
@@ -537,6 +562,19 @@ function Window:AddTab(name)
     corner(nav, 7)
     addPadding(nav, 12, 8)
 
+    local navGradient = Instance.new("UIGradient")
+    navGradient.Rotation = 0
+    navGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, self.Theme.accent),
+        ColorSequenceKeypoint.new(1, self.Theme.accent2),
+    })
+    navGradient.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.18),
+        NumberSequenceKeypoint.new(1, 0.55),
+    })
+    navGradient.Parent = nav
+    tab.NavGradient = navGradient
+
     local page = Instance.new("ScrollingFrame")
     page.Name = tabName .. "Page"
     page.Size = UDim2.new(1, 0, 1, 0)
@@ -631,8 +669,8 @@ function MacOSKit:AddWindow(title, config)
     root.AnchorPoint = Vector2.new(0.5, 0.5)
     root.Position = UDim2.fromScale(0.5, 0.5)
     root.Size = UDim2.fromOffset(width, height)
-    root.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
-    root.BackgroundTransparency = 0.02
+    root.BackgroundColor3 = Color3.fromRGB(13, 16, 21)
+    root.BackgroundTransparency = 0.08
     root.BorderSizePixel = 0
     root.Visible = true
     root.Active = true
@@ -640,14 +678,14 @@ function MacOSKit:AddWindow(title, config)
     root.ZIndex = 1
     root.Parent = gui
     corner(root, 14)
-    addStroke(root, Color3.fromRGB(110, 110, 125), 0.55, 1)
+    addStroke(root, Color3.fromRGB(72, 80, 94), 0.42, 1)
 
     local gradient = Instance.new("UIGradient")
     gradient.Rotation = 145
     gradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(22, 22, 27)),
-        ColorSequenceKeypoint.new(0.52, Color3.fromRGB(12, 12, 16)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(7, 7, 9)),
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(27, 32, 40)),
+        ColorSequenceKeypoint.new(0.50, Color3.fromRGB(15, 19, 25)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(8, 10, 13)),
     })
     gradient.Transparency = NumberSequence.new({
         NumberSequenceKeypoint.new(0, 0.05),
@@ -659,10 +697,20 @@ function MacOSKit:AddWindow(title, config)
     local titleBar = Instance.new("Frame")
     titleBar.Name = "TitleBar"
     titleBar.Size = UDim2.new(1,0,0,48)
-    titleBar.BackgroundTransparency = 1
+    titleBar.BackgroundColor3 = Color3.fromRGB(19, 23, 29)
+    titleBar.BackgroundTransparency = 0.08
     titleBar.BorderSizePixel = 0
     titleBar.ZIndex = 5
     titleBar.Parent = root
+
+    local titleGradient = Instance.new("UIGradient")
+    titleGradient.Rotation = 90
+    titleGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(31, 37, 46)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(16, 20, 25)),
+    })
+    titleGradient.Parent = titleBar
+
     makeDraggable(titleBar, root)
 
     local dots = {
@@ -733,8 +781,8 @@ function MacOSKit:AddWindow(title, config)
     local sidebar = Instance.new("Frame")
     sidebar.Name = "Sidebar"
     sidebar.Size = UDim2.new(0, 224, 1, 0)
-    sidebar.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
-    sidebar.BackgroundTransparency = 0.03
+    sidebar.BackgroundColor3 = Color3.fromRGB(12, 15, 19)
+    sidebar.BackgroundTransparency = 0.10
     sidebar.BorderSizePixel = 0
     sidebar.ZIndex = 3
     sidebar.Parent = body
@@ -743,8 +791,8 @@ function MacOSKit:AddWindow(title, config)
     search.Name = "Search"
     search.Position = UDim2.fromOffset(9,11)
     search.Size = UDim2.new(1,-18,0,31)
-    search.BackgroundColor3 = Color3.fromRGB(21, 26, 32)
-    search.BackgroundTransparency = 0.08
+    search.BackgroundColor3 = Color3.fromRGB(18, 22, 28)
+    search.BackgroundTransparency = 0.04
     search.BorderSizePixel = 0
     search.Text = ""
     search.PlaceholderText = "Search tabs..."
@@ -791,8 +839,8 @@ function MacOSKit:AddWindow(title, config)
     pages.Name = "Pages"
     pages.Position = UDim2.fromOffset(225,0)
     pages.Size = UDim2.new(1,-225,1,0)
-    pages.BackgroundColor3 = Color3.fromRGB(12, 12, 15)
-    pages.BackgroundTransparency = 0.04
+    pages.BackgroundColor3 = Color3.fromRGB(15, 18, 23)
+    pages.BackgroundTransparency = 0.10
     pages.BorderSizePixel = 0
     pages.ZIndex = 3
     pages.Parent = body
@@ -811,8 +859,8 @@ function MacOSKit:AddWindow(title, config)
         RestorePosition = root.Position,
         Minimized = false,
         Maximized = false,
-        ThemeName = "Violet",
-        Theme = Themes.Violet,
+        ThemeName = config.theme or "Violet",
+        Theme = Themes[config.theme] or Themes.Violet,
         AccentGradient = gradient,
         ThemeButtons = {},
     }, Window)
