@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Panel — macOS-style UI Kit</title>
+<style>
+  :root{
+    --bg-window: rgba(18,18,20,0.52);
+    --bg-sidebar: rgba(10,10,12,0.4);
+    --bg-panel: rgba(255,255,255,0.045);
+    --bg-panel-raised: rgba(255,255,255,0.08);
+    --border: rgba(255,255,255,0.1);
+    --border-soft: rgba(255,255,255,0.07);
+    --text-primary: #f2f2f4;
+    --text-secondary: #98989e;
+    --text-tertiary: #636368;
+    --accent-blue: #3a8fff;
+    --accent-green: #33d17a;
+    --accent-amber: #f5a623;
+    --accent-red: #ff5f57;
+    --radius-window: 14px;
+    --radius-panel: 10px;
+    --radius-chip: 7px;
+    --ease: cubic-bezier(.4,0,.2,1);
+    --ease-spring: cubic-bezier(.34,1.56,.64,1);
+    --window-alpha: 0.52;
+    --tint-a: rgba(90,60,180,0.14);
+    --tint-b: rgba(20,90,160,0.1);
+    --blob1: #6a4fd8;
+    --blob2: #1f7ae0;
+    --blob3: #22b56b;
+    font-size: 15px;
+  }
+  :root[data-theme="midnight"]{
+    --tint-a: rgba(40,80,210,0.16); --tint-b: rgba(10,40,120,0.12);
+    --blob1: #2f5fe0; --blob2: #1fb0e0; --blob3: #3a3fae;
+  }
+  :root[data-theme="emerald"]{
+    --tint-a: rgba(25,170,120,0.16); --tint-b: rgba(10,90,70,0.12);
+    --blob1: #22c58a; --blob2: #1fae6a; --blob3: #8be04a;
+  }
+  :root[data-theme="crimson"]{
+    --tint-a: rgba(210,60,60,0.16); --tint-b: rgba(150,40,20,0.12);
+    --blob1: #ff5f57; --blob2: #e0392f; --blob3: #ff9a3c;
+  }
+  :root[data-theme="mono"]{
+    --tint-a: rgba(255,255,255,0.08); --tint-b: rgba(255,255,255,0.03);
+    --blob1: #9a9aa0; --blob2: #5f5f66; --blob3: #3a3a3f;
+  }
+  :root[data-reduce-motion="true"] *{
+    animation-duration: .001s !important;
+    transition-duration: .001s !important;
+  }
+  html,body{height:100%;}
+  *{box-sizing:border-box;}
+  body{
+    position:relative;
+    margin:0;
+    min-height:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background: #0a0a0b;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Helvetica Neue", Arial, sans-serif;
+    color: var(--text-primary);
+    padding: 32px 16px;
+    padding-top: max(32px, env(safe-area-inset-top, 0px));
+    padding-bottom: max(32px, env(safe-area-inset-bottom, 0px));
+    overflow:hidden;
+  }
+  /* soft color blobs the glass window blurs/refracts */
+  .kit-blob{
+    position:fixed; border-radius:50%; filter: blur(10px); z-index:0; opacity:0.55;
+  }
+  .kit-blob.b1{ width:520px; height:520px; top:-160px; left:-120px; background: radial-gradient(circle,var(--blob1),transparent 70%); transition: background .4s ease; }
+  .kit-blob.b2{ width:480px; height:480px; bottom:-180px; right:-140px; background: radial-gradient(circle,var(--blob2),transparent 70%); transition: background .4s ease; }
+  .kit-blob.b3{ width:360px; height:360px; bottom:10%; left:8%; background: radial-gradient(circle,var(--blob3),transparent 70%); opacity:0.35; transition: background .4s ease; }
+
+  /* ---------- Window chrome ---------- */
+  .kit-window{
+    position:relative; z-index:1;
+    width: min(960px, 100%);
+    height: min(700px, 88vh);
+    max-height: calc(100vh - 32px);
+    background:
+      linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0) 40%),
+      linear-gradient(200deg, var(--tint-a), var(--tint-b) 55%, rgba(18,18,20,0.5) 100%);
+    background-color: rgba(18,18,20, var(--window-alpha));
+    -webkit-backdrop-filter: blur(38px) saturate(160%);
+    backdrop-filter: blur(38px) saturate(160%);
+    border-radius: var(--radius-window);
+    border: 1px solid rgba(255,255,255,0.12);
+    box-shadow: 0 30px 90px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.08) inset;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transform-origin: center center;
+    animation: kitWindowIn .55s var(--ease-spring) both;
+    transition: width .38s var(--ease), height .38s var(--ease), border-radius .3s var(--ease), opacity .3s var(--ease), transform .3s var(--ease);
+  }
+  @keyframes kitWindowIn{
+    from{ opacity:0; transform: scale(.9) translateY(14px); filter: blur(6px); }
+    to{ opacity:1; transform: scale(1) translateY(0); filter: blur(0); }
+  }
+  .kit-window::before{
+    content:"";
+    position:absolute; inset:0; pointer-events:none; z-index:5;
+    border-radius: inherit;
+    background: linear-gradient(115deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0) 18%);
+  }
+  .kit-window.kit-minimized{
+    height: 46px !important;
+    border-radius: 23px;
+  }
+  .kit-window.kit-minimized .kit-body{ opacity:0; pointer-events:none; transition: opacity .15s ease; }
+  .kit-window.kit-closing{
+    opacity:0; transform: scale(.85) translateY(10px); pointer-events:none;
+  }
+  .kit-window.kit-maximized{
+    width: 96vw !important; height: 92vh !important;
+  }
+  .kit-reopen{
+    position:fixed; z-index:2; bottom:28px; left:50%; transform:translateX(-50%);
+    display:none; align-items:center; gap:8px;
+    padding:10px 18px; border-radius:999px; cursor:pointer;
+    background: linear-gradient(135deg, rgba(58,143,255,0.9), rgba(122,90,230,0.9));
+    color:#fff; font-size:13px; font-weight:600;
+    box-shadow: 0 10px 30px rgba(58,100,255,0.35);
+    border:1px solid rgba(255,255,255,0.2);
+    animation: kitWindowIn .4s var(--ease-spring) both;
+  }
+  .kit-reopen.show{ display:flex; }
+  .kit-titlebar{
+    height: 46px;
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 14px;
+    background: linear-gradient(to bottom, rgba(255,255,255,0.07), rgba(255,255,255,0.01));
+    border-bottom: 1px solid var(--border-soft);
+    -webkit-app-region: drag;
+    position:relative; z-index:6;
+  }
+  .kit-dots{ display:flex; gap:8px; }
+  .kit-dot{
+    width:12px; height:12px; border-radius:50%; position:relative;
+    cursor:pointer; border:none; padding:0;
+    transition: transform .12s var(--ease), filter .12s var(--ease);
+  }
+  .kit-dot:hover{ transform: scale(1.15); filter: brightness(1.15); }
+  .kit-dot:active{ transform: scale(.9); }
+  .kit-dot.red{ background: radial-gradient(circle at 35% 30%, #ff9187, var(--accent-red) 65%); }
+  .kit-dot.amber{ background: radial-gradient(circle at 35% 30%, #ffd685, var(--accent-amber) 65%); }
+  .kit-dot.green{ background: radial-gradient(circle at 35% 30%, #7bf0a0, var(--accent-green) 65%); }
+  .kit-dot::after{
+    content:"";
+    position:absolute; inset:0; border-radius:50%;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15);
+  }
+  .kit-titletext{
+    display:flex; flex-direction:column; margin-left:4px; line-height:1.2;
+  }
+  .kit-titletext .name{ font-size:13px; font-weight:600; color:var(--text-primary); }
+  .kit-titletext .sub{ font-size:11px; color:var(--text-tertiary); }
+  .kit-titlebar-spacer{ flex:1; }
+  .kit-titlebar-icon{
+    width:26px; height:26px; border-radius:7px;
+    display:flex; align-items:center; justify-content:center;
+    color:var(--text-secondary);
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border-soft);
+    cursor:pointer;
+    transition: transform .3s var(--ease), background .15s ease, color .15s ease;
+  }
+  .kit-titlebar-icon:hover{ background: rgba(255,255,255,0.09); color: var(--text-primary); transform: rotate(45deg); }
+
+  /* ---------- Body: sidebar + content ---------- */
+  .kit-body{ flex:1; display:flex; min-height:0; }
+
+  .kit-sidebar{
+    width: 210px;
+    flex: none;
+    background: var(--bg-sidebar);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    border-right: 1px solid var(--border-soft);
+    display:flex; flex-direction:column;
+    min-height:0;
+    padding: 12px 8px;
+    gap: 4px;
+    overflow-y:auto;
+  }
+  .kit-search{
+    display:flex; align-items:center; gap:8px;
+    background: rgba(255,255,255,0.05);
+    border:1px solid var(--border-soft);
+    border-radius: var(--radius-chip);
+    padding: 7px 10px;
+    margin-bottom: 10px;
+    color: var(--text-tertiary);
+    font-size: 13px;
+  }
+  .kit-search svg{ flex:none; opacity:0.7; }
+
+  .kit-navitem{
+    pointer-events:auto;
+    display:flex; align-items:center; gap:10px;
+    padding: 7px 8px;
+    border-radius: var(--radius-chip);
+    color: var(--text-secondary);
+    font-size: 13.5px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid transparent;
+    user-select:none;
+    transition: background .18s var(--ease), color .12s ease, transform .18s var(--ease), border-color .18s ease;
+  }
+  .kit-navitem:hover{ background: rgba(255,255,255,0.05); color: var(--text-primary); transform: translateX(2px); }
+  .kit-navitem:active{ transform: translateX(2px) scale(.98); }
+  .kit-navitem .kit-navicon{ transition: transform .18s var(--ease-spring); }
+  .kit-navitem:hover .kit-navicon{ transform: scale(1.08) rotate(-4deg); }
+  .kit-navitem.active{
+    color: var(--text-primary);
+    border-color: rgba(255,255,255,0.14);
+  }
+  .kit-navitem.active.accent-blue{ background: linear-gradient(120deg, rgba(58,143,255,.24), rgba(58,143,255,.05)); }
+  .kit-navitem.active.accent-green{ background: linear-gradient(120deg, rgba(51,209,122,.24), rgba(51,209,122,.05)); }
+  .kit-navitem.active.accent-purple{ background: linear-gradient(120deg, rgba(169,139,255,.26), rgba(169,139,255,.05)); }
+  .kit-navitem.active.accent-amber{ background: linear-gradient(120deg, rgba(245,166,35,.24), rgba(245,166,35,.05)); }
+  .kit-navitem.active.accent-red{ background: linear-gradient(120deg, rgba(255,95,87,.24), rgba(255,95,87,.05)); }
+  .kit-navitem.active.accent-gray{ background: linear-gradient(120deg, rgba(255,255,255,.14), rgba(255,255,255,.03)); }
+  .kit-navicon{
+    width:24px; height:24px; border-radius:6px; flex:none;
+    display:flex; align-items:center; justify-content:center;
+    color:#fff;
+    box-shadow: 0 2px 6px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.2);
+  }
+  .kit-navicon.blue{ background: linear-gradient(135deg,#4aa3ff,#2f6fe0); }
+  .kit-navicon.green{ background: linear-gradient(135deg,#3fe08a,#22a25e); }
+  .kit-navicon.purple{ background: linear-gradient(135deg,#a98bff,#7b5ce0); }
+  .kit-navicon.amber{ background: linear-gradient(135deg,#ffc24a,#e69a1c); }
+  .kit-navicon.gray{ background: linear-gradient(135deg,#8a8a90,#5f5f66); }
+  .kit-navicon.red{ background: linear-gradient(135deg,#ff6a61,#e0392f); }
+
+  .kit-content{
+    flex:1; min-width:0; min-height:0; overflow-y:auto;
+    padding: 22px 26px 30px;
+  }
+  .kit-content h1{
+    font-size: 15px; font-weight: 700; margin: 0 0 2px;
+    color: var(--text-primary);
+  }
+  .kit-content .kit-meta{
+    font-size: 12.5px; color: var(--text-tertiary); margin: 0 0 20px;
+  }
+
+  /* ---------- Stat row ---------- */
+  .kit-stats-grid{
+    display:grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px,1fr));
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .kit-stat-card{
+    background: linear-gradient(160deg, rgba(255,255,255,0.06), var(--bg-panel) 60%);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-panel);
+    padding: 12px 14px;
+    transition: transform .18s var(--ease), border-color .18s ease, background .18s ease;
+  }
+  .kit-stat-card:hover{
+    transform: translateY(-2px);
+    border-color: rgba(255,255,255,0.16);
+    background: linear-gradient(160deg, rgba(255,255,255,0.09), var(--bg-panel-raised) 60%);
+  }
+  .kit-stat-card .label{
+    font-size: 11.5px; color: var(--text-tertiary); margin-bottom: 6px;
+    display:flex; align-items:center; gap:6px;
+  }
+  .kit-stat-card .value{
+    font-size: 19px; font-weight: 700; color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+  .kit-stat-card .value.accent-green{ color: var(--accent-green); }
+
+  /* ---------- Collapsible panel ---------- */
+  .kit-panel{
+    background: var(--bg-panel);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-panel);
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .kit-panel-header{
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 12px 14px;
+    cursor: pointer;
+    user-select: none;
+    transition: background .15s ease;
+  }
+  .kit-panel-header:hover{ background: rgba(255,255,255,0.03); }
+  .kit-panel-header .title{ font-size:13.5px; font-weight:600; color:var(--text-primary); }
+  .kit-panel-header .chevron{
+    color: var(--text-tertiary);
+    transition: transform .25s var(--ease-spring);
+    flex:none;
+  }
+  .kit-panel.open .chevron{ transform: rotate(180deg); color: var(--text-primary); }
+  .kit-panel-body{
+    max-height:0;
+    overflow:hidden;
+    transition: max-height .3s var(--ease);
+    border-top: 1px solid transparent;
+  }
+  .kit-panel.open .kit-panel-body{
+    max-height: 320px;
+    border-top: 1px solid var(--border-soft);
+  }
+  .kit-panel-body-inner{
+    padding: 12px 14px 14px;
+    animation: kitFadeUp .25s var(--ease) both;
+  }
+  @keyframes kitFadeUp{
+    from{ opacity:0; transform: translateY(-4px); }
+    to{ opacity:1; transform: translateY(0); }
+  }
+
+  .kit-metric-row{
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 7px 0;
+    font-size: 13px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .kit-metric-row:last-child{ border-bottom:none; }
+  .kit-metric-row .k{ color: var(--text-secondary); display:flex; align-items:center; gap:8px; }
+  .kit-metric-row .v{ color: var(--text-primary); font-weight:600; font-variant-numeric: tabular-nums; }
+
+  .kit-check{
+    width:16px; height:16px; border-radius:5px;
+    background: var(--accent-green);
+    display:flex; align-items:center; justify-content:center;
+    flex:none;
+  }
+  .kit-check svg{ width:10px; height:10px; }
+
+  /* ---------- Toggle switch ---------- */
+  .kit-toggle{
+    width:34px; height:20px; border-radius:12px;
+    background: rgba(255,255,255,0.14);
+    position:relative; cursor:pointer; flex:none;
+    transition: background .2s var(--ease);
+  }
+  .kit-toggle.on{ background: linear-gradient(135deg, #3fe08a, #22a25e); box-shadow: 0 0 10px rgba(51,209,122,.4); }
+  .kit-toggle .knob{
+    position:absolute; top:2px; left:2px;
+    width:16px; height:16px; border-radius:50%;
+    background:#fff; box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+    transition: left .22s var(--ease-spring);
+  }
+  .kit-toggle.on .knob{ left:16px; }
+  .kit-toggle:active .knob{ width:19px; }
+
+  /* scrollbars */
+  .kit-sidebar::-webkit-scrollbar, .kit-content::-webkit-scrollbar{ width:8px; }
+  .kit-sidebar::-webkit-scrollbar-thumb, .kit-content::-webkit-scrollbar-thumb{
+    background: rgba(255,255,255,0.12); border-radius: 8px;
+  }
+
+  /* ---------- Theme picker ---------- */
+  .kit-theme-grid{
+    display:grid; grid-template-columns: repeat(auto-fit, minmax(140px,1fr));
+    gap: 10px; margin-bottom: 18px;
+  }
+  .kit-theme-card{
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-panel);
+    padding: 10px;
+    cursor: pointer;
+    background: var(--bg-panel);
+    transition: transform .16s var(--ease), border-color .16s ease;
+  }
+  .kit-theme-card:hover{ transform: translateY(-2px); border-color: rgba(255,255,255,0.16); }
+  .kit-theme-card.selected{ border-color: rgba(255,255,255,0.45); }
+  .kit-theme-swatch{ height:44px; border-radius:8px; margin-bottom:8px; }
+  .kit-theme-row{ display:flex; align-items:center; justify-content:space-between; }
+  .kit-theme-name{ font-size:12.5px; font-weight:600; color:var(--text-primary); }
+  .kit-theme-check{ width:15px; height:15px; border-radius:50%; background:var(--accent-green); display:flex; align-items:center; justify-content:center; opacity:0; transform:scale(.5); transition: opacity .15s ease, transform .15s var(--ease-spring); }
+  .kit-theme-check svg{ width:9px; height:9px; }
+  .kit-theme-card.selected .kit-theme-check{ opacity:1; transform:scale(1); }
+
+  /* ---------- Settings form ---------- */
+  .kit-setting-row{ padding: 12px 0; border-bottom: 1px solid var(--border-soft); }
+  .kit-setting-row:last-of-type{ border-bottom:none; }
+  .kit-setting-label{ display:flex; align-items:center; justify-content:space-between; font-size:13px; color:var(--text-secondary); margin-bottom: 8px; }
+  .kit-setting-label b{ color:var(--text-primary); font-weight:600; }
+  .kit-slider{ width:100%; accent-color:#8a7bff; cursor:pointer; }
+  .kit-btn-row{ display:flex; gap:8px; margin-top:16px; flex-wrap:wrap; }
+  .kit-btn{
+    padding: 9px 14px; border-radius:8px; border:1px solid var(--border-soft);
+    background: rgba(255,255,255,0.05); color:var(--text-primary);
+    font-size:12.5px; font-weight:600; cursor:pointer; flex:1;
+    transition: background .15s ease, transform .12s var(--ease);
+  }
+  .kit-btn:hover{ background: rgba(255,255,255,0.1); }
+  .kit-btn:active{ transform: scale(.96); }
+  .kit-btn.primary{ background: linear-gradient(135deg,#4aa3ff,#2f6fe0); border-color:transparent; }
+  .kit-settings-status{ font-size:11.5px; color:var(--text-tertiary); margin-top:10px; min-height:14px; }
+</style>
+</head>
+<body>
+<div class="kit-blob b1"></div>
+<div class="kit-blob b2"></div>
+<div class="kit-blob b3"></div>
+
+<div class="kit-window" id="kitWindow">
+  <div class="kit-titlebar">
+    <div class="kit-dots">
+      <button class="kit-dot red" id="dotClose" title="Close" aria-label="Close"></button>
+      <button class="kit-dot amber" id="dotMin" title="Minimize" aria-label="Minimize"></button>
+      <button class="kit-dot green" id="dotMax" title="Maximize" aria-label="Maximize"></button>
+    </div>
+    <div class="kit-titletext">
+      <span class="name">Panel</span>
+      <span class="sub">UI Kit Demo</span>
+    </div>
+    <div class="kit-titlebar-spacer"></div>
+    <div class="kit-titlebar-icon">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </div>
+  </div>
+
+  <div class="kit-body">
+    <nav class="kit-sidebar" id="sidebar">
+      <div class="kit-search">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        Search
+      </div>
+      <!-- nav items injected by JS -->
+    </nav>
+
+    <main class="kit-content">
+      <h1 id="pageTitle">Farming</h1>
+      <p class="kit-meta" id="pageMeta">Live summary</p>
+
+      <div id="pageBody"></div>
+    </main>
+  </div>
+</div>
+
+<div class="kit-reopen" id="kitReopen">
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="4" y="4" width="16" height="16" rx="3"/></svg>
+  Reopen Panel
+</div>
+
+<script>
+/* =========================================================
+   Panel — a tiny macOS-style dark UI component library
+   Everything below is plain functions you can lift into
+   your own project. No framework dependency.
+   ========================================================= */
+const UIKit = {
+
+  icons: {
+    grid: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>`,
+    trend: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 17l6-6 4 4 8-8"/><path d="M17 7h4v4"/></svg>`,
+    users: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
+    bolt: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg>`,
+    gear: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82A1.65 1.65 0 0 0 3 13.09H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+    check: `<svg viewBox="0 0 24 24" fill="none" stroke="#0c1f14" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>`,
+    leaf: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 22v-7"/><path d="M9 8a5 5 0 0 1 5-5c1 3-1 5-4 5"/><path d="M15 15a5 5 0 0 1-5 5c-1-3 1-5 4-5"/></svg>`,
+    refresh: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>`,
+    paw: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="7" cy="10" r="1.8"/><circle cx="12" cy="6.5" r="1.8"/><circle cx="17" cy="10" r="1.8"/><path d="M12 13c-3 0-5.2 2-5.2 4.4 0 2.1 2.1 3.6 5.2 3.6s5.2-1.5 5.2-3.6C17.2 15 15 13 12 13z"/></svg>`,
+    person: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>`,
+    crosshair: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>`,
+    bars: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 20V10"/><path d="M12 20V4"/><path d="M20 20v-7"/></svg>`,
+    pulse: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2-7 4 14 2-7h6"/></svg>`,
+    shield: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4v6c0 5-3.5 9-8 10-4.5-1-8-5-8-10V6l8-4z"/><path d="m9 12 2 2 4-4"/></svg>`,
+    palette: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 0 20c1.1 0 2-.9 2-2 0-.5-.2-1-.5-1.4-.3-.4-.5-.9-.5-1.4 0-1.1.9-2 2-2h2.3c2 0 3.7-1.7 3.7-3.7C21 6.5 17 2 12 2z"/><circle cx="7.5" cy="10.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="11" cy="7" r="1.2" fill="currentColor" stroke="none"/><circle cx="15.5" cy="8.5" r="1.2" fill="currentColor" stroke="none"/></svg>`
+  },
+
+  // Build a sidebar nav item. onSelect receives the item's id.
+  navItem({ id, label, icon = 'grid', color = 'blue', active = false }){
+    const el = document.createElement('div');
+    el.className = `kit-navitem accent-${color}` + (active ? ' active' : '');
+    el.dataset.id = id;
+    el.innerHTML = `
+      <span class="kit-navicon ${color}">${UIKit.icons[icon] || UIKit.icons.grid}</span>
+      <span>${label}</span>`;
+    return el;
+  },
+
+  // A small stat card for a top summary grid.
+  statCard({ label, value, accent = false }){
+    const el = document.createElement('div');
+    el.className = 'kit-stat-card';
+    el.innerHTML = `
+      <div class="label">${label}</div>
+      <div class="value${accent ? ' accent-green' : ''}">${value}</div>`;
+    return el;
+  },
+
+  // A collapsible section. rowsHTML is the inner content markup.
+  panel({ title, open = false, bodyBuilder }){
+    const el = document.createElement('div');
+    el.className = 'kit-panel' + (open ? ' open' : '');
+    el.innerHTML = `
+      <div class="kit-panel-header">
+        <span class="title">${title}</span>
+        <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
+      <div class="kit-panel-body"><div class="kit-panel-body-inner"></div></div>`;
+    const body = el.querySelector('.kit-panel-body-inner');
+    if (bodyBuilder) bodyBuilder(body);
+    el.querySelector('.kit-panel-header').addEventListener('click', () => {
+      el.classList.toggle('open');
+    });
+    return el;
+  },
+
+  // One key/value row inside a panel, optionally with a checkmark or toggle.
+  metricRow({ label, value, checked }){
+    const el = document.createElement('div');
+    el.className = 'kit-metric-row';
+    el.innerHTML = `
+      <span class="k">${checked !== undefined ? `<span class="kit-check">${UIKit.icons.check}</span>` : ''}${label}</span>
+      <span class="v">${value}</span>`;
+    return el;
+  },
+
+  toggle({ on = false, onChange }){
+    const el = document.createElement('div');
+    el.className = 'kit-toggle' + (on ? ' on' : '');
+    el.innerHTML = `<div class="knob"></div>`;
+    el.addEventListener('click', () => {
+      el.classList.toggle('on');
+      if (onChange) onChange(el.classList.contains('on'));
+    });
+    return el;
+  }
+};
+
+/* ---------------- Demo wiring ---------------- */
+
+const NAV = [
+  { id:'farming', label:'Farming', icon:'leaf', color:'green' },
+  { id:'rebirth', label:'Rebirth', icon:'refresh', color:'amber' },
+  { id:'pets', label:'Pets', icon:'paw', color:'purple' },
+  { id:'player', label:'Player', icon:'person', color:'blue' },
+  { id:'killing', label:'Killing', icon:'crosshair', color:'red' },
+  { id:'stats', label:'Stats', icon:'bars', color:'green' },
+  { id:'admin', label:'Admin', icon:'shield', color:'gray' },
+  { id:'perf', label:'Perf', icon:'pulse', color:'blue' },
+  { id:'themes', label:'Themes', icon:'palette', color:'purple' },
+  { id:'misc', label:'Misc', icon:'gear', color:'gray' },
+  { id:'tools', label:'Tools', icon:'grid', color:'blue' },
+  { id:'info', label:'Info', icon:'shield', color:'gray' },
+];
+const PAGE_META = {
+  farming:'Farming controls and automation', rebirth:'Rebirth automation and targets',
+  pets:'Pet and egg controls', player:'Player movement and utilities',
+  killing:'Combat and target controls', stats:'Live player statistics',
+  admin:'Execution dashboard and admin access', perf:'Performance and client information',
+  themes:'Appearance and accent controls', misc:'Preferences, opacity and saved config',
+  tools:'Teleport and utility controls', info:'Script information and cleanup controls'
+};
+const sidebar=document.getElementById('sidebar');
+NAV.forEach((item,i)=>{const el=UIKit.navItem({...item,active:i===0});el.addEventListener('click',()=>selectPage(item.id));sidebar.appendChild(el);});
+function selectPage(id){
+  const item=NAV.find(n=>n.id===id); if(!item)return;
+  document.querySelectorAll('.kit-navitem').forEach(n=>n.classList.toggle('active',n.dataset.id===id));
+  const main=document.querySelector('.kit-content'); main.style.opacity='0'; main.style.transform='translateY(4px)';
+  setTimeout(()=>{document.getElementById('pageTitle').textContent=item.label;document.getElementById('pageMeta').textContent=PAGE_META[id];renderPage(id);main.style.opacity='1';main.style.transform='translateY(0)';},90);
+}
+function actionPanel(host,title,rows){
+  host.appendChild(UIKit.panel({title,open:true,bodyBuilder(body){
+    rows.forEach(r=>{const row=document.createElement('div');row.className='kit-metric-row';
+      const left=document.createElement('span');left.className='k';left.textContent=r.label;row.appendChild(left);
+      if(r.toggle)row.appendChild(UIKit.toggle({on:false,onChange:r.onChange}));
+      else if(r.button){const b=document.createElement('button');b.className='kit-btn';b.textContent=r.button;b.addEventListener('click',r.onClick||(()=>{}));row.appendChild(b);}
+      else{const v=document.createElement('span');v.className='v';v.textContent=r.value||'Ready';row.appendChild(v);}
+      body.appendChild(row);
+    });
+  }}));
+}
+function renderFarming(host){actionPanel(host,'Farming Controls',[{label:'Auto Farm',toggle:true},{label:'Auto Shake',toggle:true},{label:'Auto Size 1',toggle:true},{label:'Auto Egg 60',toggle:true},{label:'Anti AFK',toggle:true}]);actionPanel(host,'Farming Utilities',[{label:'Current status',value:'Idle'},{label:'Automation loops',value:'Enabled'},{label:'Safety cleanup',button:'Stop All'}]);}
+function renderRebirth(host){actionPanel(host,'Rebirth Controls',[{label:'Fast Rebirth',toggle:true},{label:'Target Rebirth',toggle:true},{label:'Infinite Rebirth',toggle:true}]);actionPanel(host,'Rebirth Settings',[{label:'Rebirth interval',value:'Configurable'},{label:'Target',value:'Not set'},{label:'Pet multiplier',value:'Detected from equipped pets'}]);}
+function renderPets(host){actionPanel(host,'Pet Controls',[{label:'Auto Egg',toggle:true},{label:'Auto Equip Best',toggle:true},{label:'Keep Titanium Hydra equipped',toggle:true}]);actionPanel(host,'Pet Information',[{label:'Rebirth pet slots',value:'8+ supported'},{label:'Swift Samurai',value:'x2 rebirths'},{label:'Titanium Hydra',value:'x2 rebirths'}]);}
+function renderPlayer(host){actionPanel(host,'Player Utilities',[{label:'Player position',value:'Live'},{label:'Muscle King teleport',toggle:true},{label:'Position lock',toggle:true}]);actionPanel(host,'Movement',[{label:'Teleport state',value:'Ready'},{label:'RootPart',value:'Detected when character is loaded'}]);}
+function renderKilling(host){actionPanel(host,'Combat Controls',[{label:'Auto Kill',toggle:true},{label:'Target Lock',toggle:true},{label:'Muscle King target',toggle:true}]);actionPanel(host,'Combat Status',[{label:'Target',value:'None'},{label:'Position lock',value:'Ready'}]);}
+function renderStats(host){const grid=document.createElement('div');grid.className='kit-stats-grid';[['Strength','—'],['Durability','—'],['Rebirths','—'],['Player','Loaded']].forEach(([label,value])=>grid.appendChild(UIKit.statCard({label,value})));host.appendChild(grid);actionPanel(host,'Live Stats',[{label:'Strength',value:'Reads current player stat'},{label:'Durability',value:'Reads current player stat'},{label:'Rebirths',value:'Reads current player stat'}]);}
+function renderAdmin(host){actionPanel(host,'Admin Access',[{label:'Authentication',value:'Password protected'},{label:'Execution dashboard',value:'Available after unlock'}]);host.appendChild(UIKit.panel({title:'Global Current Executions',open:true,bodyBuilder(body){const row=document.createElement('div');row.className='kit-metric-row';row.innerHTML='<span class="k">Username / UserId / Game / Server / Version / Public Stats</span><span class="v">0 records</span>';body.appendChild(row);}}));}
+function renderPerf(host){actionPanel(host,'Performance',[{label:'Client status',value:'Running'},{label:'UI animations',value:'Enabled'},{label:'Blur',value:'Enabled'}]);actionPanel(host,'Runtime',[{label:'Render loop',value:'Active'},{label:'Connections',value:'Managed by script'}]);}
+function renderTools(host){actionPanel(host,'Gym Teleports',[{label:'Jungle Bench Press',button:'Teleport'},{label:'Jungle Pull Ups',button:'Teleport'},{label:'Jungle Boulder',button:'Teleport'}]);actionPanel(host,'Utility',[{label:'Interact after teleport',value:'Press E'},{label:'RootPart required',value:'Yes'}]);}
+function renderInfo(host){actionPanel(host,'Script Information',[{label:'Author',value:'Johnny'},{label:'Discord',value:'discord.gg/Muscle'},{label:'Version',value:'1.1'}]);actionPanel(host,'Cleanup',[{label:'Destroy Script + Anti AFK',button:'Destroy',onClick:()=>alert('Cleanup requested.')}]);}
+function renderPage(id){const host=document.getElementById('pageBody');host.innerHTML='';if(id==='themes')renderThemes(host);else if(id==='misc')renderMisc(host);else if(id==='farming')renderFarming(host);else if(id==='rebirth')renderRebirth(host);else if(id==='pets')renderPets(host);else if(id==='player')renderPlayer(host);else if(id==='killing')renderKilling(host);else if(id==='stats')renderStats(host);else if(id==='admin')renderAdmin(host);else if(id==='perf')renderPerf(host);else if(id==='tools')renderTools(host);else if(id==='info')renderInfo(host);}
+/* ---------------- Settings: theme, opacity, persistence ---------------- */
+const THEMES = [
+  { id: 'violet',   name: 'Obsidian Violet', c: ['#6a4fd8', '#1f7ae0', '#22b56b'] },
+  { id: 'midnight', name: 'Midnight Blue',   c: ['#2f5fe0', '#1fb0e0', '#3a3fae'] },
+  { id: 'emerald',  name: 'Emerald Glass',   c: ['#22c58a', '#1fae6a', '#8be04a'] },
+  { id: 'crimson',  name: 'Crimson',         c: ['#ff5f57', '#e0392f', '#ff9a3c'] },
+  { id: 'mono',     name: 'Monochrome',      c: ['#9a9aa0', '#5f5f66', '#3a3a3f'] },
+];
+const STORAGE_KEY = 'glassui_demo_settings';
+const settings = { theme: 'violet', opacity: 0.52, reduceMotion: false };
+
+function applyTheme(id){
+  if (id === 'violet') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', id);
+}
+function applySettings(s){
+  applyTheme(s.theme);
+  document.documentElement.style.setProperty('--window-alpha', s.opacity);
+  document.documentElement.setAttribute('data-reduce-motion', s.reduceMotion ? 'true' : 'false');
+}
+function loadStoredSettings(){
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+function saveStoredSettings(){
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    return true;
+  } catch (e) { return false; }
+}
+
+function renderThemes(host){
+  const grid = document.createElement('div');
+  grid.className = 'kit-theme-grid';
+  THEMES.forEach(t => {
+    const card = document.createElement('div');
+    card.className = 'kit-theme-card' + (settings.theme === t.id ? ' selected' : '');
+    card.innerHTML = `
+      <div class="kit-theme-swatch" style="background:linear-gradient(135deg, ${t.c[0]}, ${t.c[1]} 55%, ${t.c[2]})"></div>
+      <div class="kit-theme-row">
+        <span class="kit-theme-name">${t.name}</span>
+        <span class="kit-theme-check">${UIKit.icons.check}</span>
+      </div>`;
+    card.addEventListener('click', () => {
+      settings.theme = t.id;
+      applyTheme(t.id);
+      grid.querySelectorAll('.kit-theme-card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+    });
+    grid.appendChild(card);
+  });
+  host.appendChild(grid);
+
+  const hint = document.createElement('p');
+  hint.className = 'kit-meta';
+  hint.style.margin = '0';
+  hint.textContent = 'Theme applies instantly. Head to Misc to save it so it loads next time.';
+  host.appendChild(hint);
+}
+
+function renderMisc(host){
+  const wrap = document.createElement('div');
+  wrap.className = 'kit-panel';
+  wrap.style.padding = '4px 14px 14px';
+
+  // opacity
+  const opacityRow = document.createElement('div');
+  opacityRow.className = 'kit-setting-row';
+  const opacityPct = Math.round(settings.opacity * 100);
+  opacityRow.innerHTML = `
+    <div class="kit-setting-label"><span>Window opacity</span><b id="opacityVal">${opacityPct}%</b></div>
+    <input type="range" min="20" max="90" value="${opacityPct}" class="kit-slider" id="opacitySlider">`;
+  wrap.appendChild(opacityRow);
+
+  // reduce motion
+  const motionRow = document.createElement('div');
+  motionRow.className = 'kit-setting-row kit-metric-row';
+  motionRow.innerHTML = `<span class="k">Reduce motion</span>`;
+  const motionToggle = UIKit.toggle({
+    on: settings.reduceMotion,
+    onChange(v){
+      settings.reduceMotion = v;
+      document.documentElement.setAttribute('data-reduce-motion', v ? 'true' : 'false');
+    }
+  });
+  motionRow.appendChild(motionToggle);
+  wrap.appendChild(motionRow);
+
+  // buttons
+  const btnRow = document.createElement('div');
+  btnRow.className = 'kit-btn-row';
+  btnRow.innerHTML = `
+    <button class="kit-btn primary" id="btnSave">Save settings</button>
+    <button class="kit-btn" id="btnLoad">Load previous</button>
+    <button class="kit-btn" id="btnReset">Reset</button>`;
+  wrap.appendChild(btnRow);
+
+  const status = document.createElement('div');
+  status.className = 'kit-settings-status';
+  status.id = 'settingsStatus';
+  wrap.appendChild(status);
+
+  host.appendChild(wrap);
+
+  document.getElementById('opacitySlider').addEventListener('input', (e) => {
+    settings.opacity = Number(e.target.value) / 100;
+    document.documentElement.style.setProperty('--window-alpha', settings.opacity);
+    document.getElementById('opacityVal').textContent = e.target.value + '%';
+  });
+
+  document.getElementById('btnSave').addEventListener('click', () => {
+    status.textContent = saveStoredSettings() ? 'Settings saved.' : "Couldn't save (storage unavailable).";
+  });
+  document.getElementById('btnLoad').addEventListener('click', () => {
+    const saved = loadStoredSettings();
+    if (!saved) { status.textContent = 'No saved settings yet.'; return; }
+    Object.assign(settings, saved);
+    applySettings(settings);
+    host.innerHTML = '';
+    renderMisc(host);
+    document.getElementById('settingsStatus').textContent = 'Loaded previous settings.';
+  });
+  document.getElementById('btnReset').addEventListener('click', () => {
+    Object.assign(settings, { theme: 'violet', opacity: 0.52, reduceMotion: false });
+    applySettings(settings);
+    host.innerHTML = '';
+    renderMisc(host);
+    document.getElementById('settingsStatus').textContent = 'Reset to defaults.';
+  });
+}
+
+// Load any previously saved settings on startup, then paint the first page.
+const startupSaved = loadStoredSettings();
+if (startupSaved) { Object.assign(settings, startupSaved); applySettings(settings); }
+renderPage(NAV[0].id);
+
+/* ---------------- Window controls: close / minimize / maximize ---------------- */
+const kitWindow = document.getElementById('kitWindow');
+const reopenBtn = document.getElementById('kitReopen');
+let isMin = false, isMax = false;
+
+document.getElementById('dotMin').addEventListener('click', () => {
+  if (isMax) { kitWindow.classList.remove('kit-maximized'); isMax = false; }
+  isMin = !isMin;
+  kitWindow.classList.toggle('kit-minimized', isMin);
+});
+
+document.getElementById('dotMax').addEventListener('click', () => {
+  if (isMin) { kitWindow.classList.remove('kit-minimized'); isMin = false; }
+  isMax = !isMax;
+  kitWindow.classList.toggle('kit-maximized', isMax);
+});
+
+document.getElementById('dotClose').addEventListener('click', () => {
+  kitWindow.classList.add('kit-closing');
+  setTimeout(() => {
+    kitWindow.style.display = 'none';
+    reopenBtn.classList.add('show');
+  }, 260);
+});
+
+reopenBtn.addEventListener('click', () => {
+  reopenBtn.classList.remove('show');
+  kitWindow.style.display = 'flex';
+  kitWindow.classList.remove('kit-closing', 'kit-minimized', 'kit-maximized');
+  isMin = false; isMax = false;
+  kitWindow.style.animation = 'none';
+  void kitWindow.offsetWidth; // restart entrance animation
+  kitWindow.style.animation = '';
+});
+</script>
+</body>
+</html>
