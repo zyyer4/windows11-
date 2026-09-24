@@ -194,117 +194,78 @@ local KillingTab = window:AddTab("Killing")
 local StatsTab = window:AddTab("Stats")
 local TicketsTab = window:AddTab("Tickets")
 local PerfTab = window:AddTab("Perf")
+
+
 local AdminTab = window:AddTab("Admin")
 
-local openCompactMode
-
 --========================================================--
--- ADMIN TAB
+-- ADMIN PAGE
+-- Only the requested execution dashboard is included here.
 --========================================================--
--- Admin-only execution dashboard.
--- This tab intentionally contains only the requested admin page:
--- password gate, global current executions, search/refresh,
--- public stats, and the admin API.
 
 local ADMIN_PASSWORD = "yader45"
 local adminUnlocked = false
 local adminExecutions = {}
-local filteredExecutions = {}
-local adminRecordLabels = {}
 local adminSearch = ""
 
-AdminTab:AddLabel("")
-AdminTab:AddLabel("Admin Access").TextSize = 24
-AdminTab:AddLabel("Enter the admin password to unlock the execution dashboard.")
+AdminTab:AddLabel("").TextSize = 10
+AdminTab:AddLabel("Admin Access").TextSize = 20
+AdminTab:AddLabel("Enter the admin password to unlock the Empire execution dashboard.")
 
-AdminTab:AddTextBox(
-    "Admin Password",
-    function(value)
-        AdminTab.__AdminPassword = tostring(value or "")
-    end,
-    {
-        placeholder = "Admin password"
-    }
-)
-
-AdminTab:AddButton("Unlock", function()
-    if AdminTab.__AdminPassword == ADMIN_PASSWORD then
+AdminTab:AddTextBox("Admin Password", function(value)
+    adminSearch = adminSearch -- keep callback state isolated
+    if value == ADMIN_PASSWORD then
         adminUnlocked = true
-        AdminTab.__AdminStatus = "Unlocked"
-        renderAdminExecutions()
+        AdminTab:AddLabel("Admin unlocked.").TextColor3 = Color3.fromRGB(51, 209, 122)
+        AdminTab:AddLabel("Global Current Executions").TextSize = 20
+        AdminTab:AddLabel("Username, UserId, game, server, version and public stats.")
     else
         adminUnlocked = false
-        AdminTab.__AdminStatus = "Incorrect password"
-        AdminTab:AddLabel("Incorrect password.").TextSize = 12
+        AdminTab:AddLabel("Incorrect password.").TextColor3 = Color3.fromRGB(255, 95, 87)
     end
 end)
 
-AdminTab:AddLabel("Locked").TextSize = 12
+local adminSearchBox
+local adminResultsLabel
 
 local function compactAdminNumber(value)
     local n = tonumber(value)
-    if not n then
-        return tostring(value or "-")
-    end
-
-    local abs = math.abs(n)
-    local suffixes = {
-        {1e18, "Qi"},
-        {1e15, "Qa"},
-        {1e12, "T"},
-        {1e9, "B"},
-        {1e6, "M"},
-        {1e3, "K"}
-    }
-
+    if not n then return tostring(value or "-") end
+    local suffixes = {{1e18,"Qi"},{1e15,"Qa"},{1e12,"T"},{1e9,"B"},{1e6,"M"},{1e3,"K"}}
+    local a = math.abs(n)
     for _, item in ipairs(suffixes) do
-        if abs >= item[1] then
-            local textValue = string.format("%.2f", n / item[1])
-                :gsub("(%..-)0+$", "%1")
-                :gsub("%.$", "")
-            return textValue .. item[2]
+        if a >= item[1] then
+            local v = string.format("%.2f", n / item[1]):gsub("(%..-)0+$", "%1"):gsub("%.$", "")
+            return v .. item[2]
         end
     end
-
     return tostring(math.floor(n) == n and math.floor(n) or n)
 end
 
 local function stringifyAdminStats(stats)
-    if type(stats) ~= "table" then
-        return "No public stats supplied"
-    end
-
+    if type(stats) ~= "table" then return "No public stats supplied" end
     local parts = {}
     local preferred = {"Strength", "Durability", "Rebirths"}
     local used = {}
-
     for _, key in ipairs(preferred) do
         if stats[key] ~= nil then
             table.insert(parts, key .. ": " .. compactAdminNumber(stats[key]))
             used[key] = true
         end
     end
-
     local others = {}
     for key, value in pairs(stats) do
         if not used[key] and string.lower(tostring(key)) ~= "durability" then
             table.insert(others, tostring(key) .. ": " .. compactAdminNumber(value))
         end
     end
-
     table.sort(others)
-    for _, item in ipairs(others) do
-        table.insert(parts, item)
-    end
-
+    for _, item in ipairs(others) do table.insert(parts, item) end
     return #parts > 0 and table.concat(parts, "  •  ") or "No public stats supplied"
 end
 
-local function adminRecordMatches(record, query)
-    if query == "" then
-        return true
-    end
-
+local function adminMatches(record, query)
+    if query == "" then return true end
     local haystack = table.concat({
         tostring(record.Username or ""),
         tostring(record.DisplayName or ""),
@@ -315,109 +276,75 @@ local function adminRecordMatches(record, query)
         tostring(record.JobId or ""),
         tostring(record.Version or "")
     }, " "):lower()
-
     return string.find(haystack, query:lower(), 1, true) ~= nil
 end
 
-local function clearAdminRecords()
-    for _, label in ipairs(adminRecordLabels) do
-        pcall(function()
-            label:Destroy()
-        end)
-    end
-    table.clear(adminRecordLabels)
-end
-
-function renderAdminExecutions()
-    if not adminUnlocked then
-        return
-    end
-
-    clearAdminRecords()
-    filteredExecutions = {}
-
+local function renderAdminExecutions()
+    if not adminUnlocked or not adminResultsLabel then return end
+    local lines = {}
+    local count = 0
     for _, record in ipairs(adminExecutions) do
-        if adminRecordMatches(record, adminSearch) then
-            table.insert(filteredExecutions, record)
+        if adminMatches(record, adminSearch) then
+            count += 1
+            table.insert(lines, string.format(
+                "%s | %s | UserId: %s\nGame: %s\nServer: %s\nVersion: %s\nStats: %s",
+                tostring(record.Username or "Unknown"),
+                tostring(record.DisplayName or ""),
+                tostring(record.UserId or "-"),
+                tostring(record.Game or "Unknown Game"),
+                tostring(record.Server or record.JobId or "-"),
+                tostring(record.Version or "-"),
+                stringifyAdminStats(record.Stats)
+            ))
         end
     end
-
-    AdminTab:AddLabel("")
-    local countLabel = AdminTab:AddLabel(
-        "Global Current Executions: " .. tostring(#filteredExecutions)
-    )
-    countLabel.TextSize = 20
-    table.insert(adminRecordLabels, countLabel)
-
-    if #filteredExecutions == 0 then
-        local empty = AdminTab:AddLabel("No execution records found.")
-        empty.TextSize = 12
-        table.insert(adminRecordLabels, empty)
-        return
-    end
-
-    for index, record in ipairs(filteredExecutions) do
-        local card = AdminTab:AddLabel(table.concat({
-            "#" .. tostring(index),
-            "Username: " .. tostring(record.Username or "Unknown"),
-            "DisplayName: " .. tostring(record.DisplayName or "-"),
-            "UserId: " .. tostring(record.UserId or "-"),
-            "Game: " .. tostring(record.Game or "Unknown Game"),
-            "Server: " .. tostring(record.Server or record.JobId or "-"),
-            "Version: " .. tostring(record.Version or "-"),
-            "Stats: " .. stringifyAdminStats(record.Stats)
-        }, "\n"))
-        card.TextSize = 11
-        table.insert(adminRecordLabels, card)
+    if count == 0 then
+        adminResultsLabel.Text = "0 RECORDS\nNo matching executions."
+    else
+        adminResultsLabel.Text = tostring(count) .. " RECORD" .. (count == 1 and "" or "S") .. "\n\n" .. table.concat(lines, "\n\n")
     end
 end
 
-AdminTab:AddTextBox(
-    "Search Executions",
-    function(value)
-        if not adminUnlocked then
-            return
-        end
-        adminSearch = tostring(value or "")
-        renderAdminExecutions()
-    end,
-    {
-        placeholder = "Username, UserId, game or server..."
-    }
-)
-
-AdminTab:AddButton("Refresh", function()
-    if adminUnlocked then
-        renderAdminExecutions()
-    end
+AdminTab:AddButton("Unlock / Refresh Dashboard", function()
+    if not adminUnlocked then return end
+    renderAdminExecutions()
 end)
 
-function Window:SetAdminExecutions(entries)
+adminSearchBox = AdminTab:AddTextBox("Search Executions", function(value)
+    adminSearch = tostring(value or "")
+    renderAdminExecutions()
+end)
+
+adminResultsLabel = AdminTab:AddLabel("Locked - enter the admin password first.")
+adminResultsLabel.TextSize = 12
+
+function window:SetAdminExecutions(entries)
     if type(entries) ~= "table" then
         adminExecutions = {}
     else
         adminExecutions = entries
     end
-
-    if adminUnlocked then
-        renderAdminExecutions()
-    end
+    renderAdminExecutions()
 end
 
-function Window:GetAdminExecutions()
+function window:GetAdminExecutions()
     return adminExecutions
 end
 
-function Window:IsAdminUnlocked()
+function window:IsAdminUnlocked()
     return adminUnlocked
 end
 
-function Window:LockAdmin()
+function window:LockAdmin()
     adminUnlocked = false
     adminSearch = ""
-    clearAdminRecords()
-    AdminTab.__AdminPassword = ""
+    if adminResultsLabel then
+        adminResultsLabel.Text = "Locked - enter the admin password first."
+    end
 end
+
+
+local openCompactMode
 
 --========================================================--
 -- FAST FARM TAB
