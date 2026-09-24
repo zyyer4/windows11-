@@ -36,7 +36,7 @@ local library = loadstring(
 )()
 
 local window = library:AddWindow("Johnny | Farming", {
-    min_size = Vector2.new(900, 900),
+    min_size = Vector2.new(1080, 760),
     can_resize = true,
     theme = "Violet"
 })
@@ -3993,7 +3993,7 @@ TicketsTab:AddLabel("No ticket automation was included in the supplied Fast Farm
 local infoTab =
     window:AddTab("Info")
 
-infoTab:Show()
+FarmingTab:Show()
 
 infoTab:AddButton(
     "Destroy Script + Anti AFK",
