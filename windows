@@ -108,16 +108,16 @@ end
 
 -- Every theme is just this token table with some values replaced.
 local BASE_THEME = {
-	windowBg  = rgb(18, 18, 20),     -- glass base colour
-	tintA     = rgb(70, 55, 110),    -- tint gradient start
-	tintB     = rgb(20, 70, 95),     -- tint gradient end
-	sidebarBg = rgb(10, 10, 12),
-	surface   = rgb(255, 255, 255),  -- cards / panels / titlebar (drawn at high transparency)
-	stroke    = rgb(255, 255, 255),  -- hairline borders
-	text      = rgb(242, 242, 244),
-	textDim   = rgb(152, 152, 158),
-	textFaint = rgb(99, 99, 104),
-	accent    = rgb(51, 209, 122),   -- toggles, sliders, checkmarks, selected states
+	windowBg  = rgb(13, 16, 21),
+	tintA     = rgb(49, 93, 186),
+	tintB     = rgb(108, 59, 189),
+	sidebarBg = rgb(12, 15, 19),
+	surface   = rgb(25, 30, 37),
+	stroke    = rgb(41, 47, 56),
+	text      = rgb(243, 245, 247),
+	textDim   = rgb(169, 176, 186),
+	textFaint = rgb(112, 121, 133),
+	accent    = rgb(91, 156, 255),
 }
 
 local THEMES = {}
@@ -179,7 +179,7 @@ GlassUI.RegisterTheme("Frost", { -- light glass
 -- Everything that gets saved. `toggles` holds toggle rows created with a `key`.
 local DEFAULTS = {
 	theme     = "Midnight",
-	opacity   = 0.65,   -- 0.2 (very see-through) .. 1 (solid)
+	opacity   = 0.92,   -- 0.2 (very see-through) .. 1 (solid)
 	blur      = true,
 	blurSize  = 18,     -- 0 .. 40
 	scale     = 1,      -- 0.7 .. 1.5
@@ -689,7 +689,7 @@ function GlassUI.new(opts)
 		previous:Destroy() -- re-running the script replaces the old window instead of stacking
 	end
 
-	local baseSize = opts.size or UDim2.fromOffset(720, 480)
+	local baseSize = opts.size or UDim2.fromOffset(900, 620)
 	self._baseSize = baseSize
 	self._basePos = UDim2.fromScale(0.5, 0.5)
 
@@ -743,7 +743,7 @@ function GlassUI.new(opts)
 
 	local titlebar = new("Frame", {
 		Name = "Titlebar",
-		Size = UDim2.new(1, 0, 0, 40),
+		Size = UDim2.new(1, 0, 0, 48),
 		BackgroundTransparency = 0.94,
 		BorderSizePixel = 0,
 	})
@@ -810,7 +810,7 @@ function GlassUI.new(opts)
 	local body = new("Frame", {
 		Name = "Body",
 		Size = UDim2.new(1, 0, 1, -40),
-		Position = UDim2.new(0, 0, 0, 40),
+		Position = UDim2.new(0, 0, 0, 48),
 		BackgroundTransparency = 1,
 	})
 	body.Parent = window
@@ -818,7 +818,7 @@ function GlassUI.new(opts)
 	-- sidebar
 	local sidebar = new("ScrollingFrame", {
 		Name = "Sidebar",
-		Size = UDim2.new(0, 190, 1, 0),
+		Size = UDim2.new(0, 224, 1, 0),
 		BackgroundTransparency = 0.55,
 		BorderSizePixel = 0,
 		Active = true,
@@ -834,7 +834,7 @@ function GlassUI.new(opts)
 			PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 10),
 			PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8),
 		}),
-		new("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }),
+		new("UIListLayout", { Padding = UDim.new(0, 3), SortOrder = Enum.SortOrder.LayoutOrder }),
 	})
 	self:_bind(sidebar, "BackgroundColor3", "sidebarBg")
 	self:_stroke(sidebar, 0.93, 1)
@@ -851,6 +851,39 @@ function GlassUI.new(opts)
 	self.window = window
 	self.sidebar = sidebar
 	self._body = body
+
+	-- Fluent-style tab search: keeps the sidebar compact while making every tab easy to find.
+	local tabSearch = new("TextBox", {
+		Name = "TabSearch",
+		Text = "",
+		PlaceholderText = "Search tabs",
+		ClearTextOnFocus = false,
+		Font = Enum.Font.Gotham,
+		TextSize = 11,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Size = UDim2.new(1, -16, 0, 34),
+		LayoutOrder = 0,
+		BackgroundTransparency = 0.15,
+		BorderSizePixel = 0,
+		ZIndex = 25,
+	}, { corner(7), new("UIPadding", {
+		PaddingLeft = UDim.new(0, 10),
+		PaddingRight = UDim.new(0, 10),
+	}) })
+	self:_bind(tabSearch, "BackgroundColor3", "surface")
+	self:_bind(tabSearch, "TextColor3", "text")
+	self:_bind(tabSearch, "PlaceholderColor3", "textFaint")
+	tabSearch.Parent = sidebar
+	self._tabSearch = tabSearch
+
+	tabSearch:GetPropertyChangedSignal("Text"):Connect(function()
+		local q = string.lower(tabSearch.Text or "")
+		for _, item in pairs(self._navItems) do
+			local name = string.lower(item.label and item.label.Text or "")
+			item.button.Visible = q == "" or string.find(name, q, 1, true) ~= nil
+		end
+	end)
+
 	self._minimized = false
 	self._maximized = false
 
@@ -1044,8 +1077,8 @@ function GlassUI:AddPage(id)
 	end
 	local frame = new("ScrollingFrame", {
 		Name = "Page_" .. tostring(id),
-		Size = UDim2.new(1, -190, 1, 0),
-		Position = UDim2.new(0, 190, 0, 0),
+		Size = UDim2.new(1, -224, 1, 0),
+		Position = UDim2.new(0, 224, 0, 0),
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		ScrollBarThickness = 5,
@@ -1056,10 +1089,10 @@ function GlassUI:AddPage(id)
 		ZIndex = 2,
 	}, {
 		new("UIPadding", {
-			PaddingTop = UDim.new(0, 18), PaddingBottom = UDim.new(0, 18),
-			PaddingLeft = UDim.new(0, 20), PaddingRight = UDim.new(0, 20),
+			PaddingTop = UDim.new(0, 24), PaddingBottom = UDim.new(0, 32),
+			PaddingLeft = UDim.new(0, 28), PaddingRight = UDim.new(0, 28),
 		}),
-		new("UIListLayout", { Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder }),
+		new("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }),
 	})
 	self:_bind(frame, "ScrollBarImageColor3", "textFaint")
 	frame.Parent = self._body
@@ -1121,14 +1154,14 @@ function GlassUI:AddNavItem(opts)
 
 	local btn = new("TextButton", {
 		Text = "",
-		Size = UDim2.new(1, 0, 0, 32),
+		Size = UDim2.new(1, 0, 0, 34),
 		Active = true,
 		ZIndex = 20,
 		AutoButtonColor = false,
 		BorderSizePixel = 0,
 		LayoutOrder = self._navCount,
 	}, { corner(7) })
-	local activeGradient = gradient(lighten(iconColor, 0.1), self.theme.windowBg, 115)
+	local activeGradient = gradient(lighten(self.theme.accent, 0.1), self.theme.windowBg, 115)
 	activeGradient.Transparency = NumberSequence.new({
 		NumberSequenceKeypoint.new(0, 0.3),
 		NumberSequenceKeypoint.new(1, 0.92),
@@ -1136,14 +1169,13 @@ function GlassUI:AddNavItem(opts)
 	activeGradient.Parent = btn
 
 	local icon = new("Frame", {
-		Size = UDim2.fromOffset(22, 22),
-		Position = UDim2.new(0, 6, 0.5, -11),
-		BackgroundColor3 = iconColor,
+		Size = UDim2.fromOffset(18, 18),
+		Position = UDim2.new(0, 8, 0.5, -9),
+		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-	}, { corner(6), gradient(lighten(iconColor, 0.3), darken(iconColor, 0.12), 135) })
-	if opts.icon then
-		new("TextLabel", {
-			Text = opts.icon,
+	}, { corner(4) })
+	new("TextLabel", {
+			Text = string.sub(tostring(opts.label or "Item"), 1, 1),
 			Font = Enum.Font.SourceSansBold,
 			TextSize = 13,
 			Size = UDim2.fromScale(1, 1),
@@ -1158,19 +1190,19 @@ function GlassUI:AddNavItem(opts)
 		TextSize = 13,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Size = UDim2.new(1, -40, 1, 0),
-		Position = UDim2.new(0, 36, 0, 0),
+		Position = UDim2.new(0, 34, 0, 0),
 		BackgroundTransparency = 1,
 	})
 	label.Parent = btn
 
-	local item = { id = id, button = btn, page = page, active = false, hover = false }
+	local item = { id = id, button = btn, page = page, active = false, hover = false, label = label }
 
 	function item.refresh(animate)
 		local theme = self.theme
-		local bgColor = item.active and iconColor or theme.surface
-		local bgTrans = item.active and 0.85 or (item.hover and 0.95 or 1)
+		local bgColor = item.active and theme.accent or theme.surface
+		local bgTrans = item.active and 0.78 or (item.hover and 0.90 or 1)
 		local textColor = item.active and theme.text or theme.textDim
-		activeGradient.Color = ColorSequence.new(lighten(iconColor, 0.1), theme.windowBg)
+		activeGradient.Color = ColorSequence.new(lighten(theme.accent, 0.1), theme.windowBg)
 		activeGradient.Enabled = item.active
 		if animate then
 			tween(btn, { BackgroundColor3 = bgColor, BackgroundTransparency = bgTrans }, 0.12)
@@ -1187,12 +1219,12 @@ function GlassUI:AddNavItem(opts)
 
 	btn.MouseEnter:Connect(function()
 		item.hover = true
-		tween(icon, { Size = UDim2.fromOffset(24, 24), Position = UDim2.new(0, 5, 0.5, -12) }, 0.15, Enum.EasingStyle.Back)
+		tween(icon, { Size = UDim2.fromOffset(19, 19), Position = UDim2.new(0, 7, 0.5, -9.5) }, 0.15, Enum.EasingStyle.Back)
 		item.refresh(true)
 	end)
 	btn.MouseLeave:Connect(function()
 		item.hover = false
-		tween(icon, { Size = UDim2.fromOffset(22, 22), Position = UDim2.new(0, 6, 0.5, -11) }, 0.15)
+		tween(icon, { Size = UDim2.fromOffset(18, 18), Position = UDim2.new(0, 8, 0.5, -9) }, 0.15)
 		item.refresh(true)
 	end)
 	btn.Activated:Connect(function()
@@ -1245,7 +1277,7 @@ function Page:AddStatGrid()
 	}, {
 		new("UIGridLayout", {
 			CellPadding = UDim2.fromOffset(10, 10),
-			CellSize = UDim2.new(0.5, -5, 0, 60),
+			CellSize = UDim2.new(0.25, -8, 0, 64),
 			SortOrder = Enum.SortOrder.LayoutOrder,
 		}),
 	})
@@ -1320,7 +1352,7 @@ function Page:AddPanel(opts)
 
 	local header = new("TextButton", {
 		Text = "",
-		Size = UDim2.new(1, 0, 0, 40),
+		Size = UDim2.new(1, 0, 0, 42),
 		BackgroundTransparency = 1,
 		AutoButtonColor = false,
 	})
@@ -1353,7 +1385,7 @@ function Page:AddPanel(opts)
 	local body = new("Frame", {
 		Size = UDim2.new(1, 0, 0, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
-		Position = UDim2.new(0, 0, 0, 40),
+		Position = UDim2.new(0, 0, 0, 42),
 		BackgroundTransparency = 1,
 		Visible = opts.open == true,
 	}, {
