@@ -2200,7 +2200,6 @@ function GlassUI:BuildInfoPage(page, opts)
 	return page
 end
 
-return GlassUI
 
 
 local Players = game:GetService("Players")
