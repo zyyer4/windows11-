@@ -37,6 +37,7 @@ local library = loadstring(
 
 local window = library:AddWindow("Johnny | Farming", {
     min_size = Vector2.new(1080, 760),
+    theme = "Midnight",
     can_resize = true,
     theme = "Violet"
 })
@@ -195,7 +196,7 @@ local MainTab = window:AddTab("Player")
 local PetsTab = window:AddTab("Pets")
 local KillingTab = window:AddTab("Killing")
 local StatsTab = window:AddTab("Stats")
-local TicketsTab = window:AddTab("Tickets")
+local ThemeTab = window:AddTab("Theme")
 local PerfTab = window:AddTab("Perf")
 
 
@@ -3977,11 +3978,20 @@ KillingTab:AddLabel("Combat:").TextSize = 20
 KillingTab:AddLabel("No combat automation was included in the supplied Fast Farm feature set.")
 
 --========================================================--
--- TICKETS TAB
+-- THEME TAB
 --========================================================--
 
-TicketsTab:AddLabel("Tickets:").TextSize = 20
-TicketsTab:AddLabel("No ticket automation was included in the supplied Fast Farm feature set.")
+ThemeTab:AddLabel("").TextSize = 10
+ThemeTab:AddLabel("Theme").TextSize = 20
+ThemeTab:AddLabel("Dark glass interface themes with gradient accents.")
+
+local themeNames = {"Violet", "Midnight", "Emerald", "Crimson", "Mono"}
+
+for _, themeName in ipairs(themeNames) do
+    ThemeTab:AddButton(themeName, function()
+        window:SetTheme(themeName)
+    end)
+end
 
 --========================================================--
 -- INFO TAB
@@ -4395,52 +4405,6 @@ _G.JohnnyAntiAfkConnection =
             end
         end
     )
-
---========================================================--
--- FINAL UI SIZE FIX
---========================================================--
-
-task.defer(function()
-
-    local guiRoot =
-        (gethui and gethui())
-        or
-        game:GetService(
-            "CoreGui"
-        )
-
-    local imgui =
-        guiRoot:FindFirstChild(
-            "imgui"
-        )
-
-    local windows =
-        imgui
-        and
-        imgui:FindFirstChild(
-            "Windows"
-        )
-
-    local uiWindow =
-        windows
-        and
-        windows:FindFirstChild(
-            "Window"
-        )
-
-    if uiWindow then
-
-        uiWindow.Size =
-            UDim2.fromOffset(
-                900,
-                900
-            )
-
-        uiWindow.ClipsDescendants =
-            true
-
-    end
-end)
 
 --========================================================--
 -- END
