@@ -4051,7 +4051,7 @@ FastRebTab:AddButton(
 -- REBIRTH TAB
 --========================================================--
 
-local RebirthTab = FastRebTab
+RebirthTab = FastRebTab
 
 --========================================================--
 -- REBIRTH OPTIONS
@@ -4203,7 +4203,7 @@ infiniteToggle =
 --========================================================--
 
 
-local ToolsTab = window:AddTab("Misc")
+ToolsTab = window:AddTab("Misc")
 
 --========================================================--
 -- AUTO EXERCISES
@@ -4988,7 +4988,7 @@ end)
 --========================================================--
 
 
-local infoTab =
+infoTab =
     window:AddTab("Info")
 
 FarmingTab:Show()
@@ -5155,7 +5155,7 @@ infoTab:AddButton(
 
 infoTab:AddLabel("")
 
-local versionLabel =
+versionLabel =
     infoTab:AddLabel(
         "VERSION:1.1"
     )
@@ -5174,7 +5174,7 @@ pcall(function()
     FarmingTab:Show()
 end)
 
-local antiAfkGui =
+antiAfkGui =
     Instance.new("ScreenGui")
 
 antiAfkGui.Name =
@@ -5186,16 +5186,16 @@ antiAfkGui.ResetOnSpawn =
 _G.JohnnyAntiAfkGui =
     antiAfkGui
 
-local antiAfkTitle =
+antiAfkTitle =
     Instance.new("TextLabel")
 
-local antiAfkFrame =
+antiAfkFrame =
     Instance.new("Frame")
 
-local antiAfkCreator =
+antiAfkCreator =
     Instance.new("TextLabel")
 
-local antiAfkStatus =
+antiAfkStatus =
     Instance.new("TextLabel")
 
 antiAfkGui.Parent =
@@ -5359,7 +5359,7 @@ antiAfkStatus.TextColor3 =
 
 antiAfkStatus.TextSize = 20
 
-local virtualUser =
+virtualUser =
     game:GetService(
         "VirtualUser"
     )
