@@ -1,54 +1,85 @@
 local GlassUI = (function()
 --[[
-	GlassUI
-	A small "black glass" macOS-style UI library for Roblox.
+	GlassUI  (standalone)
+	A self-contained "black glass" UI library for Roblox. One file, no dependencies:
+	no ReplicatedStorage, no server script, no RemoteFunction.
 
-	Put this ModuleScript in ReplicatedStorage (e.g. ReplicatedStorage.GlassUI),
-	then require it from a LocalScript to build a window.
+	Use it any of these ways:
+	  * Paste it at the top of your own LocalScript and use the returned table
+	    (see GlassUI_Standalone.lua for that exact setup).
+	  * Keep it in its own file and run it with loadstring(<file contents>)().
+	  * Or drop it in any ModuleScript and require it.
 
-	The "glass" look is two things layered together, exactly like a real
-	frosted-glass panel:
-	  1. Lighting.Blur — blurs the 3D game world behind the UI.
-	  2. A semi-transparent black Frame on top of that blur.
-	Turn the blur on when you open the window and off when you close it.
+	LOOK
+	  Lighting.GlassUIBlur (blurs the world) + a semi-transparent frame + a theme tint.
 
-	USAGE (see GlassUI_Demo.client.lua for a full working example):
+	FEATURES
+	  * Real pages: every nav item owns a page. Clicking it switches pages.
+	  * Themes: window:SetTheme("Ocean"), GlassUI.RegisterTheme(...) for your own.
+	  * Settings: opacity, blur on/off + strength, UI scale, accent colour,
+	    show/hide keybind, auto-save. Saved and loaded as one JSON blob.
+	  * Toggle rows with a `key` are saved too (e.g. your feature switches).
 
-		local GlassUI = require(game.ReplicatedStorage.GlassUI)
+	SAVING
+	  Default storage writes  GlassUI/<configName>.json  when the environment provides
+	  writefile / readfile / isfile / makefolder. If it doesn't, settings are kept in
+	  memory for the current session only (the status line says so).
+	  Use GlassUI.SetStorage({ Save = fn(json, name), Load = fn(name) }) to plug in
+	  your own (DataStore, HttpService, etc.).
+
+	OPTIONS  GlassUI.new({ title, subtitle, size, parent, configName, autoLoad })
+	  parent      where the ScreenGui goes (default: LocalPlayer.PlayerGui)
+	  configName  file/slot name for saving (default: the title)
+	  autoLoad    false = don't load saved settings on startup
+
+	QUICK START
 		local window = GlassUI.new({ title = "Panel", subtitle = "UI Kit Demo" })
 
-		window:AddNavItem({ id = "overview", label = "Overview", color = "blue", active = true })
-		window:AddStat({ label = "Active sessions", value = "128" })
+		local _, farming = window:AddNavItem({ id = "farming", label = "Farming", color = "green", active = true })
+		farming:AddStat({ label = "Active sessions", value = "128" })
+		local panel = farming:AddPanel({ title = "Gained this session", open = true })
+		panel:AddToggleRow({ label = "Auto farm", key = "autoFarm", on = false, onChange = print })
 
-		local panel = window:AddPanel({ title = "Gained this session", open = true })
-		panel:AddRow({ label = "Requests handled", value = "3,204", checked = true })
-
-		local row, toggle = panel:AddToggleRow({ label = "Email digests", on = true })
+		local _, themes = window:AddNavItem({ id = "themes", label = "Themes", color = "purple" })
+		window:BuildThemesPage(themes)
+		local _, misc = window:AddNavItem({ id = "misc", label = "Misc", color = "gray" })
+		window:BuildSettingsPage(misc)
 ]]
 
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local MarketplaceService = game:GetService("MarketplaceService")
+local Stats = game:GetService("Stats")
 
 local GlassUI = {}
 GlassUI.__index = GlassUI
+GlassUI.Version = "2.1.0"
+
+local Page = {}
+Page.__index = Page
+
+local Panel = {}
+Panel.__index = Panel
 
 -- ===================== design tokens =====================
 
+local function rgb(r, g, b)
+	return Color3.fromRGB(r, g, b)
+end
+
+-- Fixed colours (traffic lights, nav icons, danger button). Not themed.
 local COLOR = {
-	windowBg   = Color3.fromRGB(18, 18, 20),
-	sidebarBg  = Color3.fromRGB(10, 10, 12),
-	panelBg    = Color3.fromRGB(255, 255, 255), -- used with high transparency
-	stroke     = Color3.fromRGB(255, 255, 255),
-	text       = Color3.fromRGB(242, 242, 244),
-	textDim    = Color3.fromRGB(152, 152, 158),
-	textFaint  = Color3.fromRGB(99, 99, 104),
-	green      = Color3.fromRGB(51, 209, 122),
-	blue       = Color3.fromRGB(58, 143, 255),
-	purple     = Color3.fromRGB(169, 139, 255),
-	amber      = Color3.fromRGB(245, 166, 35),
-	red        = Color3.fromRGB(255, 95, 87),
-	gray       = Color3.fromRGB(138, 138, 144),
+	green  = rgb(51, 209, 122),
+	blue   = rgb(58, 143, 255),
+	purple = rgb(169, 139, 255),
+	amber  = rgb(245, 166, 35),
+	red    = rgb(255, 95, 87),
+	gray   = rgb(138, 138, 144),
+	white  = Color3.new(1, 1, 1),
 }
 
 local NAV_ICON_COLOR = {
@@ -56,7 +87,121 @@ local NAV_ICON_COLOR = {
 	amber = COLOR.amber, gray = COLOR.gray, red = COLOR.red,
 }
 
+-- Accent colours you can pick on the Themes page ("auto" = use the theme's own).
+local ACCENTS = {
+	{ id = "green",  color = COLOR.green },
+	{ id = "blue",   color = COLOR.blue },
+	{ id = "purple", color = COLOR.purple },
+	{ id = "amber",  color = COLOR.amber },
+	{ id = "red",    color = COLOR.red },
+	{ id = "pink",   color = rgb(244, 114, 182) },
+}
+
+local function findAccent(id)
+	for _, a in ipairs(ACCENTS) do
+		if a.id == id then
+			return a.color
+		end
+	end
+	return nil
+end
+
+-- Every theme is just this token table with some values replaced.
+local BASE_THEME = {
+	windowBg  = rgb(18, 18, 20),     -- glass base colour
+	tintA     = rgb(70, 55, 110),    -- tint gradient start
+	tintB     = rgb(20, 70, 95),     -- tint gradient end
+	sidebarBg = rgb(10, 10, 12),
+	surface   = rgb(255, 255, 255),  -- cards / panels / titlebar (drawn at high transparency)
+	stroke    = rgb(255, 255, 255),  -- hairline borders
+	text      = rgb(242, 242, 244),
+	textDim   = rgb(152, 152, 158),
+	textFaint = rgb(99, 99, 104),
+	accent    = rgb(51, 209, 122),   -- toggles, sliders, checkmarks, selected states
+}
+
+local THEMES = {}
+local THEME_ORDER = {}
+
+-- Add your own theme (call before creating the window so it shows on the Themes page):
+--   GlassUI.RegisterTheme("Mint", { windowBg = Color3.fromRGB(10, 24, 20), accent = Color3.fromRGB(80, 230, 180) })
+function GlassUI.RegisterTheme(name, overrides)
+	local theme = {}
+	for k, v in pairs(BASE_THEME) do
+		theme[k] = v
+	end
+	for k, v in pairs(overrides or {}) do
+		theme[k] = v
+	end
+	theme.name = name
+	if not THEMES[name] then
+		table.insert(THEME_ORDER, name)
+	end
+	THEMES[name] = theme
+end
+
+GlassUI.RegisterTheme("Midnight", {})
+GlassUI.RegisterTheme("Ocean", {
+	windowBg = rgb(8, 20, 32), tintA = rgb(25, 105, 165), tintB = rgb(8, 55, 90),
+	sidebarBg = rgb(5, 13, 22), accent = rgb(56, 189, 248),
+})
+GlassUI.RegisterTheme("Sunset", {
+	windowBg = rgb(28, 14, 16), tintA = rgb(205, 85, 55), tintB = rgb(120, 45, 110),
+	sidebarBg = rgb(18, 8, 10), accent = rgb(255, 146, 72),
+})
+GlassUI.RegisterTheme("Forest", {
+	windowBg = rgb(9, 22, 15), tintA = rgb(35, 125, 75), tintB = rgb(20, 75, 65),
+	sidebarBg = rgb(5, 14, 9), accent = rgb(74, 222, 128),
+})
+GlassUI.RegisterTheme("Rose", {
+	windowBg = rgb(28, 11, 21), tintA = rgb(205, 65, 125), tintB = rgb(115, 50, 140),
+	sidebarBg = rgb(18, 6, 13), accent = rgb(244, 114, 182),
+})
+GlassUI.RegisterTheme("Amethyst", {
+	windowBg = rgb(18, 12, 32), tintA = rgb(120, 75, 220), tintB = rgb(60, 45, 150),
+	sidebarBg = rgb(11, 7, 22), accent = rgb(169, 139, 255),
+})
+GlassUI.RegisterTheme("Ember", {
+	windowBg = rgb(26, 14, 8), tintA = rgb(220, 110, 30), tintB = rgb(150, 40, 30),
+	sidebarBg = rgb(17, 8, 4), accent = rgb(245, 166, 35),
+})
+GlassUI.RegisterTheme("Graphite", {
+	windowBg = rgb(22, 22, 24), tintA = rgb(110, 110, 118), tintB = rgb(50, 50, 56),
+	sidebarBg = rgb(12, 12, 14), accent = rgb(225, 225, 232),
+})
+GlassUI.RegisterTheme("Frost", { -- light glass
+	windowBg = rgb(232, 236, 244), tintA = rgb(160, 190, 245), tintB = rgb(215, 180, 245),
+	sidebarBg = rgb(250, 251, 255), surface = rgb(0, 0, 0), stroke = rgb(0, 0, 0),
+	text = rgb(24, 24, 30), textDim = rgb(72, 72, 84), textFaint = rgb(118, 118, 130),
+	accent = rgb(10, 120, 255),
+})
+
+-- Everything that gets saved. `toggles` holds toggle rows created with a `key`.
+local DEFAULTS = {
+	theme     = "Midnight",
+	opacity   = 0.65,   -- 0.2 (very see-through) .. 1 (solid)
+	blur      = true,
+	blurSize  = 18,     -- 0 .. 40
+	scale     = 1,      -- 0.7 .. 1.5
+	accent    = "auto",
+	toggleKey = "RightShift",
+	autoSave  = true,
+	toggles   = {},
+}
+
 -- ===================== small helpers =====================
+
+local function clamp(v, lo, hi)
+	return math.max(lo, math.min(hi, v))
+end
+
+local function deepCopy(t)
+	local out = {}
+	for k, v in pairs(t) do
+		out[k] = type(v) == "table" and deepCopy(v) or v
+	end
+	return out
+end
 
 local function new(class, props, children)
 	local inst = Instance.new(class)
@@ -73,15 +218,6 @@ local function corner(radius)
 	return new("UICorner", { CornerRadius = UDim.new(0, radius or 10) })
 end
 
-local function stroke(transparency, thickness)
-	return new("UIStroke", {
-		Color = COLOR.stroke,
-		Transparency = transparency or 0.9,
-		Thickness = thickness or 1,
-	})
-end
-
--- Two-stop diagonal gradient, e.g. gradient(baseColor, 135) for a glossy button.
 local function lighten(c, amt)
 	return c:Lerp(Color3.new(1, 1, 1), amt)
 end
@@ -102,7 +238,7 @@ local function tween(inst, props, time, style)
 end
 
 -- Makes `frame` draggable by dragging `handle` (e.g. the titlebar).
-local function makeDraggable(frame, handle)
+local function makeDraggable(frame, handle, onEnd)
 	local dragging, dragStart, startPos
 	handle.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -112,6 +248,9 @@ local function makeDraggable(frame, handle)
 			input.Changed:Connect(function()
 				if input.UserInputState == Enum.UserInputState.End then
 					dragging = false
+					if onEnd then
+						onEnd(frame.Position)
+					end
 				end
 			end)
 		end
@@ -128,20 +267,397 @@ local function makeDraggable(frame, handle)
 end
 
 -- Enables/disables the real background blur behind the glass window.
-local function setWorldBlur(on)
+local function setWorldBlur(on, size)
 	local blur = Lighting:FindFirstChild("GlassUIBlur")
-	if on then
+	if on and size > 0 then
 		if not blur then
 			blur = new("BlurEffect", { Name = "GlassUIBlur", Size = 0 })
 			blur.Parent = Lighting
 		end
-		tween(blur, { Size = 18 }, 0.25)
+		tween(blur, { Size = size }, 0.25)
 	elseif blur then
 		local t = tween(blur, { Size = 0 }, 0.2)
-		t.Completed:Connect(function()
-			blur:Destroy()
+		t.Completed:Connect(function(state)
+			-- a newer tween (blur switched back on) cancels this one; don't destroy then
+			if state == Enum.PlaybackState.Completed then
+				blur:Destroy()
+			end
 		end)
 	end
+end
+
+-- ===================== save / load storage =====================
+-- Storage is two functions:
+--   Save(jsonString, configName) -> success:boolean, note?:string
+--   Load(configName)             -> jsonString?:string, errorMessage?:string
+-- Default: JSON file in the GlassUI folder when file functions exist, else session memory.
+
+local CONFIG_DIR = "GlassUI"
+local sessionMemory = {} -- fallback when there is no file access (lives until the game closes)
+
+local function configPath(name)
+	return CONFIG_DIR .. "/" .. tostring(name):gsub("[^%w_%-]", "_") .. ".json"
+end
+
+GlassUI._storage = {
+	Save = function(json, name)
+		if writefile then
+			if makefolder and isfolder and not isfolder(CONFIG_DIR) then
+				pcall(makefolder, CONFIG_DIR)
+			end
+			local ok, err = pcall(writefile, configPath(name), json)
+			if ok then
+				return true
+			end
+			return false, tostring(err)
+		end
+		sessionMemory[name] = json
+		return true, "this session only"
+	end,
+	Load = function(name)
+		if readfile and isfile then
+			local path = configPath(name)
+			if isfile(path) then
+				local ok, data = pcall(readfile, path)
+				if ok then
+					return data
+				end
+				return nil, tostring(data)
+			end
+			return nil
+		end
+		return sessionMemory[name]
+	end,
+}
+
+function GlassUI.SetStorage(storage)
+	GlassUI._storage = storage
+end
+
+-- ===================== theming plumbing =====================
+
+-- Runs fn(theme, animate) now and again every time the theme changes.
+function GlassUI:_themed(fn)
+	table.insert(self._themeFns, fn)
+	fn(self.theme, false)
+end
+
+-- Keeps inst[prop] equal to theme[token].
+function GlassUI:_bind(inst, prop, token)
+	self:_themed(function(theme, animate)
+		if animate then
+			tween(inst, { [prop] = theme[token] }, 0.25)
+		else
+			inst[prop] = theme[token]
+		end
+	end)
+end
+
+function GlassUI:_stroke(parent, transparency, thickness)
+	local s = new("UIStroke", {
+		ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+		Transparency = transparency or 0.9,
+		Thickness = thickness or 1,
+	})
+	s.Parent = parent
+	self:_bind(s, "Color", "stroke")
+	return s
+end
+
+-- Controls register a "syncer" that re-reads self.settings and updates themselves.
+function GlassUI:_addSyncer(fn)
+	table.insert(self._syncers, fn)
+	fn()
+end
+
+function GlassUI:_syncControls()
+	for _, fn in ipairs(self._syncers) do
+		fn()
+	end
+end
+
+function GlassUI:_resolveTheme()
+	local base = THEMES[self.settings.theme] or THEMES.Midnight
+	local theme = {}
+	for k, v in pairs(base) do
+		theme[k] = v
+	end
+	local override = findAccent(self.settings.accent)
+	if override then
+		theme.accent = override
+	end
+	local a = theme.accent
+	local luminance = 0.299 * a.R + 0.587 * a.G + 0.114 * a.B
+	theme.accentOn = luminance > 0.45 and rgb(12, 24, 18) or rgb(255, 255, 255)
+	self.theme = theme
+end
+
+function GlassUI:_applyTheme(animate)
+	self:_resolveTheme()
+	for _, fn in ipairs(self._themeFns) do
+		fn(self.theme, animate)
+	end
+	self:_syncControls()
+end
+
+-- ===================== settings state =====================
+
+function GlassUI:GetSettings()
+	return deepCopy(self.settings)
+end
+
+-- Something the user changed: refresh controls, mark unsaved, maybe auto-save.
+function GlassUI:_changed()
+	if self._applying or self._destroyed then
+		return
+	end
+	self:_syncControls()
+	if self.settings.autoSave then
+		self:_setStatus("Saving soon...", "dim")
+		self:_scheduleSave()
+	else
+		self:_setStatus("Unsaved changes", "dim")
+	end
+end
+
+function GlassUI:_setStatus(text, kind)
+	self._status = { text = text, kind = kind or "dim" }
+	self:_renderStatus()
+end
+
+function GlassUI:_renderStatus()
+	local label = self._statusLabel
+	if not label then
+		return
+	end
+	local st = self._status
+	label.Text = st.text
+	if st.kind == "ok" then
+		label.TextColor3 = self.theme.accent
+	elseif st.kind == "err" then
+		label.TextColor3 = COLOR.red
+	else
+		label.TextColor3 = self.theme.textFaint
+	end
+end
+
+function GlassUI:_scheduleSave()
+	self._saveToken = (self._saveToken or 0) + 1
+	local token = self._saveToken
+	task.delay(1.5, function()
+		if token == self._saveToken and not self._destroyed then
+			self:SaveSettings()
+		end
+	end)
+end
+
+function GlassUI:_updateKey()
+	local ok, keyCode = pcall(function()
+		return Enum.KeyCode[self.settings.toggleKey]
+	end)
+	self._toggleKeyCode = (ok and keyCode) or Enum.KeyCode.RightShift
+end
+
+function GlassUI:_applyOpacity()
+	if not self._hidden and self.window then
+		self.window.BackgroundTransparency = 1 - self.settings.opacity
+	end
+end
+
+function GlassUI:_maximizedLayout()
+	local viewport = workspace.CurrentCamera.ViewportSize
+	local s = self.settings.scale
+	return UDim2.fromOffset(viewport.X * 0.92 / s, viewport.Y * 0.88 / s), UDim2.fromScale(0.5, 0.5)
+end
+
+function GlassUI:_applyScale(animate)
+	local s = self.settings.scale
+	if animate then
+		tween(self._uiScale, { Scale = s }, 0.15)
+	else
+		self._uiScale.Scale = s
+	end
+	if self._maximized then
+		local size = self:_maximizedLayout()
+		tween(self.window, { Size = size }, 0.15)
+	end
+end
+
+function GlassUI:_updateBlur()
+	local on = (not self._hidden) and self.settings.blur
+	setWorldBlur(on, self.settings.blurSize)
+	self._blurred = on
+end
+
+-- Public setters (each one applies visually, then marks settings changed).
+
+function GlassUI:SetTheme(name)
+	if not THEMES[name] then
+		return
+	end
+	self.settings.theme = name
+	self:_applyTheme(not self._applying)
+	self:_changed()
+end
+
+function GlassUI:SetAccent(id)
+	self.settings.accent = id
+	self:_applyTheme(not self._applying)
+	self:_changed()
+end
+
+function GlassUI:SetOpacity(v)
+	self.settings.opacity = clamp(v, 0.2, 1)
+	self:_applyOpacity()
+	self:_changed()
+end
+
+function GlassUI:SetBlur(on)
+	self.settings.blur = on == true
+	self:_updateBlur()
+	self:_changed()
+end
+
+function GlassUI:SetBlurSize(n)
+	self.settings.blurSize = clamp(n, 0, 40)
+	self:_updateBlur()
+	self:_changed()
+end
+
+function GlassUI:SetScale(s)
+	self.settings.scale = clamp(s, 0.7, 1.5)
+	self:_applyScale(not self._applying)
+	self:_changed()
+end
+
+function GlassUI:SetToggleKey(name)
+	local ok = pcall(function()
+		return Enum.KeyCode[name]
+	end)
+	if not ok then
+		return
+	end
+	self.settings.toggleKey = name
+	self:_updateKey()
+	self:_changed()
+end
+
+function GlassUI:SetAutoSave(on)
+	self.settings.autoSave = on == true
+	self:_changed()
+end
+
+-- Merge a settings table (e.g. decoded from JSON) into the live settings.
+function GlassUI:ApplySettings(data)
+	if type(data) ~= "table" then
+		return
+	end
+	self._applying = true
+	local s = self.settings
+
+	if type(data.theme) == "string" and THEMES[data.theme] then
+		s.theme = data.theme
+	end
+	if type(data.opacity) == "number" then
+		s.opacity = clamp(data.opacity, 0.2, 1)
+	end
+	if type(data.blur) == "boolean" then
+		s.blur = data.blur
+	end
+	if type(data.blurSize) == "number" then
+		s.blurSize = clamp(data.blurSize, 0, 40)
+	end
+	if type(data.scale) == "number" then
+		s.scale = clamp(data.scale, 0.7, 1.5)
+	end
+	if type(data.accent) == "string" then
+		s.accent = data.accent
+	end
+	if type(data.toggleKey) == "string" then
+		local ok = pcall(function()
+			return Enum.KeyCode[data.toggleKey]
+		end)
+		if ok then
+			s.toggleKey = data.toggleKey
+		end
+	end
+	if type(data.autoSave) == "boolean" then
+		s.autoSave = data.autoSave
+	end
+	if type(data.toggles) == "table" then
+		for k, v in pairs(data.toggles) do
+			if type(k) == "string" and type(v) == "boolean" then
+				s.toggles[k] = v
+			end
+		end
+	end
+
+	self:_applyTheme(false)
+	self:_applyOpacity()
+	self:_applyScale(false)
+	self:_updateBlur()
+	self:_updateKey()
+	for key, state in pairs(self._toggleStates) do
+		local wanted = s.toggles[key]
+		if wanted ~= nil and state.on ~= wanted then
+			state:Set(wanted, true) -- fires the row's onChange so your game logic follows
+		end
+	end
+
+	self._applying = false
+	self:_syncControls()
+end
+
+-- Back to defaults for the look & behaviour. Your feature toggles are left alone.
+function GlassUI:ResetSettings()
+	local fresh = deepCopy(DEFAULTS)
+	fresh.toggles = nil
+	self:ApplySettings(fresh)
+	self:_changed()
+end
+
+function GlassUI:SaveSettings()
+	local storage = GlassUI._storage
+	local json = HttpService:JSONEncode(self:GetSettings())
+	self:_setStatus("Saving...", "dim")
+	local ok, success, err = pcall(storage.Save, json, self._configName)
+	if ok and success then
+		self:_setStatus(err and ("Saved (" .. tostring(err) .. ")") or "Saved", "ok")
+		return true
+	end
+	local message = ok and tostring(err or "save failed") or tostring(success)
+	warn("[GlassUI] save failed: " .. message)
+	self:_setStatus("Save failed: " .. message, "err")
+	return false, message
+end
+
+function GlassUI:LoadSettings()
+	local storage = GlassUI._storage
+	self:_setStatus("Loading...", "dim")
+	local ok, data, err = pcall(storage.Load, self._configName)
+	if not ok then
+		warn("[GlassUI] load failed: " .. tostring(data))
+		self:_setStatus("Load failed", "err")
+		return false, tostring(data)
+	end
+	if data == nil or data == "" then
+		if err then
+			self:_setStatus("Load failed: " .. tostring(err), "err")
+			return false, tostring(err)
+		end
+		self:_setStatus("No saved settings yet", "dim")
+		return false, "no saved settings"
+	end
+	local okJson, decoded = pcall(function()
+		return HttpService:JSONDecode(data)
+	end)
+	if not okJson or type(decoded) ~= "table" then
+		self:_setStatus("Saved data is corrupted", "err")
+		return false, "corrupted data"
+	end
+	self:ApplySettings(decoded)
+	self:_setStatus("Loaded", "ok")
+	return true
 end
 
 -- ===================== window =====================
@@ -150,42 +666,89 @@ function GlassUI.new(opts)
 	opts = opts or {}
 	local self = setmetatable({}, GlassUI)
 
-	local player = game.Players.LocalPlayer
-	local playerGui = player:WaitForChild("PlayerGui")
+	self.settings = deepCopy(DEFAULTS)
+	self._themeFns = {}
+	self._syncers = {}
+	self._toggleStates = {}
+	self._pages = {}
+	self._navItems = {}
+	self._conns = {}
+	self._navCount = 0
+	self._hidden = false
+	self._startTime = os.time()
+	self._status = { text = "Not saved yet", kind = "dim" }
+	self._configName = opts.configName or opts.title or "default"
+	self:_resolveTheme()
+	self:_updateKey()
+
+	local player = Players.LocalPlayer
+	local guiParent = opts.parent or player:WaitForChild("PlayerGui")
+	local guiName = "GlassUI_" .. (opts.title or "Window")
+	local previous = guiParent:FindFirstChild(guiName)
+	if previous then
+		previous:Destroy() -- re-running the script replaces the old window instead of stacking
+	end
+
+	local baseSize = opts.size or UDim2.fromOffset(720, 480)
+	self._baseSize = baseSize
+	self._basePos = UDim2.fromScale(0.5, 0.5)
 
 	local screenGui = new("ScreenGui", {
-		Name = "GlassUI_" .. (opts.title or "Window"),
+		Name = guiName,
 		ResetOnSpawn = false,
 		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
 	})
 
+	-- Anchored at its centre so UI scale and open/close animations stay centred.
 	local window = new("Frame", {
 		Name = "Window",
-		Size = opts.size or UDim2.fromOffset(720, 480),
-		Position = UDim2.new(0.5, -360, 0.5, -240),
-		AnchorPoint = Vector2.new(0, 0),
-		BackgroundColor3 = COLOR.windowBg,
-		BackgroundTransparency = 0.35, -- <- the "glass": see through to the blurred world
+		Size = baseSize,
+		Position = self._basePos,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		BackgroundColor3 = self.theme.windowBg,
+		BackgroundTransparency = 1 - self.settings.opacity, -- <- the "glass"
 		BorderSizePixel = 0,
 		ClipsDescendants = true,
 	}, {
 		corner(14),
-		stroke(0.85, 1),
-		gradient(Color3.fromRGB(70, 55, 110), Color3.fromRGB(20, 70, 95), 160),
 	})
-	window.UIGradient.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.55),
-		NumberSequenceKeypoint.new(1, 0.85),
+	self:_bind(window, "BackgroundColor3", "windowBg")
+	self:_stroke(window, 0.85, 1)
+
+	local uiScale = new("UIScale", { Scale = self.settings.scale })
+	uiScale.Parent = window
+	self._uiScale = uiScale
+
+	-- Tint layer: a white frame whose gradient carries the theme colours.
+	-- (White base so the gradient shows its exact colours.)
+	local tint = new("Frame", {
+		Name = "Tint",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundColor3 = COLOR.white,
+		BorderSizePixel = 0,
+		ZIndex = 0,
+	}, { corner(14) })
+	local tintGradient = new("UIGradient", {
+		Rotation = 160,
+		Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.55),
+			NumberSequenceKeypoint.new(1, 0.85),
+		}),
 	})
+	tintGradient.Parent = tint
+	tint.Parent = window
+	self:_themed(function(theme)
+		tintGradient.Color = ColorSequence.new(theme.tintA, theme.tintB)
+	end)
 
 	local titlebar = new("Frame", {
 		Name = "Titlebar",
 		Size = UDim2.new(1, 0, 0, 40),
-		BackgroundColor3 = Color3.fromRGB(255, 255, 255),
 		BackgroundTransparency = 0.94,
 		BorderSizePixel = 0,
 	})
-	new("UIStroke", { Color = COLOR.stroke, Transparency = 0.93, Thickness = 1 }).Parent = titlebar
+	self:_bind(titlebar, "BackgroundColor3", "surface")
+	self:_stroke(titlebar, 0.93, 1)
 	titlebar.Parent = window
 
 	-- traffic light dots: red = close, amber = minimize, green = maximize
@@ -212,31 +775,37 @@ function GlassUI.new(opts)
 	end
 	dotsHolder.Parent = titlebar
 
-	new("TextLabel", {
+	local titleLabel = new("TextLabel", {
 		Text = opts.title or "Window",
 		Font = Enum.Font.GothamBold,
 		TextSize = 13,
-		TextColor3 = COLOR.text,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Size = UDim2.new(0, 200, 0, 16),
 		Position = UDim2.new(0, 82, 0, 6),
 		BackgroundTransparency = 1,
-	}).Parent = titlebar
+	})
+	self:_bind(titleLabel, "TextColor3", "text")
+	titleLabel.Parent = titlebar
 
 	if opts.subtitle then
-		new("TextLabel", {
+		local subtitleLabel = new("TextLabel", {
 			Text = opts.subtitle,
 			Font = Enum.Font.Gotham,
 			TextSize = 11,
-			TextColor3 = COLOR.textFaint,
 			TextXAlignment = Enum.TextXAlignment.Left,
 			Size = UDim2.new(0, 200, 0, 14),
 			Position = UDim2.new(0, 82, 0, 20),
 			BackgroundTransparency = 1,
-		}).Parent = titlebar
+		})
+		self:_bind(subtitleLabel, "TextColor3", "textFaint")
+		subtitleLabel.Parent = titlebar
 	end
 
-	makeDraggable(window, titlebar)
+	makeDraggable(window, titlebar, function(pos)
+		if not self._maximized then
+			self._basePos = pos
+		end
+	end)
 
 	local body = new("Frame", {
 		Name = "Body",
@@ -250,106 +819,92 @@ function GlassUI.new(opts)
 	local sidebar = new("Frame", {
 		Name = "Sidebar",
 		Size = UDim2.new(0, 190, 1, 0),
-		BackgroundColor3 = COLOR.sidebarBg,
 		BackgroundTransparency = 0.55,
 		BorderSizePixel = 0,
 	}, {
-		new("UIStroke", { Color = COLOR.stroke, Transparency = 0.93, Thickness = 1 }),
 		new("UIPadding", {
 			PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 10),
 			PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8),
 		}),
 		new("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }),
 	})
+	self:_bind(sidebar, "BackgroundColor3", "sidebarBg")
+	self:_stroke(sidebar, 0.93, 1)
 	sidebar.Parent = body
 
-	-- content (scrolling)
-	local content = new("ScrollingFrame", {
-		Name = "Content",
-		Size = UDim2.new(1, -190, 1, 0),
-		Position = UDim2.new(0, 190, 0, 0),
-		BackgroundTransparency = 1,
-		BorderSizePixel = 0,
-		ScrollBarThickness = 5,
-		ScrollBarImageColor3 = COLOR.textFaint,
-		AutomaticCanvasSize = Enum.AutomaticSize.Y,
-		CanvasSize = UDim2.new(0, 0, 0, 0),
-	}, {
-		new("UIPadding", {
-			PaddingTop = UDim.new(0, 18), PaddingBottom = UDim.new(0, 18),
-			PaddingLeft = UDim.new(0, 20), PaddingRight = UDim.new(0, 20),
-		}),
-		new("UIListLayout", { Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder }),
-	})
-	content.Parent = body
+	screenGui.Destroying:Connect(function()
+		self._destroyed = true
+		for _, conn in ipairs(self._conns) do
+			conn:Disconnect()
+		end
+	end)
 
 	self.screenGui = screenGui
 	self.window = window
 	self.sidebar = sidebar
-	self.content = content
-	self._navCount = 0
-	self._statGrid = nil
-	self._baseSize = opts.size or UDim2.fromOffset(720, 480)
-	self._basePos = window.Position
+	self._body = body
 	self._minimized = false
 	self._maximized = false
 
 	window.Parent = screenGui
-	screenGui.Parent = playerGui
+	screenGui.Parent = guiParent
 
-	setWorldBlur(true)
-	self._blurred = true
+	self:_updateBlur()
 
-	-- opening "pop in" animation: scale up from the window's own center
-	local target = self._baseSize
-	window.Size = UDim2.new(target.X.Scale, target.X.Offset * 0.85, target.Y.Scale, target.Y.Offset * 0.85)
-	window.Position = self._basePos + UDim2.fromOffset(target.X.Offset * 0.075, target.Y.Offset * 0.075)
+	-- opening "pop in" animation: scales up from the window's centre
+	window.Size = UDim2.new(baseSize.X.Scale, baseSize.X.Offset * 0.85, baseSize.Y.Scale, baseSize.Y.Offset * 0.85)
 	window.BackgroundTransparency = 1
-	tween(window, { Size = target, Position = self._basePos, BackgroundTransparency = 0.35 }, 0.35, Enum.EasingStyle.Back)
+	local openTween = tween(window, { Size = baseSize, BackgroundTransparency = 1 - self.settings.opacity }, 0.35, Enum.EasingStyle.Back)
+	openTween.Completed:Connect(function()
+		self:_applyOpacity() -- settings may have been loaded while the animation ran
+	end)
 
 	-- a small pill shown after closing, to bring the window back
 	local reopen = new("TextButton", {
 		Name = "Reopen",
-		Text = "  Reopen " .. (opts.title or "Window"),
-		Font = Enum.Font.GothamBold,
-		TextSize = 13,
-		TextColor3 = Color3.fromRGB(255, 255, 255),
+		Text = "",
 		AutoButtonColor = false,
 		Size = UDim2.fromOffset(160, 36),
 		Position = UDim2.new(0.5, -80, 1, -60),
-		BackgroundColor3 = COLOR.blue,
+		BackgroundColor3 = COLOR.white,
 		Visible = false,
 		BorderSizePixel = 0,
-	}, { corner(18), gradient(lighten(COLOR.blue, 0.15), COLOR.purple, 135) })
+	}, { corner(18) })
+	local pillGradient = new("UIGradient", { Rotation = 135 })
+	pillGradient.Parent = reopen
+	local pillLabel = new("TextLabel", {
+		Text = "Reopen " .. (opts.title or "Window"),
+		Font = Enum.Font.GothamBold,
+		TextSize = 13,
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+	})
+	pillLabel.Parent = reopen
+	self:_themed(function(theme)
+		pillGradient.Color = ColorSequence.new(lighten(theme.accent, 0.15), darken(theme.accent, 0.2))
+		pillLabel.TextColor3 = theme.accentOn
+	end)
 	reopen.Parent = screenGui
 	self.reopenButton = reopen
 
 	dots[1].MouseButton1Click:Connect(function() -- red: close
-		local t = tween(window, { Size = UDim2.new(target.X.Scale, 0, target.Y.Scale, 0), BackgroundTransparency = 1 }, 0.22)
-		t.Completed:Connect(function()
-			window.Visible = false
-			reopen.Visible = true
-			tween(reopen, { BackgroundTransparency = 0 }, 0.15)
-		end)
+		self:Hide(true)
 	end)
 
 	reopen.MouseButton1Click:Connect(function()
-		reopen.Visible = false
-		window.Visible = true
-		window.Size = UDim2.new(target.X.Scale, 0, target.Y.Scale, 0)
-		window.BackgroundTransparency = 1
-		self._minimized = false
-		self._maximized = false
-		body.Visible = true
-		tween(window, { Size = self._baseSize, BackgroundTransparency = 0.35 }, 0.3, Enum.EasingStyle.Back)
+		self:Show()
 	end)
 
 	dots[2].MouseButton1Click:Connect(function() -- amber: minimize
 		self._maximized = false
 		self._minimized = not self._minimized
 		if self._minimized then
-			tween(window, { Size = UDim2.new(0, self._baseSize.X.Offset, 0, 40) }, 0.3, Enum.EasingStyle.Back)
-			task.delay(0.15, function() if self._minimized then body.Visible = false end end)
+			tween(window, { Size = UDim2.new(0, self._baseSize.X.Offset, 0, 40), Position = self._basePos }, 0.3, Enum.EasingStyle.Back)
+			task.delay(0.15, function()
+				if self._minimized then
+					body.Visible = false
+				end
+			end)
 		else
 			body.Visible = true
 			tween(window, { Size = self._baseSize }, 0.3, Enum.EasingStyle.Back)
@@ -361,50 +916,221 @@ function GlassUI.new(opts)
 		body.Visible = true
 		self._maximized = not self._maximized
 		if self._maximized then
-			local viewport = workspace.CurrentCamera.ViewportSize
-			tween(window, {
-				Size = UDim2.fromOffset(viewport.X * 0.92, viewport.Y * 0.88),
-				Position = UDim2.fromOffset(viewport.X * 0.04, viewport.Y * 0.05),
-			}, 0.32, Enum.EasingStyle.Back)
+			local size, pos = self:_maximizedLayout()
+			tween(window, { Size = size, Position = pos }, 0.32, Enum.EasingStyle.Back)
 		else
 			tween(window, { Size = self._baseSize, Position = self._basePos }, 0.32, Enum.EasingStyle.Back)
 		end
 	end)
 
+	-- one input listener: key capture for rebinding + the show/hide hotkey
+	table.insert(self._conns, UserInputService.InputBegan:Connect(function(input, processed)
+		if self._capturing then
+			if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode ~= Enum.KeyCode.Unknown then
+				self._capturing = false
+				if input.KeyCode ~= Enum.KeyCode.Escape then
+					self:SetToggleKey(input.KeyCode.Name)
+				end
+				self:_syncControls()
+			end
+			return
+		end
+		if processed then
+			return
+		end
+		if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == self._toggleKeyCode then
+			self:Toggle()
+		end
+	end))
+
+	if opts.autoLoad ~= false then
+		task.spawn(function()
+			self:LoadSettings()
+		end)
+	end
+
 	return self
 end
 
-function GlassUI:Destroy()
-	if self._blurred then
-		setWorldBlur(false)
+function GlassUI:Hide(showPill)
+	if self._hidden then
+		return
 	end
+	self._hidden = true
+	self._hideToken = (self._hideToken or 0) + 1
+	local token = self._hideToken
+	local base = self._baseSize
+	local t = tween(self.window, {
+		Size = UDim2.new(base.X.Scale, 0, base.Y.Scale, 0),
+		BackgroundTransparency = 1,
+	}, 0.22)
+	self:_updateBlur()
+	t.Completed:Connect(function(state)
+		if state == Enum.PlaybackState.Completed and self._hidden and token == self._hideToken then
+			self.window.Visible = false
+			if showPill then
+				self.reopenButton.Visible = true
+			end
+		end
+	end)
+end
+
+function GlassUI:Show()
+	if not self._hidden then
+		return
+	end
+	self._hidden = false
+	self._hideToken = (self._hideToken or 0) + 1
+	self._minimized = false
+	self._maximized = false
+	self.reopenButton.Visible = false
+	self._body.Visible = true
+
+	local base = self._baseSize
+	local window = self.window
+	window.Visible = true
+	window.Position = self._basePos
+	window.Size = UDim2.new(base.X.Scale, 0, base.Y.Scale, 0)
+	window.BackgroundTransparency = 1
+	local t = tween(window, { Size = base, BackgroundTransparency = 1 - self.settings.opacity }, 0.3, Enum.EasingStyle.Back)
+	t.Completed:Connect(function()
+		self:_applyOpacity()
+	end)
+	self:_updateBlur()
+end
+
+function GlassUI:Toggle()
+	if self._hidden then
+		self:Show()
+	else
+		self:Hide(false)
+	end
+end
+
+-- Puts the window back in the middle of the screen (handy if it got dragged off).
+function GlassUI:Recenter()
+	self._basePos = UDim2.fromScale(0.5, 0.5)
+	if not self._maximized then
+		tween(self.window, { Position = self._basePos }, 0.25, Enum.EasingStyle.Back)
+	end
+end
+
+function GlassUI:Destroy()
+	self._destroyed = true
+	for _, conn in ipairs(self._conns) do
+		conn:Disconnect()
+	end
+	setWorldBlur(false, 0)
 	if self.reopenButton then
 		self.reopenButton:Destroy()
 	end
 	self.screenGui:Destroy()
 end
 
+-- ===================== pages =====================
+
+-- Every nav item owns one page (a scrolling area). Add stats/panels to the page.
+function GlassUI:AddPage(id)
+	if self._pages[id] then
+		return self._pages[id]
+	end
+	local frame = new("ScrollingFrame", {
+		Name = "Page_" .. tostring(id),
+		Size = UDim2.new(1, -190, 1, 0),
+		Position = UDim2.new(0, 190, 0, 0),
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		ScrollBarThickness = 5,
+		AutomaticCanvasSize = Enum.AutomaticSize.Y,
+		CanvasSize = UDim2.new(0, 0, 0, 0),
+		Visible = false,
+	}, {
+		new("UIPadding", {
+			PaddingTop = UDim.new(0, 18), PaddingBottom = UDim.new(0, 18),
+			PaddingLeft = UDim.new(0, 20), PaddingRight = UDim.new(0, 20),
+		}),
+		new("UIListLayout", { Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder }),
+	})
+	self:_bind(frame, "ScrollBarImageColor3", "textFaint")
+	frame.Parent = self._body
+
+	local page = setmetatable({ window = self, id = id, content = frame, _order = 0 }, Page)
+
+	local hint = new("TextLabel", {
+		Name = "EmptyHint",
+		Text = "Nothing here yet",
+		Font = Enum.Font.Gotham,
+		TextSize = 12,
+		Size = UDim2.new(1, 0, 0, 40),
+		BackgroundTransparency = 1,
+		LayoutOrder = 1000000,
+	})
+	self:_bind(hint, "TextColor3", "textFaint")
+	hint.Parent = frame
+	page._hint = hint
+
+	self._pages[id] = page
+	return page
+end
+
+function GlassUI:GetPage(id)
+	return self._pages[id]
+end
+
+function GlassUI:_getDefaultPage()
+	if not self._defaultPage then
+		self._defaultPage = self:AddPage("main")
+		self._defaultPage.content.Visible = true
+		self.content = self._defaultPage.content
+	end
+	return self._defaultPage
+end
+
+-- Window-level shortcuts: add to the default (first / active) page.
+function GlassUI:AddStatGrid()
+	return self:_getDefaultPage():AddStatGrid()
+end
+function GlassUI:AddStat(opts)
+	return self:_getDefaultPage():AddStat(opts)
+end
+function GlassUI:AddPanel(opts)
+	return self:_getDefaultPage():AddPanel(opts)
+end
+
+function Page:_touch()
+	if self._hint then
+		self._hint:Destroy()
+		self._hint = nil
+	end
+end
+
 -- ===================== sidebar nav items =====================
 
+-- Returns (button, page). The page is created for you unless you pass `page`.
 function GlassUI:AddNavItem(opts)
 	self._navCount += 1
+	local id = opts.id or opts.label or tostring(self._navCount)
 	local iconColor = NAV_ICON_COLOR[opts.color] or COLOR.blue
+
+	local page
+	if type(opts.page) == "table" then
+		page = opts.page
+	else
+		page = self:AddPage(opts.page or id)
+	end
 
 	local btn = new("TextButton", {
 		Text = "",
 		Size = UDim2.new(1, 0, 0, 32),
-		BackgroundColor3 = opts.active and iconColor or Color3.fromRGB(255, 255, 255),
-		BackgroundTransparency = opts.active and 0.85 or 1,
 		AutoButtonColor = false,
 		BorderSizePixel = 0,
 		LayoutOrder = self._navCount,
 	}, { corner(7) })
-	local activeGradient = gradient(lighten(iconColor, 0.1), Color3.fromRGB(18, 18, 20), 115)
+	local activeGradient = gradient(lighten(iconColor, 0.1), self.theme.windowBg, 115)
 	activeGradient.Transparency = NumberSequence.new({
 		NumberSequenceKeypoint.new(0, 0.3),
 		NumberSequenceKeypoint.new(1, 0.92),
 	})
-	activeGradient.Enabled = opts.active == true
 	activeGradient.Parent = btn
 
 	local icon = new("Frame", {
@@ -413,42 +1139,102 @@ function GlassUI:AddNavItem(opts)
 		BackgroundColor3 = iconColor,
 		BorderSizePixel = 0,
 	}, { corner(6), gradient(lighten(iconColor, 0.3), darken(iconColor, 0.12), 135) })
+	if opts.icon then
+		new("TextLabel", {
+			Text = opts.icon,
+			Font = Enum.Font.Gotham,
+			TextSize = 13,
+			Size = UDim2.fromScale(1, 1),
+			BackgroundTransparency = 1,
+		}).Parent = icon
+	end
 	icon.Parent = btn
 
-	new("TextLabel", {
+	local label = new("TextLabel", {
 		Text = opts.label or "Item",
 		Font = Enum.Font.GothamMedium,
 		TextSize = 13,
-		TextColor3 = opts.active and COLOR.text or COLOR.textDim,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Size = UDim2.new(1, -40, 1, 0),
 		Position = UDim2.new(0, 36, 0, 0),
 		BackgroundTransparency = 1,
-	}).Parent = btn
+	})
+	label.Parent = btn
+
+	local item = { id = id, button = btn, page = page, active = false, hover = false }
+
+	function item.refresh(animate)
+		local theme = self.theme
+		local bgColor = item.active and iconColor or theme.surface
+		local bgTrans = item.active and 0.85 or (item.hover and 0.95 or 1)
+		local textColor = item.active and theme.text or theme.textDim
+		activeGradient.Color = ColorSequence.new(lighten(iconColor, 0.1), theme.windowBg)
+		activeGradient.Enabled = item.active
+		if animate then
+			tween(btn, { BackgroundColor3 = bgColor, BackgroundTransparency = bgTrans }, 0.12)
+			tween(label, { TextColor3 = textColor }, 0.12)
+		else
+			btn.BackgroundColor3 = bgColor
+			btn.BackgroundTransparency = bgTrans
+			label.TextColor3 = textColor
+		end
+	end
+	self:_themed(function(_, animate)
+		item.refresh(animate)
+	end)
 
 	btn.MouseEnter:Connect(function()
+		item.hover = true
 		tween(icon, { Size = UDim2.fromOffset(24, 24), Position = UDim2.new(0, 5, 0.5, -12) }, 0.15, Enum.EasingStyle.Back)
-		if not opts.active then
-			tween(btn, { BackgroundTransparency = 0.95 }, 0.12)
-		end
+		item.refresh(true)
 	end)
 	btn.MouseLeave:Connect(function()
+		item.hover = false
 		tween(icon, { Size = UDim2.fromOffset(22, 22), Position = UDim2.new(0, 6, 0.5, -11) }, 0.15)
-		if not opts.active then
-			tween(btn, { BackgroundTransparency = 1 }, 0.12)
+		item.refresh(true)
+	end)
+	btn.MouseButton1Click:Connect(function()
+		self:SelectNav(id)
+		if opts.onClick then
+			opts.onClick()
 		end
 	end)
-	if opts.onClick then
-		btn.MouseButton1Click:Connect(opts.onClick)
-	end
 
 	btn.Parent = self.sidebar
-	return btn
+	self._navItems[id] = item
+
+	-- the active item's page is where window:AddStat / window:AddPanel go
+	if opts.active or not self._defaultPage then
+		self._defaultPage = page
+		self.content = page.content
+	end
+	if opts.active or not self._activeNavId then
+		self:SelectNav(id)
+	end
+
+	return btn, page
+end
+
+function GlassUI:SelectNav(id)
+	local target = self._navItems[id]
+	if not target then
+		return
+	end
+	self._activeNavId = id
+	for _, page in pairs(self._pages) do
+		page.content.Visible = false
+	end
+	target.page.content.Visible = true
+	for _, item in pairs(self._navItems) do
+		item.active = item == target
+		item.refresh(true)
+	end
 end
 
 -- ===================== stat cards =====================
 
-function GlassUI:AddStatGrid()
+function Page:AddStatGrid()
+	self:_touch()
 	local grid = new("Frame", {
 		Size = UDim2.new(1, 0, 0, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
@@ -466,42 +1252,45 @@ function GlassUI:AddStatGrid()
 	return grid
 end
 
-function GlassUI:AddStat(opts)
+function Page:AddStat(opts)
 	if not self._statGrid then
 		self:AddStatGrid()
 	end
+	local ui = self.window
 	local card = new("Frame", {
-		BackgroundColor3 = Color3.fromRGB(255, 255, 255),
 		BackgroundTransparency = 0.95,
 		BorderSizePixel = 0,
 	}, {
 		corner(9),
-		stroke(0.93, 1),
 		new("UIPadding", {
 			PaddingTop = UDim.new(0, 10), PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12),
 		}),
 	})
+	ui:_bind(card, "BackgroundColor3", "surface")
+	ui:_stroke(card, 0.93, 1)
 
-	new("TextLabel", {
+	local label = new("TextLabel", {
 		Text = opts.label or "Label",
 		Font = Enum.Font.Gotham,
 		TextSize = 11,
-		TextColor3 = COLOR.textFaint,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Size = UDim2.new(1, 0, 0, 14),
 		BackgroundTransparency = 1,
-	}).Parent = card
+	})
+	ui:_bind(label, "TextColor3", "textFaint")
+	label.Parent = card
 
-	new("TextLabel", {
+	local value = new("TextLabel", {
 		Text = opts.value or "0",
 		Font = Enum.Font.GothamBold,
 		TextSize = 19,
-		TextColor3 = opts.accent and COLOR.green or COLOR.text,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Size = UDim2.new(1, 0, 0, 24),
 		Position = UDim2.new(0, 0, 0, 18),
 		BackgroundTransparency = 1,
-	}).Parent = card
+	})
+	ui:_bind(value, "TextColor3", opts.accent and "accent" or "text")
+	value.Parent = card
 
 	card.Parent = self._statGrid
 	return card
@@ -509,21 +1298,23 @@ end
 
 -- ===================== collapsible panels =====================
 
-local Panel = {}
-Panel.__index = Panel
-
-function GlassUI:AddPanel(opts)
+function Page:AddPanel(opts)
+	self:_touch()
 	opts = opts or {}
-	local panel = setmetatable({}, Panel)
+	local ui = self.window
+	local panel = setmetatable({ _ui = ui, _page = self, _rowCount = 0 }, Panel)
 
+	self._order += 1
 	local frame = new("Frame", {
 		Size = UDim2.new(1, 0, 0, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
-		BackgroundColor3 = Color3.fromRGB(255, 255, 255),
 		BackgroundTransparency = 0.95,
 		BorderSizePixel = 0,
 		ClipsDescendants = true,
-	}, { corner(10), stroke(0.93, 1) })
+		LayoutOrder = self._order,
+	}, { corner(10) })
+	ui:_bind(frame, "BackgroundColor3", "surface")
+	ui:_stroke(frame, 0.93, 1)
 
 	local header = new("TextButton", {
 		Text = "",
@@ -533,27 +1324,28 @@ function GlassUI:AddPanel(opts)
 	})
 	header.Parent = frame
 
-	new("TextLabel", {
-		Text = opts.title or "Panel",
+	local title = new("TextLabel", {
+		Text = (opts.icon and (opts.icon .. "  ") or "") .. (opts.title or "Panel"),
 		Font = Enum.Font.GothamBold,
 		TextSize = 13,
-		TextColor3 = COLOR.text,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Size = UDim2.new(1, -40, 1, 0),
 		Position = UDim2.new(0, 14, 0, 0),
 		BackgroundTransparency = 1,
-	}).Parent = header
+	})
+	ui:_bind(title, "TextColor3", "text")
+	title.Parent = header
 
 	local chevron = new("TextLabel", {
 		Text = "▾",
 		Font = Enum.Font.GothamBold,
 		TextSize = 14,
-		TextColor3 = COLOR.textFaint,
 		Size = UDim2.fromOffset(20, 20),
 		Position = UDim2.new(1, -30, 0.5, -10),
 		BackgroundTransparency = 1,
 		Rotation = opts.open and 180 or 0,
 	})
+	ui:_bind(chevron, "TextColor3", "textFaint")
 	chevron.Parent = header
 
 	local body = new("Frame", {
@@ -574,7 +1366,6 @@ function GlassUI:AddPanel(opts)
 	panel.frame = frame
 	panel.body = body
 	panel.open = opts.open == true
-	panel._rowCount = 0
 
 	header.MouseButton1Click:Connect(function()
 		panel.open = not panel.open
@@ -586,7 +1377,9 @@ function GlassUI:AddPanel(opts)
 	return panel
 end
 
+-- A label + value row. Returns (row, valueLabel).
 function Panel:AddRow(opts)
+	local ui = self._ui
 	self._rowCount += 1
 	local row = new("Frame", {
 		Size = UDim2.new(1, 0, 0, 30),
@@ -599,4385 +1392,926 @@ function Panel:AddRow(opts)
 		local check = new("Frame", {
 			Size = UDim2.fromOffset(15, 15),
 			Position = UDim2.new(0, 0, 0.5, -7),
-			BackgroundColor3 = COLOR.green,
 			BorderSizePixel = 0,
 		}, { corner(4) })
-		new("TextLabel", {
+		ui:_bind(check, "BackgroundColor3", "accent")
+		local mark = new("TextLabel", {
 			Text = "✓",
 			Font = Enum.Font.GothamBold,
 			TextSize = 10,
-			TextColor3 = Color3.fromRGB(12, 31, 20),
 			Size = UDim2.fromScale(1, 1),
 			BackgroundTransparency = 1,
-		}).Parent = check
+		})
+		ui:_bind(mark, "TextColor3", "accentOn")
+		mark.Parent = check
 		check.Parent = row
 		labelX = 22
 	end
 
-	new("TextLabel", {
+	local label = new("TextLabel", {
 		Text = opts.label or "",
 		Font = Enum.Font.Gotham,
 		TextSize = 13,
-		TextColor3 = COLOR.textDim,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Size = UDim2.new(0.6, -labelX, 1, 0),
 		Position = UDim2.new(0, labelX, 0, 0),
 		BackgroundTransparency = 1,
-	}).Parent = row
+	})
+	ui:_bind(label, "TextColor3", "textDim")
+	label.Parent = row
 
-	new("TextLabel", {
+	local valueLabel = new("TextLabel", {
 		Text = opts.value or "",
 		Font = Enum.Font.GothamBold,
 		TextSize = 13,
-		TextColor3 = COLOR.text,
 		TextXAlignment = Enum.TextXAlignment.Right,
+		TextTruncate = Enum.TextTruncate.AtEnd,
 		Size = UDim2.new(0.4, 0, 1, 0),
 		Position = UDim2.new(0.6, 0, 0, 0),
 		BackgroundTransparency = 1,
-	}).Parent = row
+	})
+	ui:_bind(valueLabel, "TextColor3", "text")
+	valueLabel.Parent = row
 
-	new("Frame", {
+	local divider = new("Frame", {
 		Size = UDim2.new(1, 0, 0, 1),
 		Position = UDim2.new(0, 0, 1, -1),
-		BackgroundColor3 = COLOR.stroke,
 		BackgroundTransparency = 0.93,
 		BorderSizePixel = 0,
-	}).Parent = row
+	})
+	ui:_bind(divider, "BackgroundColor3", "stroke")
+	divider.Parent = row
 
 	row.Parent = self.body
-	return row
+	return row, valueLabel
 end
 
--- A row with a toggle switch instead of a value. Returns (row, setter/getter table).
+-- A row with a toggle switch. Returns (row, state).
+--   opts.key      -> saved/loaded with the rest of the settings (use a unique string)
+--   opts.onChange -> called with the new value (also called when a saved value is loaded)
+--   state.on, state:Set(on, fire)
 function Panel:AddToggleRow(opts)
+	local ui = self._ui
 	self._rowCount += 1
+	local key = opts.key
+
+	local initial = opts.on == true
+	local needsFire = false
+	if key then
+		local saved = ui.settings.toggles[key]
+		if saved ~= nil then
+			needsFire = saved ~= initial
+			initial = saved
+		else
+			ui.settings.toggles[key] = initial
+		end
+	end
+
 	local row = new("Frame", {
 		Size = UDim2.new(1, 0, 0, 34),
 		BackgroundTransparency = 1,
 		LayoutOrder = self._rowCount,
 	})
 
-	new("TextLabel", {
+	local label = new("TextLabel", {
 		Text = opts.label or "",
 		Font = Enum.Font.Gotham,
 		TextSize = 13,
-		TextColor3 = COLOR.textDim,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Size = UDim2.new(1, -46, 1, 0),
 		BackgroundTransparency = 1,
-	}).Parent = row
+	})
+	ui:_bind(label, "TextColor3", "textDim")
+	label.Parent = row
 
 	local track = new("TextButton", {
 		Text = "",
 		Size = UDim2.fromOffset(38, 22),
 		Position = UDim2.new(1, -38, 0.5, -11),
-		BackgroundColor3 = opts.on and COLOR.green or Color3.fromRGB(255, 255, 255),
-		BackgroundTransparency = opts.on and 0 or 0.85,
 		AutoButtonColor = false,
 		BorderSizePixel = 0,
 	}, { corner(11) })
-	local trackGradient = gradient(lighten(COLOR.green, 0.25), darken(COLOR.green, 0.1), 135)
-	trackGradient.Enabled = opts.on == true
+	local trackGradient = new("UIGradient", { Rotation = 135 })
 	trackGradient.Parent = track
 
+	local function knobPos(on)
+		return on and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
+	end
 	local knob = new("Frame", {
 		Size = UDim2.fromOffset(18, 18),
-		Position = opts.on and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9),
-		BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+		Position = knobPos(initial),
+		BackgroundColor3 = COLOR.white,
 		BorderSizePixel = 0,
 	}, { corner(9) })
 	knob.Parent = track
 
-	local state = { on = opts.on == true }
-	track.MouseButton1Click:Connect(function()
-		state.on = not state.on
+	local state = { on = initial }
+
+	local function paint(animate)
+		local theme = ui.theme
+		trackGradient.Color = ColorSequence.new(lighten(theme.accent, 0.25), darken(theme.accent, 0.1))
 		trackGradient.Enabled = state.on
+		local props = {
+			BackgroundColor3 = state.on and COLOR.white or theme.surface,
+			BackgroundTransparency = state.on and 0 or 0.85,
+		}
+		if animate then
+			tween(track, props, 0.15)
+		else
+			track.BackgroundColor3 = props.BackgroundColor3
+			track.BackgroundTransparency = props.BackgroundTransparency
+		end
+	end
+	ui:_themed(function(_, animate)
+		paint(animate)
+	end)
+
+	function state:Set(on, fire)
+		on = on == true
+		if key then
+			ui.settings.toggles[key] = on
+		end
+		if on == self.on then
+			return
+		end
+		self.on = on
+		paint(true)
 		-- little squash-and-stretch pulse on the knob as it slides
 		tween(knob, { Size = UDim2.fromOffset(22, 18) }, 0.08)
 		task.delay(0.08, function()
 			tween(knob, { Size = UDim2.fromOffset(18, 18) }, 0.12, Enum.EasingStyle.Back)
 		end)
-		tween(knob, { Position = state.on and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9) }, 0.2, Enum.EasingStyle.Back)
-		tween(track, {
-			BackgroundColor3 = state.on and COLOR.green or Color3.fromRGB(255, 255, 255),
-			BackgroundTransparency = state.on and 0 or 0.85,
-		}, 0.15)
-		if opts.onChange then
-			opts.onChange(state.on)
+		tween(knob, { Position = knobPos(on) }, 0.2, Enum.EasingStyle.Back)
+		if fire then
+			if opts.onChange then
+				opts.onChange(on)
+			end
+			ui:_changed()
 		end
+	end
+
+	track.MouseButton1Click:Connect(function()
+		state:Set(not state.on, true)
 	end)
+
+	if key then
+		ui._toggleStates[key] = state
+	end
+	if needsFire and opts.onChange then
+		task.defer(opts.onChange, initial) -- a saved value differs from the default: tell your game logic
+	end
 
 	track.Parent = row
 	row.Parent = self.body
 	return row, state
 end
 
+-- A slider row. opts: label, min, max, step, value, format(v) -> string, onChange(v)
+-- Returns (row, state) with state:Get() / state:Set(v, fire).
+function Panel:AddSliderRow(opts)
+	local ui = self._ui
+	local page = self._page
+	self._rowCount += 1
+	local min = opts.min or 0
+	local max = opts.max or 1
+	local step = opts.step or 0
+	local fmt = opts.format or tostring
+
+	local row = new("Frame", {
+		Size = UDim2.new(1, 0, 0, 46),
+		BackgroundTransparency = 1,
+		LayoutOrder = self._rowCount,
+	})
+
+	local label = new("TextLabel", {
+		Text = opts.label or "",
+		Font = Enum.Font.Gotham,
+		TextSize = 13,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Size = UDim2.new(0.6, 0, 0, 24),
+		BackgroundTransparency = 1,
+	})
+	ui:_bind(label, "TextColor3", "textDim")
+	label.Parent = row
+
+	local valueLabel = new("TextLabel", {
+		Font = Enum.Font.GothamBold,
+		TextSize = 13,
+		TextXAlignment = Enum.TextXAlignment.Right,
+		Size = UDim2.new(0.4, 0, 0, 24),
+		Position = UDim2.new(0.6, 0, 0, 0),
+		BackgroundTransparency = 1,
+	})
+	ui:_bind(valueLabel, "TextColor3", "text")
+	valueLabel.Parent = row
+
+	-- invisible, taller hit area so the thin track is easy to grab
+	local hit = new("TextButton", {
+		Text = "",
+		AutoButtonColor = false,
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 20),
+		Position = UDim2.new(0, 0, 0, 24),
+	})
+	local track = new("Frame", {
+		Size = UDim2.new(1, 0, 0, 6),
+		Position = UDim2.new(0, 0, 0.5, -3),
+		BackgroundTransparency = 0.85,
+		BorderSizePixel = 0,
+	}, { corner(3) })
+	ui:_bind(track, "BackgroundColor3", "surface")
+	local fill = new("Frame", {
+		Size = UDim2.fromScale(0, 1),
+		BorderSizePixel = 0,
+	}, { corner(3) })
+	ui:_bind(fill, "BackgroundColor3", "accent")
+	fill.Parent = track
+	local knob = new("Frame", {
+		Size = UDim2.fromOffset(14, 14),
+		BackgroundColor3 = COLOR.white,
+		BorderSizePixel = 0,
+		ZIndex = 2,
+	}, { corner(7) })
+	knob.Parent = track
+	track.Parent = hit
+	hit.Parent = row
+
+	local value = clamp(opts.value or min, min, max)
+	local state = {}
+
+	local function render()
+		local frac = max > min and (value - min) / (max - min) or 0
+		fill.Size = UDim2.fromScale(frac, 1)
+		knob.Position = UDim2.new(frac, -7, 0.5, -7)
+		valueLabel.Text = fmt(value)
+	end
+
+	function state:Get()
+		return value
+	end
+	function state:Set(v, fire)
+		v = clamp(v, min, max)
+		if step > 0 then
+			v = min + math.floor((v - min) / step + 0.5) * step
+		end
+		v = tonumber(string.format("%.4f", clamp(v, min, max)))
+		local changed = v ~= value
+		value = v
+		render()
+		if fire and changed and opts.onChange then
+			opts.onChange(v)
+		end
+	end
+	render()
+
+	local dragging = false
+	local function setFromX(x)
+		local width = hit.AbsoluteSize.X
+		if width <= 0 then
+			return
+		end
+		local frac = clamp((x - hit.AbsolutePosition.X) / width, 0, 1)
+		state:Set(min + frac * (max - min), true)
+	end
+	local function isPress(input)
+		return input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch
+	end
+
+	hit.InputBegan:Connect(function(input)
+		if isPress(input) then
+			dragging = true
+			page.content.ScrollingEnabled = false -- so touch-dragging doesn't scroll the page
+			setFromX(input.Position.X)
+		end
+	end)
+	table.insert(ui._conns, UserInputService.InputChanged:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			setFromX(input.Position.X)
+		end
+	end))
+	table.insert(ui._conns, UserInputService.InputEnded:Connect(function(input)
+		if dragging and isPress(input) then
+			dragging = false
+			page.content.ScrollingEnabled = true
+		end
+	end))
+
+	row.Parent = self.body
+	return row, state
+end
+
+-- A row showing the window's show/hide key; click it, then press a new key.
+function Panel:AddKeybindRow(opts)
+	local ui = self._ui
+	self._rowCount += 1
+	local row = new("Frame", {
+		Size = UDim2.new(1, 0, 0, 36),
+		BackgroundTransparency = 1,
+		LayoutOrder = self._rowCount,
+	})
+
+	local label = new("TextLabel", {
+		Text = opts.label or "Toggle window key",
+		Font = Enum.Font.Gotham,
+		TextSize = 13,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Size = UDim2.new(1, -130, 1, 0),
+		BackgroundTransparency = 1,
+	})
+	ui:_bind(label, "TextColor3", "textDim")
+	label.Parent = row
+
+	local btn = new("TextButton", {
+		Text = "",
+		Font = Enum.Font.GothamMedium,
+		TextSize = 12,
+		AutoButtonColor = false,
+		BorderSizePixel = 0,
+		BackgroundTransparency = 0.88,
+		Size = UDim2.fromOffset(120, 24),
+		Position = UDim2.new(1, -120, 0.5, -12),
+	}, { corner(6) })
+	ui:_bind(btn, "BackgroundColor3", "surface")
+	ui:_bind(btn, "TextColor3", "text")
+	btn.MouseButton1Click:Connect(function()
+		ui._capturing = true
+		btn.Text = "Press a key..."
+	end)
+	btn.Parent = row
+
+	ui:_addSyncer(function()
+		if not ui._capturing then
+			btn.Text = ui.settings.toggleKey
+		end
+	end)
+
+	row.Parent = self.body
+	return row
+end
+
+-- A row of equal-width buttons.
+--   buttons = { { icon = "💾", text = "Save", primary = true, onClick = fn },
+--               { icon = "🔄", text = "Reset", danger = true, confirm = "Sure?", onClick = fn } }
+function Panel:AddButtonRow(buttons)
+	local ui = self._ui
+	self._rowCount += 1
+	local n = #buttons
+	local row = new("Frame", {
+		Size = UDim2.new(1, 0, 0, 44),
+		BackgroundTransparency = 1,
+		LayoutOrder = self._rowCount,
+	}, {
+		new("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			Padding = UDim.new(0, 8),
+			VerticalAlignment = Enum.VerticalAlignment.Center,
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+	})
+
+	for i, def in ipairs(buttons) do
+		local baseT = def.primary and 0 or (def.danger and 0.82 or 0.88)
+		local idleText = def.icon and (def.icon .. "  " .. def.text) or def.text
+		local btn = new("TextButton", {
+			Text = idleText,
+			Font = Enum.Font.GothamMedium,
+			TextSize = 12,
+			AutoButtonColor = false,
+			BorderSizePixel = 0,
+			BackgroundTransparency = baseT,
+			LayoutOrder = i,
+			Size = UDim2.new(1 / n, -8 * (n - 1) / n, 0, 28),
+		}, { corner(7) })
+		ui:_themed(function(theme)
+			if def.primary then
+				btn.BackgroundColor3 = theme.accent
+				btn.TextColor3 = theme.accentOn
+			elseif def.danger then
+				btn.BackgroundColor3 = COLOR.red
+				btn.TextColor3 = COLOR.red
+			else
+				btn.BackgroundColor3 = theme.surface
+				btn.TextColor3 = theme.text
+			end
+		end)
+		btn.MouseEnter:Connect(function()
+			tween(btn, { BackgroundTransparency = math.max(baseT - 0.08, 0) }, 0.1)
+		end)
+		btn.MouseLeave:Connect(function()
+			tween(btn, { BackgroundTransparency = baseT }, 0.1)
+		end)
+
+		local armed = false
+		btn.MouseButton1Click:Connect(function()
+			if def.confirm and not armed then
+				armed = true
+				btn.Text = "⚠️  " .. def.confirm
+				task.delay(2.5, function()
+					if armed then
+						armed = false
+						btn.Text = idleText
+					end
+				end)
+				return
+			end
+			armed = false
+			btn.Text = idleText
+			if def.onClick then
+				task.spawn(def.onClick)
+			end
+		end)
+		btn.Parent = row
+	end
+
+	row.Parent = self.body
+	return row
+end
+
+-- Grid of theme cards. Clicking one calls window:SetTheme(name).
+function Panel:AddThemeGrid()
+	local ui = self._ui
+	self._rowCount += 1
+	local grid = new("Frame", {
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundTransparency = 1,
+		LayoutOrder = self._rowCount,
+	}, {
+		new("UIGridLayout", {
+			CellPadding = UDim2.fromOffset(10, 10),
+			CellSize = UDim2.new(1 / 3, -7, 0, 74),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+		new("UIPadding", { PaddingTop = UDim.new(0, 2), PaddingBottom = UDim.new(0, 2) }),
+	})
+
+	local cards = {}
+	for i, name in ipairs(THEME_ORDER) do
+		local theme = THEMES[name]
+		local card = new("TextButton", {
+			Name = name,
+			Text = "",
+			AutoButtonColor = false,
+			BorderSizePixel = 0,
+			BackgroundColor3 = theme.windowBg,
+			ClipsDescendants = true,
+			LayoutOrder = i,
+		}, { corner(10) })
+
+		-- mini preview of the theme: tint + accent pill + two "text" lines
+		local tint = new("Frame", {
+			Size = UDim2.fromScale(1, 1),
+			BackgroundColor3 = COLOR.white,
+			BorderSizePixel = 0,
+			ZIndex = 0,
+		}, {
+			new("UIGradient", {
+				Color = ColorSequence.new(theme.tintA, theme.tintB),
+				Rotation = 160,
+				Transparency = NumberSequence.new({
+					NumberSequenceKeypoint.new(0, 0.35),
+					NumberSequenceKeypoint.new(1, 0.7),
+				}),
+			}),
+		})
+		tint.Parent = card
+
+		new("Frame", {
+			Size = UDim2.fromOffset(36, 7),
+			Position = UDim2.fromOffset(12, 12),
+			BackgroundColor3 = theme.accent,
+			BorderSizePixel = 0,
+		}, { corner(4) }).Parent = card
+		new("Frame", {
+			Size = UDim2.fromOffset(72, 5),
+			Position = UDim2.fromOffset(12, 26),
+			BackgroundColor3 = theme.textDim,
+			BackgroundTransparency = 0.5,
+			BorderSizePixel = 0,
+		}, { corner(3) }).Parent = card
+		new("Frame", {
+			Size = UDim2.fromOffset(48, 5),
+			Position = UDim2.fromOffset(12, 35),
+			BackgroundColor3 = theme.textDim,
+			BackgroundTransparency = 0.7,
+			BorderSizePixel = 0,
+		}, { corner(3) }).Parent = card
+
+		new("TextLabel", {
+			Text = name,
+			Font = Enum.Font.GothamMedium,
+			TextSize = 12,
+			TextColor3 = theme.text,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Size = UDim2.new(1, -40, 0, 18),
+			Position = UDim2.new(0, 12, 1, -24),
+			BackgroundTransparency = 1,
+		}).Parent = card
+
+		local check = new("TextLabel", {
+			Text = "✓",
+			Font = Enum.Font.GothamBold,
+			TextSize = 14,
+			TextColor3 = theme.accent,
+			Size = UDim2.fromOffset(18, 18),
+			Position = UDim2.new(1, -24, 0, 6),
+			BackgroundTransparency = 1,
+			Visible = false,
+		})
+		check.Parent = card
+
+		local ring = new("UIStroke", {
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+			Color = rgb(150, 150, 160),
+			Transparency = 0.7,
+			Thickness = 1,
+		})
+		ring.Parent = card
+
+		card.MouseButton1Click:Connect(function()
+			ui:SetTheme(name)
+		end)
+		card.Parent = grid
+		cards[name] = { ring = ring, check = check }
+	end
+
+	ui:_addSyncer(function()
+		for name, c in pairs(cards) do
+			local selected = name == ui.settings.theme
+			c.ring.Color = selected and ui.theme.accent or rgb(150, 150, 160)
+			c.ring.Thickness = selected and 2 or 1
+			c.ring.Transparency = selected and 0 or 0.7
+			c.check.Visible = selected
+		end
+	end)
+
+	grid.Parent = self.body
+	return grid
+end
+
+-- Row of accent colour chips ("Theme" = use the theme's own accent).
+function Panel:AddAccentRow()
+	local ui = self._ui
+	self._rowCount += 1
+	local row = new("Frame", {
+		Size = UDim2.new(1, 0, 0, 40),
+		BackgroundTransparency = 1,
+		LayoutOrder = self._rowCount,
+	}, {
+		new("UIListLayout", {
+			FillDirection = Enum.FillDirection.Horizontal,
+			Padding = UDim.new(0, 10),
+			VerticalAlignment = Enum.VerticalAlignment.Center,
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+	})
+
+	local rings = {}
+	local function makeRing(chip)
+		local ring = new("UIStroke", {
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+			Transparency = 1,
+			Thickness = 2,
+		})
+		ring.Parent = chip
+		return ring
+	end
+
+	local auto = new("TextButton", {
+		Text = "Theme",
+		Font = Enum.Font.GothamMedium,
+		TextSize = 12,
+		AutoButtonColor = false,
+		BorderSizePixel = 0,
+		BackgroundTransparency = 0.88,
+		Size = UDim2.fromOffset(56, 24),
+		LayoutOrder = 0,
+	}, { corner(12) })
+	ui:_bind(auto, "BackgroundColor3", "surface")
+	ui:_bind(auto, "TextColor3", "text")
+	auto.MouseButton1Click:Connect(function()
+		ui:SetAccent("auto")
+	end)
+	auto.Parent = row
+	rings.auto = makeRing(auto)
+
+	for i, a in ipairs(ACCENTS) do
+		local chip = new("TextButton", {
+			Text = "",
+			AutoButtonColor = false,
+			BorderSizePixel = 0,
+			BackgroundColor3 = a.color,
+			Size = UDim2.fromOffset(24, 24),
+			LayoutOrder = i,
+		}, { corner(12) })
+		chip.MouseButton1Click:Connect(function()
+			ui:SetAccent(a.id)
+		end)
+		chip.Parent = row
+		rings[a.id] = makeRing(chip)
+	end
+
+	ui:_addSyncer(function()
+		local current = ui.settings.accent
+		for id, ring in pairs(rings) do
+			local selected = (id == current) or (id == "auto" and not findAccent(current))
+			ring.Color = ui.theme.text
+			ring.Transparency = selected and 0 or 1
+		end
+	end)
+
+	row.Parent = self.body
+	return row
+end
+
+-- ===================== ready-made pages =====================
+
+-- Fills `page` with the theme picker + accent colour chips.
+function GlassUI:BuildThemesPage(page)
+	page = page or self:_getDefaultPage()
+	local themes = page:AddPanel({ title = "Theme", icon = "🎨", open = true })
+	themes:AddThemeGrid()
+	local accent = page:AddPanel({ title = "Accent color", icon = "🖌️", open = true })
+	accent:AddAccentRow()
+	return page
+end
+
+-- Fills `page` with appearance / behaviour settings and the save & load controls.
+function GlassUI:BuildSettingsPage(page)
+	page = page or self:_getDefaultPage()
+	local s = self.settings
+
+	local function percent(v)
+		return string.format("%d%%", math.floor(v * 100 + 0.5))
+	end
+	local function whole(v)
+		return string.format("%d", math.floor(v + 0.5))
+	end
+
+	-- Appearance
+	local look = page:AddPanel({ title = "Appearance", icon = "✨", open = true })
+	local _, opacity = look:AddSliderRow({
+		label = "Window opacity", min = 0.2, max = 1, step = 0.01, value = s.opacity, format = percent,
+		onChange = function(v) self:SetOpacity(v) end,
+	})
+	local _, blurToggle = look:AddToggleRow({
+		label = "Background blur", on = s.blur,
+		onChange = function(on) self:SetBlur(on) end,
+	})
+	local _, blurSize = look:AddSliderRow({
+		label = "Blur strength", min = 0, max = 40, step = 1, value = s.blurSize, format = whole,
+		onChange = function(v) self:SetBlurSize(v) end,
+	})
+	local _, scale = look:AddSliderRow({
+		label = "UI scale", min = 0.7, max = 1.5, step = 0.05, value = s.scale, format = percent,
+		onChange = function(v) self:SetScale(v) end,
+	})
+
+	-- Behaviour
+	local behavior = page:AddPanel({ title = "Behavior", icon = "🎮", open = true })
+	behavior:AddKeybindRow({ label = "Show / hide window key" })
+	local _, autoSave = behavior:AddToggleRow({
+		label = "Auto-save changes", on = s.autoSave,
+		onChange = function(on) self:SetAutoSave(on) end,
+	})
+	behavior:AddButtonRow({
+		{ icon = "🎯", text = "Recenter window", onClick = function() self:Recenter() end },
+	})
+
+	-- Save / load
+	local saved = page:AddPanel({ title = "Saved settings", icon = "💾", open = true })
+	local _, statusLabel = saved:AddRow({ label = "Status", value = "" })
+	self._statusLabel = statusLabel
+	self:_themed(function()
+		self:_renderStatus()
+	end)
+	saved:AddButtonRow({
+		{ text = "Save", primary = true, onClick = function() self:SaveSettings() end },
+		{ icon = "📂", text = "Load", onClick = function() self:LoadSettings() end },
+		{ text = "Reset", danger = true, confirm = "Sure?", onClick = function() self:ResetSettings() end },
+	})
+
+	self:_addSyncer(function()
+		opacity:Set(self.settings.opacity, false)
+		blurToggle:Set(self.settings.blur, false)
+		blurSize:Set(self.settings.blurSize, false)
+		scale:Set(self.settings.scale, false)
+		autoSave:Set(self.settings.autoSave, false)
+	end)
+
+	return page
+end
+
+-- Fills `page` with an info screen: about, player, game/server, live performance, shortcuts.
+--   opts.title  = "About"                       (heading of the first panel)
+--   opts.about  = { { "Script", "My hub" }, { "Version", "1.0" } }   (extra rows)
+function GlassUI:BuildInfoPage(page, opts)
+	page = page or self:_getDefaultPage()
+	opts = opts or {}
+	local player = Players.LocalPlayer
+	local updaters = {}
+
+	-- a row whose value is recomputed every second while the page is visible
+	local function live(panel, label, initial, fn)
+		local _, valueLabel = panel:AddRow({ label = label, value = initial })
+		table.insert(updaters, function()
+			valueLabel.Text = tostring(fn())
+		end)
+	end
+
+	local about = page:AddPanel({ title = opts.title or "About", icon = "ℹ️", open = true })
+	about:AddRow({ label = "UI library", value = "GlassUI " .. GlassUI.Version })
+	for _, line in ipairs(opts.about or {}) do
+		about:AddRow({ label = tostring(line[1]), value = tostring(line[2]) })
+	end
+	about:AddRow({ label = "Save slot", value = tostring(self._configName) })
+	live(about, "Theme", self.settings.theme, function()
+		return self.settings.theme
+	end)
+
+	local me = page:AddPanel({ title = "Player", icon = "👤", open = true })
+	me:AddRow({ label = "Username", value = player.Name })
+	me:AddRow({ label = "Display name", value = player.DisplayName })
+	me:AddRow({ label = "User ID", value = tostring(player.UserId) })
+	me:AddRow({ label = "Account age", value = player.AccountAge .. " days" })
+
+	local perf = page:AddPanel({ title = "Performance", icon = "📈", open = true })
+	local frames, lastT = 0, os.clock()
+	table.insert(self._conns, RunService.Heartbeat:Connect(function()
+		frames += 1
+	end))
+	live(perf, "FPS", "...", function()
+		local now = os.clock()
+		local fps = frames / math.max(now - lastT, 0.001)
+		frames, lastT = 0, now
+		return string.format("%d", math.floor(fps + 0.5))
+	end)
+	live(perf, "Ping", "...", function()
+		local ok, ms = pcall(function()
+			return Stats.Network.ServerStatsItem["Data Ping"]:GetValue()
+		end)
+		return ok and (string.format("%d", math.floor(ms + 0.5)) .. " ms") or "n/a"
+	end)
+	live(perf, "Session time", "0:00:00", function()
+		local s = os.time() - self._startTime
+		return string.format("%d:%02d:%02d", s // 3600, s % 3600 // 60, s % 60)
+	end)
+
+	local srv = page:AddPanel({ title = "Game & server", icon = "🌐", open = false })
+	local _, gameName = srv:AddRow({ label = "Game", value = game.Name })
+	task.spawn(function()
+		local ok, product = pcall(function()
+			return MarketplaceService:GetProductInfo(game.PlaceId)
+		end)
+		if ok and product and product.Name then
+			gameName.Text = product.Name
+		end
+	end)
+	srv:AddRow({ label = "Place ID", value = tostring(game.PlaceId) })
+	srv:AddRow({ label = "Server ID", value = game.JobId ~= "" and string.sub(game.JobId, 1, 8) or "Studio" })
+	live(srv, "Players", "", function()
+		return #Players:GetPlayers() .. " / " .. Players.MaxPlayers
+	end)
+
+	local keys = page:AddPanel({ title = "Shortcuts", icon = "⌨️", open = false })
+	live(keys, "Show / hide window", self.settings.toggleKey, function()
+		return self.settings.toggleKey
+	end)
+	keys:AddRow({ label = "Move window", value = "Drag title bar" })
+	keys:AddRow({ label = "🔴 Close", value = "Hide window" })
+	keys:AddRow({ label = "🟡 Minimize", value = "Title bar only" })
+	keys:AddRow({ label = "🟢 Maximize", value = "Fill screen" })
+
+	local function refresh()
+		for _, fn in ipairs(updaters) do
+			pcall(fn)
+		end
+	end
+	refresh()
+	task.spawn(function()
+		while not self._destroyed do
+			task.wait(1)
+			if page.content.Visible and not self._hidden then
+				refresh()
+			end
+		end
+	end)
+
+	return page
+end
+
 return GlassUI
 
-end)()
---========================================================--
--- JOHNNY | FARMING
--- Cleaned / Organized Version
---========================================================--
+-- JOHNNY FEATURE PACK: GLASSUI STANDALONE BASE IS UNCHANGED ABOVE
+local Players=game:GetService("Players")
+local ReplicatedStorage=game:GetService("ReplicatedStorage")
+local Lighting=game:GetService("Lighting")
+local UserInputService=game:GetService("UserInputService")
+local RunService=game:GetService("RunService")
+local TeleportService=game:GetService("TeleportService")
+local VirtualInputManager=game:GetService("VirtualInputManager")
+local StatsService=game:GetService("Stats")
+local Player=Players.LocalPlayer
+local rEvents=ReplicatedStorage:WaitForChild("rEvents")
+local muscleEvent=Player:WaitForChild("muscleEvent")
+local leaderstats=Player:WaitForChild("leaderstats")
+local rebirthsStat=leaderstats:WaitForChild("Rebirths")
+local strengthStat=leaderstats:WaitForChild("Strength")
+local durabilityStat=Player:WaitForChild("Durability")
+local equipPetEvent=rEvents:WaitForChild("equipPetEvent")
+local rebirthRemote=rEvents:WaitForChild("rebirthRemote")
+local changeSpeedSizeRemote=rEvents:WaitForChild("changeSpeedSizeRemote")
+_G.JohnnyScriptDestroyed=false
 
---========================================================--
--- SERVICES
---========================================================--
-
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Lighting = game:GetService("Lighting")
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-local TeleportService = game:GetService("TeleportService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
-local Stats = game:GetService("Stats")
-
-local Player = Players.LocalPlayer
-
---========================================================--
--- LIBRARY
---========================================================--
-
---========================================================--
--- GLASSUI COMPATIBILITY LAYER
--- The original Johnny feature code stays intact; this adapter
--- maps its tab/control API onto the uploaded GlassUI design.
---========================================================--
-local GlassTab = {}
-GlassTab.__index = GlassTab
-
-local TAB_META = {
-    ["Main"]       = {label="Player",  color="blue"},
-    ["Fast Farm"]  = {label="Farming", color="green"},
-    ["Fast Rebirth"]={label="Rebirth", color="amber"},
-    ["Rebirth"]    = {label="Rebirth", color="amber"},
-    ["Tools"]      = {label="Admin",   color="purple"},
-    ["Info"]       = {label="Stats",   color="green"},
-}
-
-local window = GlassUI.new({
-    title = "Johnny | Farming",
-    subtitle = "GlassUI",
-    size = UDim2.fromOffset(760, 500),
-})
-
-local originalContent = window.content
-local tabPages = {}
-local tabButtons = {}
-local activeTab
-
-local function makePage()
-    local page = Instance.new("Frame")
-    page.Name = "TabPage"
-    page.Size = UDim2.new(1, 0, 1, 0)
-    page.BackgroundTransparency = 1
-    page.BorderSizePixel = 0
-    page.Visible = false
-    page.Parent = originalContent
-    local pad = Instance.new("UIPadding")
-    pad.PaddingTop = UDim.new(0,18); pad.PaddingBottom = UDim.new(0,18)
-    pad.PaddingLeft = UDim.new(0,20); pad.PaddingRight = UDim.new(0,20)
-    pad.Parent = page
-    local layout = Instance.new("UIListLayout")
-    layout.Padding = UDim.new(0,10)
-    layout.SortOrder = Enum.SortOrder.LayoutOrder
-    layout.Parent = page
-    return page
+local function root() local c=Player.Character;return c and c:FindFirstChild("HumanoidRootPart") end
+local function hum() local c=Player.Character;return c and c:FindFirstChildOfClass("Humanoid") end
+local function tool(n) local c=Player.Character;local b=Player:FindFirstChild("Backpack");return (c and c:FindFirstChild(n)) or (b and b:FindFirstChild(n)) end
+local function fmt(n)
+ n=tonumber(n) or 0;local a=math.abs(n);local s
+ if a>=1e15 then s=string.format("%.2fQa",a/1e15) elseif a>=1e12 then s=string.format("%.2fT",a/1e12) elseif a>=1e9 then s=string.format("%.2fB",a/1e9) elseif a>=1e6 then s=string.format("%.2fM",a/1e6) elseif a>=1e3 then s=string.format("%.2fK",a/1e3) else s=string.format("%.2f",a) end
+ return n<0 and "-"..s or s
 end
-
-local function showTab(id)
-    for name,page in pairs(tabPages) do page.Visible = (name == id) end
-    activeTab = id
-end
-
-local function colorFor(name)
-    return (TAB_META[name] and TAB_META[name].color) or "blue"
-end
-
-function window:AddTab(name)
-    local id = name
-    if tabPages[id] then return tabPages[id]._tab end
-    local meta = TAB_META[name] or {label=name, color=colorFor(name)}
-    local page = makePage()
-    local tab = setmetatable({window=window, page=page, panels={}, activePanel=nil, name=name}, GlassTab)
-    page._tab = tab
-    tabPages[id] = page
-    local btn = window:AddNavItem({
-        id=id, label=meta.label, color=meta.color,
-        active=(not activeTab),
-        onClick=function() showTab(id) end
-    })
-    tabButtons[id]=btn
-    if not activeTab then showTab(id) end
-    return tab
-end
-
-function GlassTab:_panel(title)
-    if not self.activePanel then
-        local old=window.content
-        window.content=self.page
-        local p=window:AddPanel({title=title or "Controls", open=true})
-        window.content=old
-        self.activePanel=p
-        table.insert(self.panels,p)
-    end
-    return self.activePanel
-end
-
-function GlassTab:AddLabel(text)
-    local holder=Instance.new("Frame")
-    holder.BackgroundTransparency=1; holder.Size=UDim2.new(1,0,0,30)
-    holder.Parent=self.page
-    local l=Instance.new("TextLabel")
-    l.BackgroundTransparency=1; l.Size=UDim2.new(1,0,1,0)
-    l.Text=text or ""; l.TextColor3=Color3.fromRGB(242,242,244)
-    l.Font=Enum.Font.GothamBold; l.TextXAlignment=Enum.TextXAlignment.Left
-    l.TextSize=13; l.Parent=holder
-    return l
-end
-
-function GlassTab:AddSwitch(label, cb)
-    local p=self:_panel("Controls")
-    local row,state=p:AddToggleRow({label=label,on=false,onChange=cb})
-    local obj={_state=state}
-    function obj:Set(v)
-        if state.on==v then return end
-        -- ToggleRow owns the visual callback; emulate a click by invoking callback
-        state.on=v
-        if cb then cb(v) end
-        -- update visuals by clicking the actual switch is unavailable here;
-        -- use direct visual discovery.
-        local track=row:FindFirstChildWhichIsA("TextButton",true)
-        if track then
-            local knob=track:FindFirstChildWhichIsA("Frame",true)
-            track.BackgroundTransparency=v and 0 or .85
-            track.BackgroundColor3=v and Color3.fromRGB(51,209,122) or Color3.fromRGB(255,255,255)
-            if knob then knob.Position=v and UDim2.new(1,-20,.5,-9) or UDim2.new(0,2,.5,-9) end
-        end
-    end
-    return obj
-end
-
-function GlassTab:AddButton(label, cb)
-    local p=self:_panel("Actions")
-    local row=Instance.new("Frame")
-    row.Size=UDim2.new(1,0,0,34); row.BackgroundTransparency=1
-    row.Parent=p.body
-    local b=Instance.new("TextButton")
-    b.Size=UDim2.new(1,0,0,28); b.Position=UDim2.new(0,0,0,2)
-    b.Text=label or "Button"; b.Font=Enum.Font.GothamMedium; b.TextSize=12
-    b.TextColor3=Color3.fromRGB(242,242,244); b.BackgroundColor3=Color3.fromRGB(255,255,255)
-    b.BackgroundTransparency=.88; b.AutoButtonColor=false; b.BorderSizePixel=0
-    local c=Instance.new("UICorner"); c.CornerRadius=UDim.new(0,7); c.Parent=b
-    b.MouseButton1Click:Connect(cb or function() end); b.Parent=row
-    return b
-end
-
-function GlassTab:AddTextBox(label, cb, opts)
-    local p=self:_panel("Settings")
-    local row=Instance.new("Frame"); row.Size=UDim2.new(1,0,0,36); row.BackgroundTransparency=1; row.Parent=p.body
-    local l=Instance.new("TextLabel"); l.Size=UDim2.new(.58,0,1,0); l.BackgroundTransparency=1; l.Text=label or ""; l.TextColor3=Color3.fromRGB(152,152,158); l.Font=Enum.Font.Gotham; l.TextSize=12; l.TextXAlignment=Enum.TextXAlignment.Left; l.Parent=row
-    local box=Instance.new("TextBox"); box.Size=UDim2.new(.38,0,0,26); box.Position=UDim2.new(.62,0,.5,-13); box.BackgroundColor3=Color3.fromRGB(255,255,255); box.BackgroundTransparency=.88; box.TextColor3=Color3.fromRGB(242,242,244); box.PlaceholderColor3=Color3.fromRGB(120,120,126); box.Font=Enum.Font.Gotham; box.TextSize=12; box.Text=opts and opts.placeholder or ""; box.PlaceholderText=opts and opts.placeholder or ""; box.ClearTextOnFocus=false; box.Parent=row
-    local c=Instance.new("UICorner"); c.CornerRadius=UDim.new(0,6); c.Parent=box
-    box.FocusLost:Connect(function() if cb then cb(box.Text) end end)
-    return box
-end
-
--- Full sidebar from the supplied HTML preview, in its exact order.
-local FarmingTab=window:AddTab("Fast Farm")
-local FastRebTab=window:AddTab("Fast Rebirth")
-local PetsTab=window:AddTab("Pets")
-local MainTab=window:AddTab("Main")
-local KillingTab=window:AddTab("Killing")
-local infoTab=window:AddTab("Info")
-local ToolsTab=window:AddTab("Tools")
-local PerfTab=window:AddTab("Perf")
-local ThemesTab=window:AddTab("Themes")
-local MiscTab=window:AddTab("Misc")
-
--- Keep the feature source's original tabs mapped onto the preview's tabs.
--- Source tab variables are already initialized above. Rebirth aliases to Fast Rebirth.
-local RebirthTab = window:AddTab("Rebirth")
-
--- Preview-style utility panels for tabs that the original feature script
--- did not populate itself.
-local pp=PerfTab:_panel("Performance")
-pp:AddToggleRow({label="Anti-Lag",on=false,onChange=function(v) _G.JohnnyAntiLag=v end})
-pp:AddToggleRow({label="Low Graphics",on=false,onChange=function(v) _G.JohnnyLowGraphics=v end})
-local mp=MiscTab:_panel("Behavior")
-mp:AddToggleRow({label="Anti-AFK",on=false,onChange=function(v) _G.JohnnyAntiAFK=v end})
-mp:AddRow({label="UI key",value="Right Shift"})
-local tp=ThemesTab:_panel("Theme")
-tp:AddRow({label="Midnight",value="Default"})
-tp:AddRow({label="Ocean",value="GlassUI"})
-tp:AddRow({label="Sunset",value="GlassUI"})
-local ap=PetsTab:_panel("Pet Management")
-ap:AddRow({label="Pet controls",value="See Farming"})
-local kp=KillingTab:_panel("Killing")
-kp:AddRow({label="Combat controls",value="See original"})
-
-showTab("Fast Farm")
-
-
---========================================================--
--- COMMON REFERENCES
---========================================================--
-
-local muscleEvent = Player:WaitForChild("muscleEvent")
-local leaderstats = Player:WaitForChild("leaderstats")
-local rebirthsStat = leaderstats:WaitForChild("Rebirths")
-local strengthStat = leaderstats:WaitForChild("Strength")
-local durabilityStat = Player:WaitForChild("Durability")
-
-local rEvents = ReplicatedStorage:WaitForChild("rEvents")
-local equipPetEvent = rEvents:WaitForChild("equipPetEvent")
-local rebirthRemote = rEvents:WaitForChild("rebirthRemote")
-local changeSpeedSizeRemote = rEvents:WaitForChild("changeSpeedSizeRemote")
-
---========================================================--
--- GLOBAL STATE
---========================================================--
-
-_G.JohnnyScriptDestroyed = false
-
-_G.AutoSpeed = false
-_G.AutoSize = false
-
-_G.JohnnyPortalConnection = nil
-_G.AdRemovalConnection = nil
-
-_G.JohnnyAutoSpinWheel = false
-_G.JohnnyMuscleKingTP = false
-_G.JohnnyAutoSize1 = false
-_G.JohnnyAutoEgg60 = false
-
-_G.JohnnyFastTools = false
-
-_G.JohnnyAntiAfkConnection = nil
-_G.JohnnyAntiAfkGui = nil
-
---========================================================--
--- UTILITY FUNCTIONS
---========================================================--
-
-local function getCharacter()
-    return Player.Character or Player.CharacterAdded:Wait()
-end
-
-local function getHumanoid()
-    local character = Player.Character
-    return character and character:FindFirstChildOfClass("Humanoid")
-end
-
-local function getRootPart()
-    local character = Player.Character
-    return character and character:FindFirstChild("HumanoidRootPart")
-end
-
-local function getTool(toolName)
-    local character = Player.Character
-    local backpack = Player:FindFirstChild("Backpack")
-
-    return
-        (character and character:FindFirstChild(toolName))
-        or
-        (backpack and backpack:FindFirstChild(toolName))
-end
-
-local function formatRebirthNumber(number)
-    if number >= 1e15 then
-        return string.format("%.2fQ", number / 1e15)
-    elseif number >= 1e12 then
-        return string.format("%.2fT", number / 1e12)
-    elseif number >= 1e9 then
-        return string.format("%.2fB", number / 1e9)
-    elseif number >= 1e6 then
-        return string.format("%.2fM", number / 1e6)
-    elseif number >= 1e3 then
-        return string.format("%.2fK", number / 1e3)
-    end
-
-    return string.format("%.0f", number)
-end
-
-local function formatStatNumber(number)
-    local negative = number < 0
-    number = math.abs(number)
-
-    local result
-
-    if number >= 1e15 then
-        result = string.format("%.2fQa", number / 1e15)
-    elseif number >= 1e12 then
-        result = string.format("%.2fT", number / 1e12)
-    elseif number >= 1e9 then
-        result = string.format("%.2fB", number / 1e9)
-    elseif number >= 1e6 then
-        result = string.format("%.2fM", number / 1e6)
-    elseif number >= 1e3 then
-        result = string.format("%.2fK", number / 1e3)
-    else
-        result = string.format("%.2f", number)
-    end
-
-    return negative and "-" .. result or result
-end
-
-local function sendNotification(title, text)
-    pcall(function()
-        game:GetService("StarterGui"):SetCore("SendNotification", {
-            Title = title,
-            Text = text,
-            Duration = 3
-        })
-    end)
-end
-
---========================================================--
--- HIDE STAT FRAMES
---========================================================--
-
-local blockedFrames = {
-    "strengthFrame",
-    "durabilityFrame",
-    "agilityFrame"
-}
-
-local function hideBlockedFrame(child)
-    if table.find(blockedFrames, child.Name)
-        and child:IsA("GuiObject") then
-
-        child.Visible = false
-    end
-end
-
-for _, name in ipairs(blockedFrames) do
-    local frame = ReplicatedStorage:FindFirstChild(name)
-
-    if frame and frame:IsA("GuiObject") then
-        frame.Visible = false
-    end
-end
-
-ReplicatedStorage.ChildAdded:Connect(function(child)
-    hideBlockedFrame(child)
-end)
-
---========================================================--
--- MAIN TAB
---========================================================--
-
-local MainTab = window:AddTab("          Main          ")
-
-local openCompactMode
-
---========================================================--
--- FAST FARM TAB
---========================================================--
-
-local FarmingTab =
-    window:AddTab("Fast Farm")
-
-FarmingTab:AddButton(
-    "Fast Farm Mode",
-    function()
-        task.defer(function()
-            if type(openCompactMode) == "function" then
-                openCompactMode("Fast Farm")
-            else
-                warn("[Johnny] Fast Farm Mode: compact mode is not initialized")
-            end
-        end)
-    end
-)
-
---========================================================--
--- FARMING UI
---========================================================--
-
-FarmingTab:AddLabel("Time:").TextSize = 20
-
-local stopwatchLabel =
-    FarmingTab:AddLabel(
-        "0d 0h 0m 0s - Fast Rep Inactive"
-    )
-
-stopwatchLabel.TextSize = 17
-
-stopwatchLabel.TextColor3 =
-    Color3.fromRGB(
-        255,
-        50,
-        50
-    )
-
-local projectedStrengthLabel =
-    FarmingTab:AddLabel(
-        "Strength Pace: 0 /Hour | 0 /Day | 0 /Week"
-    )
-
-local projectedDurabilityLabel =
-    FarmingTab:AddLabel(
-        "Durability Pace: 0 /Hour | 0 /Day | 0 /Week"
-    )
-
-local averageStrengthLabel =
-    FarmingTab:AddLabel(
-        "Average Strength Pace: 0 /Hour | 0 /Day | 0 /Week"
-    )
-
-local averageDurabilityLabel =
-    FarmingTab:AddLabel(
-        "Average Durability Pace: 0 /Hour | 0 /Day | 0 /Week"
-    )
-
-projectedStrengthLabel.TextSize = 17
-projectedDurabilityLabel.TextSize = 17
-averageStrengthLabel.TextSize = 17
-averageDurabilityLabel.TextSize = 17
-
-FarmingTab:AddLabel("").TextSize = 10
-
-FarmingTab:AddLabel("Stats:").TextSize = 20
-
-local strengthLabel =
-    FarmingTab:AddLabel(
-        "Strength: 0 | Gained: 0"
-    )
-
-local durabilityLabel =
-    FarmingTab:AddLabel(
-        "Durability: 0 | Gained: 0"
-    )
-
-strengthLabel.TextSize = 17
-durabilityLabel.TextSize = 17
-
---========================================================--
--- FAST FARM TRACKING
---========================================================--
-
-local fastRepRunning = false
-local trackingStarted = false
-
-local farmStartTime = 0
-local farmPausedElapsed = 0
-
-local strengthHistory = {}
-local durabilityHistory = {}
-
-local calculationInterval = 10
-
-local initialStrength =
-    strengthStat.Value
-
-local initialDurability =
-    durabilityStat.Value
-
-task.spawn(function()
-
-    local lastCalcTime = tick()
-
-    while not _G.JohnnyScriptDestroyed do
-
-        local currentTime = tick()
-
-        local currentStrength =
-            strengthStat.Value
-
-        local currentDurability =
-            durabilityStat.Value
-
-        strengthLabel.Text =
-            "Strength: " ..
-            formatStatNumber(
-                currentStrength
-            ) ..
-            " | Gained: " ..
-            formatStatNumber(
-                currentStrength -
-                initialStrength
-            )
-
-        durabilityLabel.Text =
-            "Durability: " ..
-            formatStatNumber(
-                currentDurability
-            ) ..
-            " | Gained: " ..
-            formatStatNumber(
-                currentDurability -
-                initialDurability
-            )
-
-        if fastRepRunning then
-
-            if not trackingStarted then
-
-                trackingStarted = true
-
-                farmStartTime =
-                    currentTime
-
-                strengthHistory = {}
-                durabilityHistory = {}
-
-            end
-
-            local elapsed =
-                farmPausedElapsed +
-                (
-                    currentTime -
-                    farmStartTime
-                )
-
-            local days =
-                math.floor(
-                    elapsed / 86400
-                )
-
-            local hours =
-                math.floor(
-                    (elapsed % 86400) /
-                    3600
-                )
-
-            local minutes =
-                math.floor(
-                    (elapsed % 3600) /
-                    60
-                )
-
-            local seconds =
-                math.floor(
-                    elapsed % 60
-                )
-
-            stopwatchLabel.Text =
-                string.format(
-                    "%dd %dh %dm %ds - Fast Rep Running",
-                    days,
-                    hours,
-                    minutes,
-                    seconds
-                )
-
-            stopwatchLabel.TextColor3 =
-                Color3.fromRGB(
-                    50,
-                    255,
-                    50
-                )
-
-            table.insert(
-                strengthHistory,
-                {
-                    time = currentTime,
-                    value = currentStrength
-                }
-            )
-
-            table.insert(
-                durabilityHistory,
-                {
-                    time = currentTime,
-                    value = currentDurability
-                }
-            )
-
-            while
-                #strengthHistory > 0
-                and
-                currentTime -
-                strengthHistory[1].time >
-                calculationInterval
-            do
-
-                table.remove(
-                    strengthHistory,
-                    1
-                )
-            end
-
-            while
-                #durabilityHistory > 0
-                and
-                currentTime -
-                durabilityHistory[1].time >
-                calculationInterval
-            do
-
-                table.remove(
-                    durabilityHistory,
-                    1
-                )
-            end
-
-            if
-                currentTime -
-                lastCalcTime >=
-                calculationInterval
-            then
-
-                lastCalcTime =
-                    currentTime
-
-                if #strengthHistory >= 2 then
-
-                    local first =
-                        strengthHistory[1]
-
-                    local last =
-                        strengthHistory[
-                            #strengthHistory
-                        ]
-
-                    local delta =
-                        last.value -
-                        first.value
-
-                    local secondsElapsed =
-                        last.time -
-                        first.time
-
-                    if secondsElapsed > 0 then
-
-                        local perSecond =
-                            delta /
-                            secondsElapsed
-
-                        projectedStrengthLabel.Text =
-                            string.format(
-                                "Strength Pace: %s/Hour | %s/Day | %s/Week",
-                                formatStatNumber(
-                                    perSecond * 3600
-                                ),
-                                formatStatNumber(
-                                    perSecond * 86400
-                                ),
-                                formatStatNumber(
-                                    perSecond * 604800
-                                )
-                            )
-                    end
-                end
-
-                if #durabilityHistory >= 2 then
-
-                    local first =
-                        durabilityHistory[1]
-
-                    local last =
-                        durabilityHistory[
-                            #durabilityHistory
-                        ]
-
-                    local delta =
-                        last.value -
-                        first.value
-
-                    local secondsElapsed =
-                        last.time -
-                        first.time
-
-                    if secondsElapsed > 0 then
-
-                        local perSecond =
-                            delta /
-                            secondsElapsed
-
-                        projectedDurabilityLabel.Text =
-                            string.format(
-                                "Durability Pace: %s/Hour | %s/Day | %s/Week",
-                                formatStatNumber(
-                                    perSecond * 3600
-                                ),
-                                formatStatNumber(
-                                    perSecond * 86400
-                                ),
-                                formatStatNumber(
-                                    perSecond * 604800
-                                )
-                            )
-                    end
-                end
-
-                local totalElapsed =
-                    farmPausedElapsed +
-                    (
-                        currentTime -
-                        farmStartTime
-                    )
-
-                if totalElapsed > 0 then
-
-                    local strengthPerSecond =
-                        (
-                            currentStrength -
-                            initialStrength
-                        ) /
-                        totalElapsed
-
-                    local durabilityPerSecond =
-                        (
-                            currentDurability -
-                            initialDurability
-                        ) /
-                        totalElapsed
-
-                    averageStrengthLabel.Text =
-                        string.format(
-                            "Average Strength Pace: %s/Hour | %s/Day | %s/Week",
-                            formatStatNumber(
-                                strengthPerSecond * 3600
-                            ),
-                            formatStatNumber(
-                                strengthPerSecond * 86400
-                            ),
-                            formatStatNumber(
-                                strengthPerSecond * 604800
-                            )
-                        )
-
-                    averageDurabilityLabel.Text =
-                        string.format(
-                            "Average Durability Pace: %s/Hour | %s/Day | %s/Week",
-                            formatStatNumber(
-                                durabilityPerSecond * 3600
-                            ),
-                            formatStatNumber(
-                                durabilityPerSecond * 86400
-                            ),
-                            formatStatNumber(
-                                durabilityPerSecond * 604800
-                            )
-                        )
-                end
-            end
-
-        elseif trackingStarted then
-
-            trackingStarted = false
-
-            farmPausedElapsed +=
-                currentTime -
-                farmStartTime
-
-            local elapsed =
-                farmPausedElapsed
-
-            stopwatchLabel.Text =
-                string.format(
-                    "%dd %dh %dm %ds - Fast Rep Stopped",
-                    math.floor(
-                        elapsed / 86400
-                    ),
-                    math.floor(
-                        (elapsed % 86400) /
-                        3600
-                    ),
-                    math.floor(
-                        (elapsed % 3600) /
-                        60
-                    ),
-                    math.floor(
-                        elapsed % 60
-                    )
-                )
-
-            stopwatchLabel.TextColor3 =
-                Color3.fromRGB(
-                    255,
-                    165,
-                    0
-                )
-
-            projectedStrengthLabel.Text =
-                "Strength Pace: 0 /Hour | 0 /Day | 0 /Week"
-
-            projectedDurabilityLabel.Text =
-                "Durability Pace: 0 /Hour | 0 /Day | 0 /Week"
-
-            averageStrengthLabel.Text =
-                "Average Strength Pace: 0 /Hour | 0 /Day | 0 /Week"
-
-            averageDurabilityLabel.Text =
-                "Average Durability Pace: 0 /Hour | 0 /Day | 0 /Week"
-
-            strengthHistory = {}
-            durabilityHistory = {}
-        end
-
-        task.wait(0.05)
-    end
-end)
-
---========================================================--
--- FAST FARM
---========================================================--
-
-FarmingTab:AddLabel("")
-
-FarmingTab:AddLabel(
-    "Fast Farm (Recommended Speed: 20)"
-).TextSize = 20
-
-local repsPerTick = 1
-
-FarmingTab:AddTextBox(
-    "Rep Speed",
-    function(value)
-
-        local number =
-            tonumber(value)
-
-        if number and number > 0 then
-            repsPerTick =
-                math.floor(number)
-        end
-
-    end,
-    {
-        placeholder = "1"
-    }
-)
-
---========================================================--
--- PING ADJUSTER
---========================================================--
-
-local pingAdjusterEnabled = true
-
-local pausePing = 250
-local resumePing = 200
-local pauseDuration = 1
-
-local pingPaused = false
-local lastKnownPing = 0
-
-local pingStatusLabel =
-    FarmingTab:AddLabel(
-        "Ping: -- ms | Status: Ready"
-    )
-
-pingStatusLabel.TextSize = 16
-
-local function readPingStat(stat)
-
-    if not stat then
-        return nil
-    end
-
-    local ok, value =
-        pcall(function()
-            return stat:GetValue()
-        end)
-
-    if ok
-        and type(value) == "number"
-        and value >= 0
-    then
-
-        return value
-    end
-
-    local okString, valueString =
-        pcall(function()
-            return stat:GetValueString()
-        end)
-
-    if okString
-        and type(valueString) ==
-        "string"
-    then
-
-        local number =
-            tonumber(
-                valueString:
-                match("([%d%.]+)")
-            )
-
-        if number then
-            return number
-        end
-    end
-
-    return nil
-end
-
-local function getPing()
-
-    local candidates = {}
-
-    local network =
-        Stats:FindFirstChild("Network")
-
-    if network then
-
-        local serverStats =
-            network:FindFirstChild(
-                "ServerStatsItem"
-            )
-
-        if serverStats then
-
-            table.insert(
-                candidates,
-                serverStats:FindFirstChild(
-                    "Data Ping"
-                )
-            )
-
-            table.insert(
-                candidates,
-                serverStats:FindFirstChild(
-                    "Ping"
-                )
-            )
-        end
-    end
-
-    local performance =
-        Stats:FindFirstChild(
-            "PerformanceStats"
-        )
-
-    if performance then
-
-        table.insert(
-            candidates,
-            performance:FindFirstChild(
-                "Ping"
-            )
-        )
-    end
-
-    for _, stat in ipairs(candidates) do
-
-        local value =
-            readPingStat(stat)
-
-        if value then
-
-            lastKnownPing =
-                value
-
-            return value
-        end
-    end
-
-    return lastKnownPing
-end
-
-local function updatePingStatus(status)
-
-    local ping =
-        getPing()
-
-    pingStatusLabel.Text =
-        string.format(
-            "Ping: %d ms | Status: %s",
-            math.floor(
-                ping + 0.5
-            ),
-            status
-        )
-end
-
-local function waitForPingRecovery()
-
-    if pauseDuration > 0 then
-
-        local finish =
-            tick() +
-            pauseDuration
-
-        while
-            fastRepRunning
-            and
-            pingAdjusterEnabled
-            and
-            tick() < finish
-        do
-
-            updatePingStatus(
-                "Paused - cooldown"
-            )
-
-            task.wait(0.1)
-        end
-    end
-
-    while
-        fastRepRunning
-        and
-        pingAdjusterEnabled
-    do
-
-        local ping =
-            getPing()
-
-        if ping < resumePing then
-            break
-        end
-
-        updatePingStatus(
-            "Paused - waiting for recovery"
-        )
-
-        task.wait(0.15)
-    end
-
-    pingPaused = false
-
-    if fastRepRunning then
-
-        updatePingStatus(
-            pingAdjusterEnabled
-            and "Running"
-            or "Disabled"
-        )
-    end
-end
-
-local pingAdjusterSwitch =
-    FarmingTab:AddSwitch(
-        "Ping Adjuster",
-        function(state)
-
-            pingAdjusterEnabled =
-                state
-
-            if not state then
-
-                pingPaused = false
-
-                updatePingStatus(
-                    "Disabled"
-                )
-            end
-        end
-    )
-
-FarmingTab:AddTextBox(
-    "Pause At Ping (ms)",
-    function(value)
-
-        local n = tonumber(value)
-
-        if type(n) == "number" and n == n and n >= 1 then
-
-            pausePing =
-                math.floor(n)
-
-            if resumePing >= pausePing then
-
-                resumePing =
-                    math.max(
-                        0,
-                        pausePing - 25
-                    )
-            end
-        end
-    end,
-    {
-        placeholder = "250"
-    }
-)
-
-FarmingTab:AddTextBox(
-    "Resume Below Ping (ms)",
-    function(value)
-
-        local n = tonumber(value)
-
-        if type(n) == "number" and n == n and n >= 0 then
-
-            resumePing =
-                math.min(
-                    math.floor(n),
-                    math.max(
-                        0,
-                        pausePing - 1
-                    )
-                )
-        end
-    end,
-    {
-        placeholder = "200"
-    }
-)
-
-FarmingTab:AddTextBox(
-    "Pause Duration (seconds)",
-    function(value)
-
-        local n = tonumber(value)
-
-        if type(n) == "number" and n == n and n >= 0 then
-            pauseDuration = n
-        end
-    end,
-    {
-        placeholder = "1"
-    }
-)
-
--- The compact mode controls pingAdjusterEnabled directly; do not call Set() here.
--- Some Elerium builds return nil from AddSwitch, which caused the old nil error.
-pingAdjusterEnabled = true
-
---========================================================--
--- FAST REP LOOP
---========================================================--
-
-local function fastRepLoop()
-
-    while fastRepRunning do
-
-        if pingAdjusterEnabled then
-
-            local ping =
-                getPing()
-
-            if ping >= pausePing then
-
-                pingPaused = true
-
-                updatePingStatus(
-                    "Paused - high ping"
-                )
-
-                waitForPingRecovery()
-
-                continue
-            end
-
-        else
-
-            pingPaused = false
-        end
-
-        if not fastRepRunning then
-            break
-        end
-
-        local batchStart =
-            tick()
-
-        while
-            fastRepRunning
-            and
-            tick() - batchStart < 0.05
-        do
-
-            if
-                pingAdjusterEnabled
-                and
-                getPing() >=
-                pausePing
-            then
-
-                break
-            end
-
-            for i = 1, repsPerTick do
-
-                if not fastRepRunning then
-                    break
-                end
-
-                pcall(function()
-                    muscleEvent:FireServer(
-                        "rep"
-                    )
-                end)
-            end
-
-            task.wait(0.01)
-        end
-
-        task.wait()
-    end
-
-    pingPaused = false
-
-    updatePingStatus(
-        "Stopped"
-    )
-end
-
-FarmingTab:AddSwitch(
-    "Fast Rep",
-    function(state)
-
-        if state
-            and
-            not fastRepRunning
-        then
-
-            fastRepRunning = true
-
-            task.spawn(
-                fastRepLoop
-            )
-
-        elseif
-            not state
-            and
-            fastRepRunning
-        then
-
-            fastRepRunning = false
-        end
-    end
-)
-
---========================================================--
--- FARMING MISC
---========================================================--
-
-FarmingTab:AddLabel("").TextSize = 10
-FarmingTab:AddLabel("Misc:").TextSize = 20
-
---========================================================--
--- PET MANAGEMENT BUTTONS
---========================================================--
-
-local function unequipPets()
-
-    -- Titanium Hydra is protected.
-    unequipAllExceptProtected()
-
-    task.wait(0.05)
-end
-
-local function equipPetsByName(name)
-
-    unequipAllExceptProtected()
-
-    task.wait(0.05)
-
-    equipPetByName(name)
-end
-
---========================================================--
--- AUTO PROTEIN EGG
---========================================================--
-
-local autoEggRunning = false
-
-local function activateProteinEgg()
-
-    local tool =
-        getTool("Protein Egg")
-
-    if tool then
-
-        pcall(function()
-            muscleEvent:FireServer(
-                "proteinEgg",
-                tool
-            )
-        end)
-
-    end
-end
-
-task.spawn(function()
-
-    while not _G.JohnnyScriptDestroyed do
-
-        if autoEggRunning then
-
-            activateProteinEgg()
-
-            task.wait(1800)
-
-        else
-
-            task.wait(1)
-
-        end
-    end
-end)
-
-local autoEggSwitch =
-    FarmingTab:AddSwitch(
-        "Auto Egg",
-        function(state)
-
-            autoEggRunning = state
-
-            if state then
-                activateProteinEgg()
-            end
-
-        end
-    )
-
-autoEggSwitch:Set(false)
-
---========================================================--
--- FARMING AUTO SHAKE
---========================================================--
-
-local farmingAutoShakeRunning = false
-
-task.spawn(function()
-
-    while not _G.JohnnyScriptDestroyed do
-
-        if farmingAutoShakeRunning then
-
-            activateShake()
-
-            task.wait(900)
-
-        else
-
-            task.wait(1)
-
-        end
-
-    end
-end)
-
-local farmingShakeSwitch =
-    FarmingTab:AddSwitch(
-        "Auto Shake",
-        function(state)
-
-            farmingAutoShakeRunning =
-                state
-
-            if state then
-                activateShake()
-            end
-
-        end
-    )
-
-farmingShakeSwitch:Set(false)
-
---========================================================--
--- FARMING FORTUNE WHEEL
---========================================================--
-
-FarmingTab:AddSwitch(
-    "Spin Fortune Wheel",
-    function(state)
-        setFortuneWheel(state)
-    end
-)
-
---========================================================--
--- AUTO TELEPORT MUSCLE KING
---========================================================--
-
-FarmingTab:AddSwitch(
-    "Auto Teleport to Muscle King",
-    function(state)
-
-        _G.JohnnyMuscleKingTP =
-            state
-
-        if not state then
-            return
-        end
-
-        task.spawn(function()
-
-            while
-                _G.JohnnyMuscleKingTP
-            do
-
-                local character =
-                    Player.Character
-
-                if character then
-
-                    pcall(function()
-
-                        character:MoveTo(
-                            Vector3.new(
-                                -8646,
-                                17,
-                                -5738
-                            )
-                        )
-
-                    end)
-
-                end
-
-                task.wait(0.2)
-            end
-
-        end)
-    end
-)
-
---========================================================--
--- AUTO SIZE 1
---========================================================--
-
-FarmingTab:AddSwitch(
-    "Auto Size 1",
-    function(state)
-
-        _G.JohnnyAutoSize1 =
-            state
-
-        if not state then
-            return
-        end
-
-        task.spawn(function()
-
-            while
-                _G.JohnnyAutoSize1
-            do
-
-                pcall(function()
-
-                    changeSpeedSizeRemote:
-                    InvokeServer(
-                        "changeSize",
-                        1
-                    )
-
-                end)
-
-                task.wait()
-            end
-
-        end)
-    end
-)
-
---========================================================--
--- AUTO EAT EGG 60 MINUTES
---========================================================--
-
-FarmingTab:AddSwitch(
-    "Auto Eat Egg | 60 Minutes",
-    function(state)
-
-        _G.JohnnyAutoEgg60 =
-            state
-
-        if not state then
-            return
-        end
-
-        task.spawn(function()
-
-            while
-                _G.JohnnyAutoEgg60
-            do
-
-                activateProteinEgg()
-
-                task.wait(3600)
-
-            end
-
-        end)
-    end
-)
-
---========================================================--
--- JUNGLE SQUAT
---========================================================--
-
-FarmingTab:AddButton(
-    "Jungle Squat",
-    function()
-
-        local root =
-            getRootPart()
-
-        if not root then
-            return
-        end
-
-        root.CFrame =
-            CFrame.new(
-                -8371.43359375,
-                6.79806327,
-                2858.88525390
-            )
-
-        task.wait(0.2)
-
-        pressE()
-    end
-)
-
---========================================================--
--- FARMING ANTI LAG
---========================================================--
-
-FarmingTab:AddButton(
-    "Anti Lag",
-    activateAntiLag
-)
-
---========================================================--
--- INDUSTRIAL GYM SQUAT
---========================================================--
-
-FarmingTab:AddButton(
-    "Industrial Gym Squat",
-    function()
-
-        local root =
-            getRootPart()
-
-        if not root then
-            return
-        end
-
-        root.CFrame =
-            CFrame.new(
-                -5218,
-                61,
-                5412
-            )
-
-        task.wait(0.2)
-
-        pressE()
-    end
-)
-
---========================================================--
--- INDUSTRIAL GYM SUPER SQUAT
---========================================================--
-
-FarmingTab:AddButton(
-    "Industrial Gym Super Squat",
-    function()
-
-        local root =
-            getRootPart()
-
-        if not root then
-            return
-        end
-
-        root.CFrame =
-            CFrame.new(
-                -5488,
-                61,
-                4641
-            )
-
-        task.wait(0.2)
-
-        pressE()
-    end
-)
-
-
---========================================================--
--- EQUIP SWIFT SAMURAI
---========================================================--
-
-FarmingTab:AddButton(
-    "Equip Swift Samurai",
-    function()
-
-        equipPetsByName(
-            "Swift Samurai"
-        )
-
-    end
-)
-
-
-MainTab:AddLabel("Settings").TextSize = 30
-
---========================================================--
--- SPEED
---========================================================--
-
-MainTab:AddTextBox("Speed", function(value)
-    local speed = tonumber(value)
-
-    if not speed then
-        return
-    end
-
-    _G.AutoSpeed = true
-
-    local humanoid = getHumanoid()
-
-    if humanoid then
-        humanoid.WalkSpeed = speed
-    end
-end)
-
---========================================================--
--- SIZE
---========================================================--
-
-MainTab:AddTextBox("Size", function(value)
-    local size = tonumber(value)
-
-    if not size then
-        return
-    end
-
-    _G.AutoSize = true
-
-    pcall(function()
-        changeSpeedSizeRemote:InvokeServer(
-            "changeSize",
-            size
-        )
-    end)
-end)
-
---========================================================--
--- ESSENTIALS
---========================================================--
-
-MainTab:AddLabel("Essenttals:").TextSize = 30
-
---========================================================--
--- REMOVE PORTALS
---========================================================--
-
-local function removePortals()
-    local function destroyPortal(obj)
-        if obj and obj.Name == "RobloxForwardPortals" then
-            pcall(function()
-                obj:Destroy()
-            end)
-        end
-    end
-
-    for _, obj in ipairs(game:GetDescendants()) do
-        destroyPortal(obj)
-    end
-
-    if _G.JohnnyPortalConnection then
-        pcall(function()
-            _G.JohnnyPortalConnection:Disconnect()
-        end)
-    end
-
-    _G.JohnnyPortalConnection =
-        game.DescendantAdded:Connect(function(obj)
-            if obj.Name == "RobloxForwardPortals" then
-                destroyPortal(obj)
-            end
-        end)
-end
-
-removePortals()
-
---========================================================--
--- INFINITE YIELD
---========================================================--
-
-MainTab:AddButton("Load Infinite Yield", function()
-    pcall(function()
-        loadstring(
-            game:HttpGet(
-                "https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"
-            )
-        )()
-    end)
-end)
-
---========================================================--
--- ANTI LAG
---========================================================--
-
-MainTab:AddButton("Load Anti Lag", function()
-    pcall(function()
-        loadstring(
-            game:HttpGet(
-                "https://raw.githubusercontent.com/juywvm/-Roblox-Projects-/main/____Anti_Afk_Remastered_______"
-            )
-        )()
-    end)
-end)
-
---========================================================--
--- WALK ON WATER
---========================================================--
-
-local parts = {}
-
-local partSize = 2048
-local totalDistance = 50000
-local startPosition = Vector3.new(-2, -9.5, -2)
-
-local function createAllParts()
-    local numberOfParts =
-        math.ceil(totalDistance / partSize)
-
-    for x = 0, numberOfParts - 1 do
-        for z = 0, numberOfParts - 1 do
-
-            local function createPart(pos, name)
-                local part = Instance.new("Part")
-
-                part.Size =
-                    Vector3.new(
-                        partSize,
-                        1,
-                        partSize
-                    )
-
-                part.Position = pos
-                part.Anchored = true
-                part.Transparency = 1
-                part.CanCollide = false
-                part.Name = name
-                part.Parent = workspace
-
-                return part
-            end
-
-            table.insert(
-                parts,
-                createPart(
-                    startPosition +
-                    Vector3.new(
-                        x * partSize,
-                        0,
-                        z * partSize
-                    ),
-                    "Part_Side_" .. x .. "_" .. z
-                )
-            )
-
-            table.insert(
-                parts,
-                createPart(
-                    startPosition +
-                    Vector3.new(
-                        -x * partSize,
-                        0,
-                        z * partSize
-                    ),
-                    "Part_LeftRight_" .. x .. "_" .. z
-                )
-            )
-
-            table.insert(
-                parts,
-                createPart(
-                    startPosition +
-                    Vector3.new(
-                        -x * partSize,
-                        0,
-                        -z * partSize
-                    ),
-                    "Part_UpLeft_" .. x .. "_" .. z
-                )
-            )
-
-            table.insert(
-                parts,
-                createPart(
-                    startPosition +
-                    Vector3.new(
-                        x * partSize,
-                        0,
-                        -z * partSize
-                    ),
-                    "Part_UpRight_" .. x .. "_" .. z
-                )
-            )
-        end
-    end
-end
-
-task.spawn(createAllParts)
-
-local walkOnWaterSwitch =
-    MainTab:AddSwitch("Walk on Water", function(state)
-
-        for _, part in ipairs(parts) do
-            if part and part.Parent then
-                part.CanCollide = state
-            end
-        end
-
-    end)
-
-walkOnWaterSwitch:Set(false)
-
---========================================================--
--- PET VISIBILITY
---========================================================--
-
-MainTab:AddSwitch("Show Pets", function(state)
-    local value =
-        Player:FindFirstChild("hidePets")
-
-    if value then
-        value.Value = state
-    end
-end)
-
-MainTab:AddSwitch("Show Other Pets", function(state)
-    local value =
-        Player:FindFirstChild("showOtherPetsOn")
-
-    if value then
-        value.Value = state
-    end
-end)
-
---========================================================--
--- INFINITE JUMP
---========================================================--
-
-local infiniteJumpEnabled = false
-
-MainTab:AddSwitch("Infinite Jump", function(state)
-    infiniteJumpEnabled = state
-end)
-
-UserInputService.JumpRequest:Connect(function()
-    if not infiniteJumpEnabled then
-        return
-    end
-
-    local humanoid = getHumanoid()
-
-    if humanoid then
-        humanoid:ChangeState(
-            Enum.HumanoidStateType.Jumping
-        )
-    end
-end)
-
---========================================================--
--- TIME
---========================================================--
-
-MainTab:AddButton("Time: Night", function()
-    Lighting.ClockTime = 0
-end)
-
-MainTab:AddButton("Time: Day", function()
-    Lighting.ClockTime = 12
-end)
-
-MainTab:AddButton("Time: Midnight", function()
-    Lighting.ClockTime = 6
-end)
-
---========================================================--
--- ANTI FLING
---========================================================--
-
-local antiFlingVelocity = nil
-
-local antiKnockbackSwitch =
-    MainTab:AddSwitch("Anti Fling", function(state)
-
-        local rootPart = getRootPart()
-
-        if not rootPart then
-            return
-        end
-
-        if state then
-
-            if antiFlingVelocity then
-                pcall(function()
-                    antiFlingVelocity:Destroy()
-                end)
-            end
-
-            antiFlingVelocity =
-                Instance.new("BodyVelocity")
-
-            antiFlingVelocity.MaxForce =
-                Vector3.new(
-                    100000,
-                    0,
-                    100000
-                )
-
-            antiFlingVelocity.Velocity =
-                Vector3.zero
-
-            antiFlingVelocity.P = 1250
-
-            antiFlingVelocity.Parent =
-                rootPart
-
-        else
-
-            if antiFlingVelocity then
-                pcall(function()
-                    antiFlingVelocity:Destroy()
-                end)
-
-                antiFlingVelocity = nil
-            end
-
-            local existing =
-                rootPart:FindFirstChild("BodyVelocity")
-
-            if existing
-                and existing.MaxForce ==
-                    Vector3.new(100000, 0, 100000) then
-
-                pcall(function()
-                    existing:Destroy()
-                end)
-            end
-        end
-    end)
-
-antiKnockbackSwitch:Set(true)
-
---========================================================--
--- MAIN LOCK POSITION
---========================================================--
-
-local mainPositionLockConnection = nil
-
-local mainLockSwitch =
-    MainTab:AddSwitch("Lock Position", function(state)
-
-        if mainPositionLockConnection then
-            pcall(function()
-                mainPositionLockConnection:Disconnect()
-            end)
-
-            mainPositionLockConnection = nil
-        end
-
-        if not state then
-            return
-        end
-
-        local rootPart = getRootPart()
-
-        if not rootPart then
-            return
-        end
-
-        local lockedCFrame =
-            rootPart.CFrame
-
-        mainPositionLockConnection =
-            RunService.Heartbeat:Connect(function()
-
-                local currentRoot =
-                    getRootPart()
-
-                if currentRoot then
-                    currentRoot.CFrame =
-                        lockedCFrame
-                end
-            end)
-    end)
-
---========================================================--
--- REJOIN
---========================================================--
-
-MainTab:AddButton("Rejoin", function()
-
-    pcall(function()
-        TeleportService:TeleportToPlaceInstance(
-            game.PlaceId,
-            game.JobId,
-            Player
-        )
-    end)
-
-end)
-
---========================================================--
--- FAST REBIRTH TAB
---========================================================--
-
-local FastRebTab =
-    window:AddTab("Fast Rebirth")
-
--- Forward declarations: these are referenced by the mode button callback
--- before the main Fast Rebirth state/loop is declared below.
-local fastRebirthLoop
-local isFastRebirthRunning
-local fastRebirthStartTime
-local fastRebirthTotalElapsed
-
-FastRebTab:AddButton(
-    "Fast Reb Mode",
-    function()
-        task.defer(function()
-            if type(openCompactMode) == "function" then
-                openCompactMode("Fast Rebirth")
-            else
-                warn("[Johnny] Fast Reb Mode: compact mode is not initialized")
-            end
-        end)
-    end
-)
-
---========================================================--
--- FAST REBIRTH UI
---========================================================--
-
-isFastRebirthRunning = false
-fastRebirthStartTime = 0
-fastRebirthTotalElapsed = 0
-
-local initialRebirths =
-    rebirthsStat.Value
-
-local rebirthServerLabel =
-    FastRebTab:AddLabel("Time:")
-
-rebirthServerLabel.TextSize = 20
-
-local rebirthTimeLabel =
-    FastRebTab:AddLabel(
-        "0d 0h 0m 0s - Inactive"
-    )
-
-rebirthTimeLabel.TextSize = 17
-
-local rebirthPaceLabel =
-    FastRebTab:AddLabel(
-        "Pace: 0 / Hour | 0 / Day | 0 / Week"
-    )
-
-local rebirthAverageLabel =
-    FastRebTab:AddLabel(
-        "Average Pace: 0 / Hour | 0 / Day | 0 / Week"
-    )
-
-rebirthPaceLabel.TextSize = 17
-rebirthAverageLabel.TextSize = 17
-
-local rebirthStatsLabel =
-    FastRebTab:AddLabel(
-        "Rebirths: " ..
-        formatRebirthNumber(rebirthsStat.Value) ..
-        " | Gained: 0"
-    )
-
-rebirthStatsLabel.TextSize = 17
-
---========================================================--
--- FAST REBIRTH PACE
---========================================================--
-
-local lastRebirthTime = tick()
-local lastRebirthValue =
-    rebirthsStat.Value
-
-local paceHistoryHour = {}
-local paceHistoryDay = {}
-local paceHistoryWeek = {}
-
-local maxHistoryLength = 20
-local rebirthCount = 0
-
-local function updateRebirthsLabel()
-
-    local gained =
-        rebirthsStat.Value -
-        initialRebirths
-
-    rebirthStatsLabel.Text =
-        string.format(
-            "Rebirths: %s | Gained: %s",
-            formatRebirthNumber(
-                rebirthsStat.Value
-            ),
-            formatRebirthNumber(gained)
-        )
-end
-
-local function averageTable(tbl)
-
-    if #tbl == 0 then
-        return 0
-    end
-
-    local total = 0
-
-    for _, value in ipairs(tbl) do
-        total += value
-    end
-
-    return total / #tbl
-end
-
-local function calculateRebirthPace()
-
-    rebirthCount += 1
-
-    if rebirthCount < 2 then
-        lastRebirthTime = tick()
-        lastRebirthValue =
-            rebirthsStat.Value
-        return
-    end
-
-    local now = tick()
-
-    local gained =
-        rebirthsStat.Value -
-        lastRebirthValue
-
-    if gained <= 0 then
-        return
-    end
-
-    local elapsed =
-        now - lastRebirthTime
-
-    if elapsed <= 0 then
-        return
-    end
-
-    local perSecond =
-        gained / elapsed
-
-    local perHour =
-        perSecond * 3600
-
-    local perDay =
-        perSecond * 86400
-
-    local perWeek =
-        perSecond * 604800
-
-    rebirthPaceLabel.Text =
-        string.format(
-            "Pace: %s / Hour | %s / Day | %s / Week",
-            formatRebirthNumber(perHour),
-            formatRebirthNumber(perDay),
-            formatRebirthNumber(perWeek)
-        )
-
-    table.insert(
-        paceHistoryHour,
-        perHour
-    )
-
-    table.insert(
-        paceHistoryDay,
-        perDay
-    )
-
-    table.insert(
-        paceHistoryWeek,
-        perWeek
-    )
-
-    if #paceHistoryHour > maxHistoryLength then
-        table.remove(paceHistoryHour, 1)
-        table.remove(paceHistoryDay, 1)
-        table.remove(paceHistoryWeek, 1)
-    end
-
-    rebirthAverageLabel.Text =
-        string.format(
-            "Average Pace: %s / Hour | %s / Day | %s / Week",
-            formatRebirthNumber(
-                averageTable(paceHistoryHour)
-            ),
-            formatRebirthNumber(
-                averageTable(paceHistoryDay)
-            ),
-            formatRebirthNumber(
-                averageTable(paceHistoryWeek)
-            )
-        )
-
-    lastRebirthTime = now
-    lastRebirthValue =
-        rebirthsStat.Value
-end
-
-rebirthsStat:GetPropertyChangedSignal(
-    "Value"
-):Connect(function()
-
-    calculateRebirthPace()
-    updateRebirthsLabel()
-
-end)
-
---========================================================--
--- PET MANAGEMENT
---========================================================--
--- IMPORTANT:
--- Titanium Hydra is NEVER unequipped.
---
--- This allows the new 12-slot setup to keep
--- Titanium Hydra equipped while the script manages
--- Swift Samurai / Tribal Overlord.
---========================================================--
-
-local function getUniquePetsFolder()
-
-    local petsFolder =
-        Player:FindFirstChild("petsFolder")
-
-    if not petsFolder then
-        return nil
-    end
-
-    return petsFolder:FindFirstChild("Unique")
-end
-
-local function isProtectedPet(pet)
-
-    return pet
-        and pet.Name ==
-        "Titanium Hydra"
-end
-
-local function unequipAllExceptProtected()
-
-    local petsFolder =
-        Player:FindFirstChild("petsFolder")
-
-    if not petsFolder then
-        return
-    end
-
-    for _, folder in ipairs(
-        petsFolder:GetChildren()
-    ) do
-
-        if folder:IsA("Folder") then
-
-            for _, pet in ipairs(
-                folder:GetChildren()
-            ) do
-
-                if not isProtectedPet(pet) then
-
-                    pcall(function()
-                        equipPetEvent:FireServer(
-                            "unequipPet",
-                            pet
-                        )
-                    end)
-
-                end
-            end
-        end
-    end
-end
-
-local function equipPetByName(petName)
-
-    local uniquePets =
-        getUniquePetsFolder()
-
-    if not uniquePets then
-        return
-    end
-
-    for _, pet in ipairs(
-        uniquePets:GetChildren()
-    ) do
-
-        if pet.Name == petName then
-
-            pcall(function()
-                equipPetEvent:FireServer(
-                    "equipPet",
-                    pet
-                )
-            end)
-
-        end
-    end
-end
-
-local function managePets(petName)
-
-    -- Titanium Hydra stays equipped.
-    unequipAllExceptProtected()
-
-    task.wait(0.05)
-
-    -- Equip the requested pet.
-    equipPetByName(petName)
-
-end
-
---========================================================--
--- FAST REBIRTH LOGIC
---========================================================--
-
-local function doFastRebirth()
-
-    local currentRebirths =
-        rebirthsStat.Value
-
-    local strengthTarget =
-        5000 +
-        (currentRebirths * 2550)
-
-    while
-        isFastRebirthRunning
-        and
-        strengthStat.Value <
-        strengthTarget
-    do
-
-        local reps
-
-        if Player.MembershipType ==
-            Enum.MembershipType.Premium then
-
-            reps = 8
-
-        else
-
-            reps = 14
-
-        end
-
-        for _ = 1, reps do
-
-            if not isFastRebirthRunning then
-                break
-            end
-
-            pcall(function()
-                muscleEvent:FireServer("rep")
-            end)
-
-        end
-
-        task.wait(0.01)
-    end
-
-    if
-        isFastRebirthRunning
-        and
-        strengthStat.Value >=
-        strengthTarget
-    then
-
-        -- Keep Titanium Hydra equipped.
-        managePets("Tribal Overlord")
-
-        task.wait(0.1)
-
-        local before =
-            rebirthsStat.Value
-
-        repeat
-
-            pcall(function()
-                rebirthRemote:InvokeServer(
-                    "rebirthRequest"
-                )
-            end)
-
-            task.wait(0.05)
-
-        until
-            rebirthsStat.Value > before
-            or
-            not isFastRebirthRunning
-    end
-end
-
-fastRebirthLoop = function()
-
-    while isFastRebirthRunning do
-
-        -- Titanium Hydra remains equipped.
-        -- Swift Samurai is managed normally.
-        managePets("Swift Samurai")
-
-        doFastRebirth()
-
-        task.wait(0.05)
-    end
-
-end
-
---========================================================--
--- FAST REBIRTH SWITCH
---========================================================--
-
-FastRebTab:AddLabel("").TextSize = 10
-
-local rebirthingLabel =
-    FastRebTab:AddLabel("Rebirthing:")
-
-rebirthingLabel.TextSize = 20
-
-FastRebTab:AddSwitch(
-    "Fast Rebirth",
-    function(state)
-
-        if state then
-
-            if isFastRebirthRunning then
-                return
-            end
-
-            isFastRebirthRunning = true
-
-            fastRebirthStartTime =
-                tick()
-
-            task.spawn(
-                fastRebirthLoop
-            )
-
-        else
-
-            if not isFastRebirthRunning then
-                return
-            end
-
-            isFastRebirthRunning = false
-
-            fastRebirthTotalElapsed +=
-                tick() -
-                fastRebirthStartTime
-
-            rebirthTimeLabel.Text =
-                string.format(
-                    "%dd %dh %dm %ds - Paused",
-                    math.floor(
-                        fastRebirthTotalElapsed /
-                        86400
-                    ),
-                    math.floor(
-                        (
-                            fastRebirthTotalElapsed %
-                            86400
-                        ) / 3600
-                    ),
-                    math.floor(
-                        (
-                            fastRebirthTotalElapsed %
-                            3600
-                        ) / 60
-                    ),
-                    math.floor(
-                        fastRebirthTotalElapsed %
-                        60
-                    )
-                )
-
-        end
-
-    end
-)
-
---========================================================--
--- FAST REBIRTH TIMER
---========================================================--
-
-task.spawn(function()
-
-    while not _G.JohnnyScriptDestroyed do
-
-        if isFastRebirthRunning then
-
-            local elapsed =
-                tick() -
-                fastRebirthStartTime +
-                fastRebirthTotalElapsed
-
-            local days =
-                math.floor(
-                    elapsed / 86400
-                )
-
-            local hours =
-                math.floor(
-                    (elapsed % 86400) /
-                    3600
-                )
-
-            local minutes =
-                math.floor(
-                    (elapsed % 3600) /
-                    60
-                )
-
-            local seconds =
-                math.floor(
-                    elapsed % 60
-                )
-
-            rebirthTimeLabel.Text =
-                string.format(
-                    "%dd %dh %dm %ds - Rebirthing",
-                    days,
-                    hours,
-                    minutes,
-                    seconds
-                )
-
-            rebirthTimeLabel.TextColor3 =
-                Color3.fromRGB(
-                    50,
-                    255,
-                    50
-                )
-
-        else
-
-            rebirthTimeLabel.TextColor3 =
-                Color3.fromRGB(
-                    255,
-                    50,
-                    50
-                )
-
-        end
-
-        task.wait(0.1)
-    end
-
-end)
-
---========================================================--
--- SET SIZE 1
---========================================================--
-
-local size1Running = false
-
-FastRebTab:AddSwitch(
-    "Set Size 1",
-    function(state)
-
-        size1Running = state
-
-        if not state then
-            return
-        end
-
-        task.spawn(function()
-
-            while size1Running do
-
-                pcall(function()
-                    changeSpeedSizeRemote:InvokeServer(
-                        "changeSize",
-                        1
-                    )
-                end)
-
-                task.wait(0.01)
-            end
-
-        end)
-
-    end
-)
-
---========================================================--
--- FAST REBIRTH ANTI LAG
---========================================================--
-
-local function activateAntiLag()
-
-    local playerGui =
-        Player:WaitForChild("PlayerGui")
-
-    for _, gui in ipairs(
-        playerGui:GetChildren()
-    ) do
-
-        if gui:IsA("ScreenGui") then
-            pcall(function()
-                gui:Destroy()
-            end)
-        end
-
-    end
-
-    for _, object in ipairs(
-        Lighting:GetChildren()
-    ) do
-
-        if object:IsA("Sky") then
-            pcall(function()
-                object:Destroy()
-            end)
-        end
-
-    end
-
-    local darkSky =
-        Instance.new("Sky")
-
-    darkSky.Name =
-        "JohnnyDarkSky"
-
-    darkSky.SkyboxBk =
-        "rbxassetid://0"
-
-    darkSky.SkyboxDn =
-        "rbxassetid://0"
-
-    darkSky.SkyboxFt =
-        "rbxassetid://0"
-
-    darkSky.SkyboxLf =
-        "rbxassetid://0"
-
-    darkSky.SkyboxRt =
-        "rbxassetid://0"
-
-    darkSky.SkyboxUp =
-        "rbxassetid://0"
-
-    darkSky.Parent =
-        Lighting
-
-    Lighting.Brightness = 0
-    Lighting.ClockTime = 0
-    Lighting.TimeOfDay = "00:00:00"
-
-    Lighting.OutdoorAmbient =
-        Color3.new(0, 0, 0)
-
-    Lighting.Ambient =
-        Color3.new(0, 0, 0)
-
-    Lighting.FogColor =
-        Color3.new(0, 0, 0)
-
-    Lighting.FogEnd = 100
-
-    for _, obj in ipairs(
-        workspace:GetDescendants()
-    ) do
-
-        if obj:IsA("ParticleEmitter")
-            or obj:IsA("PointLight")
-            or obj:IsA("SpotLight")
-            or obj:IsA("SurfaceLight")
-        then
-
-            pcall(function()
-                obj:Destroy()
-            end)
-
-        end
-
-    end
-end
-
-FastRebTab:AddButton(
-    "Anti Lag",
-    activateAntiLag
-)
-
---========================================================--
--- FAST REBIRTH LOCK POSITION
---========================================================--
-
-local fastLockRunning = false
-local fastLockConnection = nil
-
-FastRebTab:AddSwitch(
-    "Lock Position",
-    function(state)
-
-        fastLockRunning = state
-
-        if fastLockConnection then
-
-            pcall(function()
-                fastLockConnection:Disconnect()
-            end)
-
-            fastLockConnection = nil
-        end
-
-        if not state then
-            return
-        end
-
-        local rootPart =
-            getRootPart()
-
-        if not rootPart then
-            return
-        end
-
-        local lockedPosition =
-            rootPart.Position
-
-        fastLockConnection =
-            RunService.Heartbeat:Connect(
-                function()
-
-                    local currentRoot =
-                        getRootPart()
-
-                    if currentRoot then
-
-                        currentRoot.Velocity =
-                            Vector3.zero
-
-                        currentRoot.RotVelocity =
-                            Vector3.zero
-
-                        currentRoot.CFrame =
-                            CFrame.new(
-                                lockedPosition
-                            )
-
-                    end
-                end
-            )
-    end
-)
-
---========================================================--
--- AUTO SHAKE
---========================================================--
-
-local autoShakeRunning = false
-
-local function activateShake()
-
-    local tool =
-        getTool("Tropical Shake")
-
-    if tool then
-
-        pcall(function()
-            muscleEvent:FireServer(
-                "tropicalShake",
-                tool
-            )
-        end)
-
-    end
-end
-
-task.spawn(function()
-
-    while not _G.JohnnyScriptDestroyed do
-
-        if autoShakeRunning then
-            activateShake()
-            task.wait(450)
-        else
-            task.wait(1)
-        end
-
-    end
-
-end)
-
-local autoShakeSwitch =
-    FastRebTab:AddSwitch(
-        "Auto Shake",
-        function(state)
-
-            autoShakeRunning = state
-
-            if state then
-                activateShake()
-            end
-
-        end
-    )
-
-autoShakeSwitch:Set(false)
-
---========================================================--
--- FAST REBIRTH FORTUNE WHEEL
---========================================================--
-
-local fortuneWheelRunning = false
-local fortuneWheelLoopId = 0
-_G.JohnnyAutoSpinWheel = false
-
-local function describeInstance(label, object)
-    if object == nil then
-        warn("[Johnny] Fortune Wheel: " .. label .. " = NIL")
-        return false
-    end
-
-    print(
-        "[Johnny] Fortune Wheel: "
-        .. label
-        .. " = "
-        .. object:GetFullName()
-        .. " ["
-        .. object.ClassName
-        .. "]"
-    )
-
-    return true
-end
-
-local fortuneWheelSwitch = nil
-
-local function hasMaxSpinsMessage()
-    local playerGui = Player:FindFirstChildOfClass("PlayerGui")
-
-    if not playerGui then
-        return false
-    end
-
-    for _, object in ipairs(playerGui:GetDescendants()) do
-        if object:IsA("TextLabel")
-            or object:IsA("TextButton")
-            or object:IsA("TextBox")
-        then
-            local ok, value = pcall(function()
-                return object.Text
-            end)
-
-            if ok
-                and type(value) == "string"
-                and value:lower():find("you have max spins", 1, true)
-            then
-                return true
-            end
-        end
-    end
-
-    return false
-end
-
-local function spinFortuneWheelOnce()
-    print("[Johnny] Fortune Wheel: starting diagnostic spin")
-
-    if hasMaxSpinsMessage() then
-        print("[Johnny] Fortune Wheel: maximum spins reached; stopping.")
-        return "MAX_SPINS"
-    end
-
-    local ok, result = pcall(function()
-
-        local events =
-            ReplicatedStorage:FindFirstChild("rEvents")
-
-        if not describeInstance("rEvents", events) then
-            return false, "rEvents was not found in ReplicatedStorage"
-        end
-
-        local remote =
-            events:FindFirstChild("openFortuneWheelRemote")
-
-        if not describeInstance(
-            "openFortuneWheelRemote",
-            remote
-        ) then
-            return false,
-                "openFortuneWheelRemote was not found under rEvents"
-        end
-
-        if not remote:IsA("RemoteFunction") then
-            return false,
-                "openFortuneWheelRemote is "
-                .. remote.ClassName
-                .. ", not RemoteFunction"
-        end
-
-        local chances =
-            ReplicatedStorage:FindFirstChild(
-                "fortuneWheelChances"
-            )
-
-        if not describeInstance(
-            "fortuneWheelChances",
-            chances
-        ) then
-            return false,
-                "fortuneWheelChances was not found in ReplicatedStorage"
-        end
-
-        local wheel =
-            chances:FindFirstChild("Fortune Wheel")
-
-        if not describeInstance(
-            "Fortune Wheel",
-            wheel
-        ) then
-            return false,
-                "Fortune Wheel was not found under fortuneWheelChances"
-        end
-
-        print(
-            "[Johnny] Fortune Wheel: invoking remote..."
-        )
-
-        local invokeOk, serverResult =
-            pcall(function()
-                return remote:InvokeServer(
-                    "openFortuneWheel",
-                    wheel
-                )
-            end)
-
-        if not invokeOk then
-            warn(
-                "[Johnny] Fortune Wheel SERVER/REMOTE ERROR: "
-                .. tostring(serverResult)
-            )
-
-            return false, serverResult
-        end
-
-        print(
-            "[Johnny] Fortune Wheel: server returned:",
-            serverResult
-        )
-
-        return true, serverResult
-    end)
-
-    if not ok then
-        warn(
-            "[Johnny] Fortune Wheel LOCAL ERROR: "
-            .. tostring(result)
-        )
-        return false
-    end
-
-    if result == false then
-        return false
-    end
-
-    task.wait(0.15)
-
-    if hasMaxSpinsMessage() then
-        print("[Johnny] Fortune Wheel: maximum spins reached; stopping.")
-        return "MAX_SPINS"
-    end
-
-    return true
-end
-
-local function setFortuneWheel(state)
-    fortuneWheelRunning = state
-    fortuneWheelLoopId += 1
-
-    local myLoopId = fortuneWheelLoopId
-
-    if not state then
-        print("[Johnny] Fortune Wheel: stopped")
-        return
-    end
-
-    task.spawn(function()
-
-        while
-            fortuneWheelRunning
-            and
-            myLoopId == fortuneWheelLoopId
-            and
-            not _G.JohnnyScriptDestroyed
-        do
-
-            local result = spinFortuneWheelOnce()
-
-            if result == "MAX_SPINS" then
-                fortuneWheelRunning = false
-
-                if fortuneWheelSwitch then
-                    pcall(function()
-                        fortuneWheelSwitch:Set(false)
-                    end)
-                end
-
-                break
-            end
-
-            task.wait(1)
-        end
-    end)
-end
-
-fortuneWheelSwitch =
-    FastRebTab:AddSwitch(
-        "Spin Fortune Wheel",
-        function(state)
-            setFortuneWheel(state)
-        end
-    )
-
---========================================================--
--- JUNGLE LIFT
---========================================================--
-
-local function pressE()
-    VirtualInputManager:SendKeyEvent(
-        true,
-        Enum.KeyCode.E,
-        false,
-        game
-    )
-
-    task.wait(0.05)
-
-    VirtualInputManager:SendKeyEvent(
-        false,
-        Enum.KeyCode.E,
-        false,
-        game
-    )
-end
-
-FastRebTab:AddButton(
-    "Jungle Lift",
-    function()
-
-        local root =
-            getRootPart()
-
-        if not root then
-            return
-        end
-
-        root.CFrame =
-            CFrame.new(
-                -8642.396484375,
-                6.7980651855,
-                2086.1030273
-            )
-
-        task.wait(0.2)
-
-        pressE()
-
-    end
-)
-
---========================================================--
--- REBIRTH TAB
---========================================================--
-
-local RebirthTab =
-    window:AddTab("Rebirth")
-
---========================================================--
--- REBIRTH OPTIONS
---========================================================--
-
-RebirthTab:AddLabel("").TextSize = 10
-RebirthTab:AddLabel("Rebirth Options").TextSize = 20
-
-local rebirthTarget = 1
-
-local targetRebirthActive = false
-local infiniteRebirthActive = false
-
-local targetToggle
-local infiniteToggle
-
-RebirthTab:AddTextBox(
-    "Rebirth Target",
-    function(value)
-
-        local number =
-            tonumber(value)
-
-        if number and number > 0 then
-
-            rebirthTarget =
-                math.floor(number)
-
-        end
-    end
-)
-
-targetToggle =
-    RebirthTab:AddSwitch(
-        "Auto Rebirth Target",
-        function(state)
-
-            targetRebirthActive =
-                state
-
-            if not state then
-                return
-            end
-
-            infiniteRebirthActive =
-                false
-
-            if infiniteToggle then
-
-                pcall(function()
-                    infiniteToggle:Set(false)
-                end)
-
-            end
-
-            task.spawn(function()
-
-                while targetRebirthActive do
-
-                    local statsFolder =
-                        Player:FindFirstChild(
-                            "leaderstats"
-                        )
-
-                    local rebirths =
-                        statsFolder
-                        and
-                        statsFolder:
-                        FindFirstChild(
-                            "Rebirths"
-                        )
-
-                    if
-                        rebirths
-                        and
-                        rebirths.Value >=
-                        rebirthTarget
-                    then
-
-                        targetRebirthActive =
-                            false
-
-                        pcall(function()
-                            targetToggle:Set(
-                                false
-                            )
-                        end)
-
-                        break
-                    end
-
-                    pcall(function()
-                        rebirthRemote:
-                        InvokeServer(
-                            "rebirthRequest"
-                        )
-                    end)
-
-                    task.wait(0.1)
-                end
-            end)
-        end
-    )
-
-infiniteToggle =
-    RebirthTab:AddSwitch(
-        "Auto Rebirth (Infinitely)",
-        function(state)
-
-            infiniteRebirthActive =
-                state
-
-            if not state then
-                return
-            end
-
-            targetRebirthActive =
-                false
-
-            if targetToggle then
-
-                pcall(function()
-                    targetToggle:Set(false)
-                end)
-
-            end
-
-            task.spawn(function()
-
-                while infiniteRebirthActive do
-
-                    pcall(function()
-                        rebirthRemote:
-                        InvokeServer(
-                            "rebirthRequest"
-                        )
-                    end)
-
-                    task.wait(0.1)
-                end
-
-            end)
-        end
-    )
-
-
---========================================================--
--- TOOLS TAB
---========================================================--
-
-
-local ToolsTab =
-    window:AddTab("Tools")
-
---========================================================--
--- AUTO EXERCISES
---========================================================--
-
-ToolsTab:AddLabel("").TextSize = 10
-ToolsTab:AddLabel("Auto Exercises").TextSize = 20
-
-local function addAutoExercise(
-    exerciseName
-)
-
-    local key =
-        "JohnnyAuto" ..
-        exerciseName:gsub(
-            "%s",
-            ""
-        )
-
-    ToolsTab:AddSwitch(
-        "Auto " .. exerciseName,
-        function(state)
-
-            _G[key] = state
-
-            if not state then
-                return
-            end
-
-            task.spawn(function()
-
-                while _G[key] do
-
-                    local character =
-                        Player.Character
-
-                    local backpack =
-                        Player.Backpack
-
-                    local tool =
-                        (
-                            character
-                            and
-                            character:FindFirstChild(
-                                exerciseName
-                            )
-                        )
-                        or
-                        (
-                            backpack
-                            and
-                            backpack:FindFirstChild(
-                                exerciseName
-                            )
-                        )
-
-                    if tool and character then
-
-                        local humanoid =
-                            character:
-                            FindFirstChildOfClass(
-                                "Humanoid"
-                            )
-
-                        if humanoid
-                            and
-                            tool.Parent ==
-                            backpack
-                        then
-
-                            pcall(function()
-                                humanoid:EquipTool(
-                                    tool
-                                )
-                            end)
-                        end
-                    end
-
-                    pcall(function()
-                        muscleEvent:FireServer(
-                            "rep"
-                        )
-                    end)
-
-                    task.wait(0.1)
-                end
-            end)
-        end
-    )
-end
-
-addAutoExercise("Weight")
-addAutoExercise("Pushups")
-addAutoExercise("Handstands")
-addAutoExercise("Situps")
-addAutoExercise("Punch")
-
---========================================================--
--- FAST TOOLS
---========================================================--
-
-ToolsTab:AddLabel("").TextSize = 10
-ToolsTab:AddLabel("Fast Tools").TextSize = 20
-
-ToolsTab:AddSwitch(
-    "Fast Tools",
-    function(state)
-
-        _G.JohnnyFastTools =
-            state
-
-        local settings = {
-
-            {
-                "Punch",
-                "attackTime",
-                state and 0 or 0.35
-            },
-
-            {
-                "Ground Slam",
-                "attackTime",
-                state and 0 or 6
-            },
-
-            {
-                "Stomp",
-                "attackTime",
-                state and 0 or 7
-            },
-
-            {
-                "Handstands",
-                "repTime",
-                state and 0 or 1
-            },
-
-            {
-                "Pushups",
-                "repTime",
-                state and 0 or 1
-            },
-
-            {
-                "Weight",
-                "repTime",
-                state and 0 or 1
-            },
-
-            {
-                "Situps",
-                "repTime",
-                state and 0 or 1
-            }
-        }
-
-        local backpack =
-            Player:WaitForChild(
-                "Backpack"
-            )
-
-        for _, entry in ipairs(
-            settings
-        ) do
-
-            local toolName =
-                entry[1]
-
-            local attributeName =
-                entry[2]
-
-            local value =
-                entry[3]
-
-            local tool =
-                backpack:FindFirstChild(
-                    toolName
-                )
-                or
-                (
-                    Player.Character
-                    and
-                    Player.Character:
-                    FindFirstChild(
-                        toolName
-                    )
-                )
-
-            local object =
-                tool and
-                tool:FindFirstChild(
-                    attributeName
-                )
-
-            if object then
-
-                pcall(function()
-                    object.Value =
-                        value
-                end)
-
-            end
-        end
-    end
-)
-
---========================================================--
--- GYM TELEPORTS
---========================================================--
-
-ToolsTab:AddLabel("").TextSize = 10
-ToolsTab:AddLabel("Gym Teleports").TextSize = 20
-
-local gymLocations = {
-
-    ["Jungle Bench Press"] =
-        CFrame.new(
-            -8173,
-            64,
-            1898
-        ),
-
-    ["Jungle Pull Ups"] =
-        CFrame.new(
-            -8666,
-            34,
-            2070
-        ),
-
-    ["Jungle Boulder"] =
-        CFrame.new(
-            -8621,
-            34,
-            2684
-        )
-}
-
-for name, target in pairs(
-    gymLocations
-) do
-
-    ToolsTab:AddButton(
-        name,
-        function()
-
-            local root =
-                getRootPart()
-
-            if not root then
-                return
-            end
-
-            root.CFrame =
-                target
-
-            task.wait(0.2)
-
-            pressE()
-
-        end
-    )
-end
-
---========================================================--
--- COMPACT MODE UI
---========================================================--
-
-local compactModeGui = nil
-local compactModePaceFormat = "Full"
-local compactNightMode = false
-
-local compactPaceFormats = {
-    Full = { reb = "Pace: %s / Hour | %s / Day | %s / Week", farm = "Strength: %s/H | %s/D | %s/W" },
-    Short = { reb = "Pace: %s/H | %s/D | %s/W", farm = "STR %s/H | %s/D | %s/W" },
-    Compact = { reb = "P: %sH | %sD | %sW", farm = "S %sH | %sD | %sW" },
-    Mini = { reb = "%sH / %sD / %sW", farm = "S %s/%s/%s" }
-}
-
-local function getJohnnyGuiRoot()
-    local root
-    if type(gethui) == "function" then
-        local ok, result = pcall(gethui)
-        if ok and typeof(result) == "Instance" then
-            root = result
-        end
-    end
-    if not root then
-        local ok, result = pcall(function() return game:GetService("CoreGui") end)
-        if ok and typeof(result) == "Instance" then
-            root = result
-        end
-    end
-    if not root then
-        root = Player:WaitForChild("PlayerGui")
-    end
-    return root
-end
-
-local function findMainJohnnyGui()
-    local roots = { getJohnnyGuiRoot() }
-    pcall(function() table.insert(roots, game:GetService("CoreGui")) end)
-    pcall(function() table.insert(roots, Player:WaitForChild("PlayerGui")) end)
-
-    for _, root in ipairs(roots) do
-        if root and typeof(root) == "Instance" then
-            local found = root:FindFirstChild("imgui", true)
-            if found then
-                return found
-            end
-        end
-    end
-    return nil
-end
-
-local function destroyMainUiForCompactMode()
-    local imgui = findMainJohnnyGui()
-    if imgui then
-        pcall(function() imgui:Destroy() end)
-    end
-end
-
-local function destroyCompactMode()
-    if compactModeGui then
-        pcall(function() compactModeGui:Destroy() end)
-        compactModeGui = nil
-    end
-    local root = getJohnnyGuiRoot()
-    pcall(function()
-        local old = root:FindFirstChild("JohnnyCompactMode")
-        if old then old:Destroy() end
-    end)
-end
-
-local function makeModeButton(parent, text, callback, width)
-    local button = Instance.new("TextButton")
-    button.Name = "ModeButton"
-    button.Size = UDim2.new(0, width or 120, 0, 32)
-    button.BackgroundColor3 = Color3.fromRGB(55, 70, 105)
-    button.BackgroundTransparency = 0.08
-    button.BorderSizePixel = 0
-    button.Text = text
-    button.TextColor3 = Color3.fromRGB(255,255,255)
-    button.TextSize = 13
-    button.Font = Enum.Font.GothamSemibold
-    button.AutoButtonColor = true
-    button.Active = true
-    button.ZIndex = 10
-    button.Parent = parent
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 7)
-    corner.Parent = button
-
-    local stroke = Instance.new("UIStroke")
-    stroke.Thickness = 1
-    stroke.Transparency = 0.35
-    stroke.Color = Color3.fromRGB(210,230,255)
-    stroke.Parent = button
-
-    button.MouseButton1Click:Connect(function()
-        local ok, err = pcall(callback)
-        if not ok then warn("[Johnny Compact] button error: " .. tostring(err)) end
-    end)
-    return button
-end
-
-local function getFarmPaceNumbers()
-    local h,d,w = "0","0","0"
-    local ok, value = pcall(function() return projectedStrengthLabel.Text end)
-    if ok and type(value) == "string" then
-        local a,b,c = value:match("Strength Pace:%s*([^/]+)%/Hour%s*|%s*([^/]+)%/Day%s*|%s*([^/]+)%/Week")
-        if a then h=a:gsub("%s+","") end
-        if b then d=b:gsub("%s+","") end
-        if c then w=c:gsub("%s+","") end
-    end
-    return h,d,w
-end
-
-openCompactMode = function(modeName)
-    -- Mode switching never starts automation.
-    -- Each compact mode always opens with its automation OFF.
-    if modeName == "Fast Farm" then
-        fastRepRunning = false
-    elseif modeName == "Fast Rebirth" then
-        isFastRebirthRunning = false
-    end
-    compactNightMode = false
-
-    -- Build the replacement first, then remove the old Elerium UI.
-    destroyCompactMode()
-
-    local root = getJohnnyGuiRoot()
-    local gui = Instance.new("ScreenGui")
-    gui.Name = "JohnnyCompactMode"
-    gui.ResetOnSpawn = false
-    gui.IgnoreGuiInset = true
-    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    gui.DisplayOrder = 1000000
-    gui.Enabled = true
-    local parented = pcall(function() gui.Parent = root end)
-    if not parented or not gui.Parent then
-        local playerGui = Player:FindFirstChildOfClass("PlayerGui") or Player:WaitForChild("PlayerGui")
-        gui.Parent = playerGui
-    end
-    compactModeGui = gui
-
-    local frame = Instance.new("Frame")
-    frame.Name = "ModePanel"
-    frame.Size = UDim2.fromOffset(390, modeName == "Fast Farm" and 300 or 260)
-    frame.Position = UDim2.fromOffset(25, 100)
-    frame.BackgroundColor3 = Color3.fromRGB(45, 35, 75)
-    frame.BackgroundTransparency = 0.10
-    frame.BorderSizePixel = 0
-    frame.ClipsDescendants = false
-    frame.Active = true
-    frame.Draggable = true
-    frame.ZIndex = 2
-    frame.Parent = gui
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 14)
-    corner.Parent = frame
-
-    local stroke = Instance.new("UIStroke")
-    stroke.Thickness = 2
-    stroke.Color = Color3.fromRGB(150,210,255)
-    stroke.Transparency = 0.05
-    stroke.Parent = frame
-
-    local gradient = Instance.new("UIGradient")
-    gradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(155,45,210)),
-        ColorSequenceKeypoint.new(0.35, Color3.fromRGB(55,90,220)),
-        ColorSequenceKeypoint.new(0.7, Color3.fromRGB(20,180,190)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(45,220,125))
-    })
-    gradient.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0,0.05),
-        NumberSequenceKeypoint.new(0.5,0.16),
-        NumberSequenceKeypoint.new(1,0.25)
-    })
-    gradient.Rotation = 25
-    gradient.Parent = frame
-
-    local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1,-58,0,34)
-    title.Position = UDim2.fromOffset(12,7)
-    title.BackgroundTransparency = 1
-    title.Text = "JOHNNY | " .. string.upper(modeName) .. " MODE"
-    title.TextColor3 = Color3.new(1,1,1)
-    title.TextSize = 17
-    title.Font = Enum.Font.GothamBold
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.ZIndex = 10
-    title.Parent = frame
-
-    local close = Instance.new("TextButton")
-    close.Size = UDim2.fromOffset(32,30)
-    close.Position = UDim2.new(1,-42,0,7)
-    close.BackgroundColor3 = Color3.fromRGB(190,55,80)
-    close.BackgroundTransparency = 0.05
-    close.BorderSizePixel = 0
-    close.Text = "X"
-    close.TextColor3 = Color3.new(1,1,1)
-    close.TextSize = 15
-    close.Font = Enum.Font.GothamBold
-    close.ZIndex = 10
-    close.Parent = frame
-    Instance.new("UICorner", close).CornerRadius = UDim.new(0,7)
-    close.MouseButton1Click:Connect(destroyCompactMode)
-
-    local content = Instance.new("Frame")
-    content.Size = UDim2.new(1,-24,1,-52)
-    content.Position = UDim2.fromOffset(12,48)
-    content.BackgroundTransparency = 1
-    content.ZIndex = 5
-    content.Parent = frame
-
-    local layout = Instance.new("UIListLayout")
-    layout.Padding = UDim.new(0,7)
-    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    layout.SortOrder = Enum.SortOrder.LayoutOrder
-    layout.Parent = content
-
-    local status = Instance.new("TextLabel")
-    status.Size = UDim2.new(1,0,0,26)
-    status.BackgroundTransparency = 1
-    status.TextSize = 13
-    status.Font = Enum.Font.GothamBold
-    status.ZIndex = 10
-    status.Parent = content
-
-    local pace = Instance.new("TextLabel")
-    pace.Size = UDim2.new(1,0,0,34)
-    pace.BackgroundTransparency = 1
-    pace.TextColor3 = Color3.fromRGB(255,245,130)
-    pace.TextSize = 13
-    pace.Font = Enum.Font.GothamSemibold
-    pace.TextWrapped = true
-    pace.ZIndex = 10
-    pace.Parent = content
-
-    local stats = Instance.new("TextLabel")
-    stats.Size = UDim2.new(1,0,0,24)
-    stats.BackgroundTransparency = 1
-    stats.TextColor3 = Color3.fromRGB(235,245,255)
-    stats.TextSize = 12
-    stats.Font = Enum.Font.Gotham
-    stats.ZIndex = 10
-    stats.Parent = content
-
-    local function refreshFarm()
-        local ping = getPing()
-        local running = fastRepRunning
-        status.Text = string.format("Fast Farm: %s | %dms | PA: %s", running and "ON" or "OFF", math.floor(ping+0.5), pingAdjusterEnabled and "ON" or "OFF")
-        status.TextColor3 = running and Color3.fromRGB(100,255,145) or Color3.fromRGB(255,120,130)
-        local h,d,w = getFarmPaceNumbers()
-        pace.Text = string.format(compactPaceFormats[compactModePaceFormat].farm,h,d,w)
-        stats.Text = string.format("Strength: %s | Durability: %s",formatStatNumber(strengthStat.Value),formatStatNumber(durabilityStat.Value))
-    end
-
-    local function refreshReb()
-        local running = isFastRebirthRunning
-        status.Text = running and "Fast Rebirth: ON" or "Fast Rebirth: OFF"
-        status.TextColor3 = running and Color3.fromRGB(100,255,145) or Color3.fromRGB(255,120,130)
-        pace.Text = string.format(compactPaceFormats[compactModePaceFormat].reb,formatRebirthNumber(averageTable(paceHistoryHour)),formatRebirthNumber(averageTable(paceHistoryDay)),formatRebirthNumber(averageTable(paceHistoryWeek)))
-        stats.Text = string.format("Rebirths: %s",formatRebirthNumber(rebirthsStat.Value))
-    end
-
-    local startButton = makeModeButton(content, modeName == "Fast Farm" and "START FAST FARM" or "START FAST REBIRTH", function()
-        if modeName == "Fast Farm" then
-            if not fastRepRunning then
-                fastRepRunning = true
-                task.spawn(fastRepLoop)
-            end
-        else
-            if not isFastRebirthRunning then
-                isFastRebirthRunning = true
-                fastRebirthStartTime = tick()
-                task.spawn(fastRebirthLoop)
-            end
-        end
-    end, 235)
-
-    local nightButton = makeModeButton(content, "Night Mode: OFF", function()
-        compactNightMode = not compactNightMode
-        nightButton.Text = compactNightMode and "Night Mode: ON" or "Night Mode: OFF"
-        if compactNightMode then
-            frame.BackgroundColor3 = Color3.fromRGB(8, 10, 20)
-            frame.BackgroundTransparency = 0.08
-            gradient.Enabled = false
-            stroke.Color = Color3.fromRGB(90, 105, 150)
-        else
-            frame.BackgroundColor3 = Color3.fromRGB(45, 35, 75)
-            frame.BackgroundTransparency = 0.10
-            gradient.Enabled = true
-            stroke.Color = Color3.fromRGB(150,210,255)
-        end
-    end, 235)
-
-    if modeName == "Fast Farm" then
-
-        local row = Instance.new("Frame")
-        row.Size = UDim2.new(1,0,0,32); row.BackgroundTransparency=1; row.Parent=content
-        local rl=Instance.new("UIListLayout",row); rl.FillDirection=Enum.FillDirection.Horizontal; rl.HorizontalAlignment=Enum.HorizontalAlignment.Center; rl.Padding=UDim.new(0,4)
-        for _,name in ipairs({"Full","Short","Compact","Mini"}) do
-            makeModeButton(row,name,function() compactModePaceFormat=name; refreshFarm() end,75)
-        end
-
-        local pingRow=Instance.new("Frame")
-        pingRow.Size=UDim2.new(1,0,0,32); pingRow.BackgroundTransparency=1; pingRow.Parent=content
-        local pl=Instance.new("UIListLayout",pingRow); pl.FillDirection=Enum.FillDirection.Horizontal; pl.HorizontalAlignment=Enum.HorizontalAlignment.Center; pl.Padding=UDim.new(0,4)
-        for _,x in ipairs({{"250/200",250,200},{"300/250",300,250},{"400/300",400,300},{"OFF",nil,nil}}) do
-            makeModeButton(pingRow,x[1],function()
-                if x[2] then pausePing=x[2]; resumePing=x[3]; pingAdjusterEnabled=true else pingAdjusterEnabled=false; pingPaused=false end
-                refreshFarm()
-            end,82)
-        end
-
-        makeModeButton(content,"Industrial Gym Regular Squat",function() local r=getRootPart(); if r then r.CFrame=CFrame.new(-5218,61,5412); task.wait(.2); pressE() end end,235)
-
-        task.spawn(function() while compactModeGui==gui and gui.Parent do refreshFarm(); task.wait(.5) end end)
-        refreshFarm()
-    else
-        local row=Instance.new("Frame"); row.Size=UDim2.new(1,0,0,32); row.BackgroundTransparency=1; row.Parent=content
-        local rl=Instance.new("UIListLayout",row); rl.FillDirection=Enum.FillDirection.Horizontal; rl.HorizontalAlignment=Enum.HorizontalAlignment.Center; rl.Padding=UDim.new(0,4)
-        for _,name in ipairs({"Full","Short","Compact","Mini"}) do makeModeButton(row,name,function() compactModePaceFormat=name; refreshReb() end,75) end
-        makeModeButton(content,"Industrial Gym Super Squat",function() local r=getRootPart(); if r then r.CFrame=CFrame.new(-5488,61,4641); task.wait(.2); pressE() end end,220)
-        task.spawn(function() while compactModeGui==gui and gui.Parent do refreshReb(); task.wait(.5) end end)
-        refreshReb()
-    end
-
-    -- Hand off completely to the selected mode: remove the full Elerium UI
-    -- immediately. The selected mode remains OFF until its START button is pressed.
-    destroyMainUiForCompactMode()
-end
-
---========================================================--
--- INFO TAB
-
---========================================================--
-
-
-local infoTab =
-    window:AddTab("Info")
-
-infoTab:Show()
-
-infoTab:AddButton(
-    "Destroy Script + Anti AFK",
-    function()
-
-        _G.JohnnyScriptDestroyed =
-            true
-
-        -- Stop all major loops.
-        isFastRebirthRunning = false
-        fastRepRunning = false
-
-        autoEggRunning = false
-        autoShakeRunning = false
-        farmingAutoShakeRunning = false
-
-        size1Running = false
-
-        targetRebirthActive = false
-        infiniteRebirthActive = false
-
-        _G.JohnnyAutoSpinWheel =
-            false
-
-        fortuneWheelRunning = false
-        fortuneWheelLoopId += 1
-
-        _G.JohnnyMuscleKingTP =
-            false
-
-        _G.JohnnyAutoSize1 =
-            false
-
-        _G.JohnnyAutoEgg60 =
-            false
-
-        -- Disconnect position locks.
-        if mainPositionLockConnection then
-
-            pcall(function()
-                mainPositionLockConnection:
-                    Disconnect()
-            end)
-
-            mainPositionLockConnection =
-                nil
-        end
-
-        if fastLockConnection then
-
-            pcall(function()
-                fastLockConnection:
-                    Disconnect()
-            end)
-
-            fastLockConnection =
-                nil
-        end
-
-        -- Disconnect anti AFK.
-        if _G.JohnnyAntiAfkConnection then
-
-            pcall(function()
-                _G.JohnnyAntiAfkConnection:
-                    Disconnect()
-            end)
-
-            _G.JohnnyAntiAfkConnection =
-                nil
-        end
-
-        -- Remove Anti AFK UI.
-        if _G.JohnnyAntiAfkGui then
-
-            pcall(function()
-                _G.JohnnyAntiAfkGui:
-                    Destroy()
-            end)
-
-            _G.JohnnyAntiAfkGui =
-                nil
-        end
-
-        -- Remove portal connection.
-        if _G.JohnnyPortalConnection then
-
-            pcall(function()
-                _G.JohnnyPortalConnection:
-                    Disconnect()
-            end)
-
-            _G.JohnnyPortalConnection =
-                nil
-        end
-
-        -- Destroy UI.
-        local guiRoot =
-            (gethui and gethui())
-            or
-            game:GetService(
-                "CoreGui"
-            )
-
-        local imgui =
-            guiRoot:FindFirstChild(
-                "imgui"
-            )
-
-        if imgui then
-
-            pcall(function()
-                imgui:Destroy()
-            end)
-
-        end
-
-        if script then
-
-            pcall(function()
-                script:Destroy()
-            end)
-
-        end
-    end
-)
-
-infoTab:AddLabel(
-    "Made by Johnny"
-).TextSize = 20
-
-infoTab:AddLabel(
-    "discord.gg/Muscle"
-).TextSize = 20
-
-infoTab:AddButton(
-    "Copy Invite",
-    function()
-
-        local link =
-            "https://discord.gg/Muscle"
-
-        if setclipboard then
-
-            setclipboard(link)
-
-            sendNotification(
-                "Link Copied!",
-                "You can continue to Discord now."
-            )
-
-        else
-
-            sendNotification(
-                "Error!",
-                "Not Supported."
-            )
-
-        end
-    end
-)
-
-infoTab:AddLabel("")
-
-local versionLabel =
-    infoTab:AddLabel(
-        "VERSION:1.1"
-    )
-
-versionLabel.TextSize = 40
-versionLabel.Font =
-    Enum.Font.Arcade
-
---========================================================--
--- ANTI AFK
---========================================================--
-
-task.wait(0.5)
-
-local antiAfkGui =
-    Instance.new("ScreenGui")
-
-antiAfkGui.Name =
-    "JohnnyAntiAfk"
-
-antiAfkGui.ResetOnSpawn =
-    false
-
-_G.JohnnyAntiAfkGui =
-    antiAfkGui
-
-local antiAfkTitle =
-    Instance.new("TextLabel")
-
-local antiAfkFrame =
-    Instance.new("Frame")
-
-local antiAfkCreator =
-    Instance.new("TextLabel")
-
-local antiAfkStatus =
-    Instance.new("TextLabel")
-
-antiAfkGui.Parent =
-    game:GetService("CoreGui")
-
-antiAfkGui.ZIndexBehavior =
-    Enum.ZIndexBehavior.Sibling
-
-antiAfkTitle.Parent =
-    antiAfkGui
-
-antiAfkTitle.Active =
-    true
-
-antiAfkTitle.BackgroundColor3 =
-    Color3.new(
-        0.176471,
-        0.176471,
-        0.176471
-    )
-
-antiAfkTitle.Draggable =
-    true
-
-antiAfkTitle.Position =
-    UDim2.new(
-        0.698610067,
-        0,
-        0.098096624,
-        0
-    )
-
-antiAfkTitle.Size =
-    UDim2.new(
-        0,
-        370,
-        0,
-        52
-    )
-
-antiAfkTitle.Font =
-    Enum.Font.SourceSansSemibold
-
-antiAfkTitle.Text =
-    "Anti Afk"
-
-antiAfkTitle.TextColor3 =
-    Color3.new(
-        192 / 255,
-        192 / 255,
-        192 / 255
-    )
-
-antiAfkTitle.TextSize = 22
-
-antiAfkFrame.Parent =
-    antiAfkTitle
-
-antiAfkFrame.BackgroundColor3 =
-    Color3.new(
-        0.196078,
-        0.196078,
-        0.196078
-    )
-
-antiAfkFrame.Position =
-    UDim2.new(
-        0,
-        0,
-        1.0192306,
-        0
-    )
-
-antiAfkFrame.Size =
-    UDim2.new(
-        0,
-        370,
-        0,
-        107
-    )
-
-antiAfkCreator.Parent =
-    antiAfkFrame
-
-antiAfkCreator.BackgroundColor3 =
-    Color3.new(
-        0.176471,
-        0.176471,
-        0.176471
-    )
-
-antiAfkCreator.Position =
-    UDim2.new(
-        0,
-        0,
-        0.800455689,
-        0
-    )
-
-antiAfkCreator.Size =
-    UDim2.new(
-        0,
-        370,
-        0,
-        21
-    )
-
-antiAfkCreator.Font =
-    Enum.Font.Arial
-
-antiAfkCreator.Text =
-    "Made by Johnnyboy"
-
-antiAfkCreator.TextColor3 =
-    Color3.new(
-        192 / 255,
-        192 / 255,
-        192 / 255
-    )
-
-antiAfkCreator.TextSize = 20
-
-antiAfkStatus.Parent =
-    antiAfkFrame
-
-antiAfkStatus.BackgroundColor3 =
-    Color3.new(
-        0.176471,
-        0.176471,
-        0.176471
-    )
-
-antiAfkStatus.Position =
-    UDim2.new(
-        0,
-        0,
-        0.158377,
-        0
-    )
-
-antiAfkStatus.Size =
-    UDim2.new(
-        0,
-        370,
-        0,
-        44
-    )
-
-antiAfkStatus.Font =
-    Enum.Font.ArialBold
-
-antiAfkStatus.Text =
-    "Status: Active"
-
-antiAfkStatus.TextColor3 =
-    Color3.new(
-        192 / 255,
-        192 / 255,
-        192 / 255
-    )
-
-antiAfkStatus.TextSize = 20
-
-local virtualUser =
-    game:GetService(
-        "VirtualUser"
-    )
-
-_G.JohnnyAntiAfkConnection =
-    Player.Idled:Connect(
-        function()
-
-            if _G.JohnnyScriptDestroyed then
-                return
-            end
-
-            virtualUser:
-                CaptureController()
-
-            virtualUser:
-                ClickButton2(
-                    Vector2.new()
-                )
-
-            antiAfkStatus.Text =
-                "Roblox tried kicking you but I didnt let them!"
-
-            task.wait(2)
-
-            if antiAfkStatus then
-
-                antiAfkStatus.Text =
-                    "Status : Active"
-
-            end
-        end
-    )
-
---========================================================--
--- FINAL UI SIZE FIX
---========================================================--
-
-task.defer(function()
-
-    local guiRoot =
-        (gethui and gethui())
-        or
-        game:GetService(
-            "CoreGui"
-        )
-
-    local imgui =
-        guiRoot:FindFirstChild(
-            "imgui"
-        )
-
-    local windows =
-        imgui
-        and
-        imgui:FindFirstChild(
-            "Windows"
-        )
-
-    local uiWindow =
-        windows
-        and
-        windows:FindFirstChild(
-            "Window"
-        )
-
-    if uiWindow then
-
-        uiWindow.Size =
-            UDim2.fromOffset(
-                900,
-                900
-            )
-
-        uiWindow.ClipsDescendants =
-            true
-
-    end
-end)
-
---========================================================--
--- END
---========================================================--
+local function tp(cf)local r=root();if r then r.CFrame=cf end end
+local function pressE()pcall(function()VirtualInputManager:SendKeyEvent(true,Enum.KeyCode.E,false,game);task.wait(.05);VirtualInputManager:SendKeyEvent(false,Enum.KeyCode.E,false,game)end)end
+local function ping()local ok,v=pcall(function()return StatsService.Network.ServerStatsItem["Data Ping"]:GetValue()end);return ok and v or 0 end
+local function uniquePets()local p=Player:FindFirstChild("petsFolder");return p and (p:FindFirstChild("Unique") or p:FindFirstChild("uniquePets") or p)end
+local function protected(p)return p and (p.Name=="Titanium Hydra" or p.Name=="Tribal Overlord")end
+local function unequipAll()local p=Player:FindFirstChild("petsFolder");if not p then return end;for _,f in ipairs(p:GetChildren())do if f:IsA("Folder")then for _,pet in ipairs(f:GetChildren())do if not protected(pet)then pcall(function()equipPetEvent:FireServer("unequipPet",pet)end)end end end end end
+local function equip(n)local p=uniquePets();if not p then return end;for _,pet in ipairs(p:GetChildren())do if pet.Name==n then pcall(function()equipPetEvent:FireServer("equipPet",pet)end)end end end
+local function manage(n)unequipAll();task.wait(.05);equip(n)end
+
+local window=GlassUI.new({title="Johnny | Farming",subtitle="GlassUI Standalone • Johnny Feature Pack",size=Vector2.new(760,500),configName="Johnny_GlassUI",autoLoad=true})
+local defs={{"farming","Farming","green"},{"rebirth","Rebirth","amber"},{"pets","Pets","purple"},{"player","Player","blue"},{"killing","Killing","red"},{"stats","Stats","green"},{"admin","Admin","gray"},{"perf","Perf","blue"},{"themes","Themes","purple"},{"misc","Misc","gray"}}
+local pages={}
+for i,d in ipairs(defs)do local _,p=window:AddNavItem({id=d[1],label=d[2],color=d[3],active=i==1});pages[d[1]]=p end
+local function P(pg,t,i)return pg:AddPanel({title=t,icon=i,open=true})end
+local function B(p,t,fn,primary,danger)p:AddButtonRow({{text=t,onClick=fn,primary=primary,danger=danger}})end
+local function BR(p,defs)p:AddButtonRow(defs)end
+local function T(p,l,k,on,fn)return p:AddToggleRow({label=l,key=k,on=on,onChange=fn})end
+local function S(p,l,mi,ma,st,v,fn)return p:AddSliderRow({label=l,min=mi,max=ma,step=st,value=v,onChange=fn})end
+
+-- FARMING
+local f=pages.farming
+f:AddStat({label="Strength",value=fmt(strengthStat.Value),accent=true});f:AddStat({label="Durability",value=fmt(durabilityStat.Value),accent=true})
+local fp=P(f,"Fast Farm","⚡");local _,fs=fp:AddRow({label="Status",value="Stopped"});local _,fg=fp:AddRow({label="Gained",value="0 / 0"})
+local fast=false;local reps=1;local pingOn=true;local pauseAt=250;local resumeBelow=200;local pauseSec=1
+T(fp,"Fast Rep","fastRep",false,function(on)fast=on;fs.Text=on and "Running" or "Stopped";if on then task.spawn(function()while fast do while fast and pingOn and ping()>=pauseAt do task.wait(pauseSec)end;for _=1,reps do if not fast then break end;pcall(function()muscleEvent:FireServer("rep")end)end;task.wait(.01)end end)end end)
+S(fp,"Rep Speed",1,20,1,1,function(v)reps=v end)
+local pa=P(f,"Ping Adjuster","📶");pa:AddRow({label="Current ping",value=tostring(math.floor(ping())).." ms"});T(pa,"Ping Adjuster","pingAdjuster",true,function(v)pingOn=v end);S(pa,"Pause At Ping (ms)",50,1000,10,250,function(v)pauseAt=v end);S(pa,"Resume Below Ping (ms)",0,900,10,200,function(v)resumeBelow=v end);S(pa,"Pause Duration (sec)",0,10,.5,1,function(v)pauseSec=v end)
+local au=P(f,"Automation","⚙")
+local ae,ash,as1,mtp,e60=false,false,false,false,false
+local function protein()local t=tool("Protein Egg");if t then pcall(function()muscleEvent:FireServer("proteinEgg",t)end)end end
+local function shake()local t=tool("Tropical Shake");if t then pcall(function()muscleEvent:FireServer("tropicalShake",t)end)end end
+T(au,"Auto Egg","autoEgg",false,function(v)ae=v;if v then protein()end end);T(au,"Auto Shake","autoShake",false,function(v)ash=v;if v then shake()end end)
+T(au,"Auto Size 1","autoSize1",false,function(v)as1=v;if v then task.spawn(function()while as1 do pcall(function()changeSpeedSizeRemote:InvokeServer("changeSize",1)end);task.wait()end end)end end)
+T(au,"Auto Teleport to Muscle King","muscleKingTP",false,function(v)mtp=v;if v then task.spawn(function()while mtp do local c=Player.Character;if c then pcall(function()c:MoveTo(Vector3.new(-8646,17,-5738))end)end;task.wait(.2)end end)end end)
+T(au,"Auto Eat Egg | 60 Minutes","autoEgg60",false,function(v)e60=v;if v then task.spawn(function()while e60 do protein();task.wait(3600)end end)end end)
+BR(au,{{text="Jungle Squat",onClick=function()tp(CFrame.new(-8371.4336,6.7981,2858.8853));task.wait(.2);pressE()end},{text="Industrial Squat",onClick=function()tp(CFrame.new(-5218,61,5412));task.wait(.2);pressE()end}})
+BR(au,{{text="Super Squat",onClick=function()tp(CFrame.new(-5488,61,4641));task.wait(.2);pressE()end},{text="Swift Samurai",onClick=function()manage("Swift Samurai")end}})
+task.spawn(function()while not _G.JohnnyScriptDestroyed do if ae then protein();task.wait(1800)else task.wait(1)end end end);task.spawn(function()while not _G.JohnnyScriptDestroyed do if ash then shake();task.wait(900)else task.wait(1)end end end)
+
+-- REBIRTH
+local rpg=pages.rebirth;rpg:AddStat({label="Rebirths",value=fmt(rebirthsStat.Value),accent=true});local rp=P(rpg,"Fast Rebirth","↻");local fr=false
+local function fastRebirth()local target=5000+rebirthsStat.Value*2550;while fr and strengthStat.Value<target do for _=1,(Player.MembershipType==Enum.MembershipType.Premium and 8 or 14)do if not fr then break end;pcall(function()muscleEvent:FireServer("rep")end)end;task.wait(.01)end;if fr then manage("Swift Samurai");local b=rebirthsStat.Value;repeat pcall(function()rebirthRemote:InvokeServer("rebirthRequest")end);task.wait(.05)until rebirthsStat.Value>b or not fr end end
+T(rp,"Fast Rebirth","fastRebirth",false,function(v)fr=v;if v then task.spawn(function()while fr do fastRebirth();task.wait(.05)end end)end end)
+T(rp,"Lock Position","rebirthLock",false,function(v)if not v then return end;local r=root();if not r then return end;local cf=r.CFrame;task.spawn(function()while fr do local x=root();if x then x.CFrame=cf;x.AssemblyLinearVelocity=Vector3.zero;x.AssemblyAngularVelocity=Vector3.zero end;task.wait()end end)end end)
+BR(rp,{{text="Jungle Lift",onClick=function()tp(CFrame.new(-8642.3965,6.7981,2086.103));task.wait(.2);pressE()end},{text="Rebirth Once",primary=true,onClick=function()pcall(function()rebirthRemote:InvokeServer("rebirthRequest")end)end}})
+local ro=P(rpg,"Rebirth Options","🎯");T(ro,"Infinite Rebirth","infiniteRebirth",false,function(v)if v then task.spawn(function()while v do pcall(function()rebirthRemote:InvokeServer("rebirthRequest")end);task.wait(.05)end end)end end)
+
+-- PETS
+local pp=pages.pets;local pet=P(pp,"Pet Management","🐾");BR(pet,{{text="Unequip Non-Protected",onClick=unequipAll},{text="Swift Samurai",onClick=function()manage("Swift Samurai")end}});BR(pet,{{text="Tribal Overlord",onClick=function()manage("Tribal Overlord")end},{text="Titanium Hydra",onClick=function()equip("Titanium Hydra")end}});pet:AddRow({label="Protected","Titanium Hydra"})
+
+-- PLAYER
+local pl=pages.player;local mv=P(pl,"Movement","🏃");S(mv,"WalkSpeed",16,250,1,16,function(v)local h=hum();if h then h.WalkSpeed=v end end);S(mv,"Size",1,100,1,1,function(v)pcall(function()changeSpeedSizeRemote:InvokeServer("changeSize",v)end)end)
+local pu=P(pl,"Player Utilities","🛠");local ij=false;T(pu,"Infinite Jump","infiniteJump",false,function(v)ij=v end);T(pu,"Show Pets","showPets",true,function(v)local x=Player:FindFirstChild("hidePets");if x then x.Value=v end end);T(pu,"Show Other Pets","showOtherPets",true,function(v)local x=Player:FindFirstChild("showOtherPetsOn");if x then x.Value=v end end)
+BR(pu,{{text="Night",onClick=function()Lighting.ClockTime=0 end},{text="Day",onClick=function()Lighting.ClockTime=12 end},{text="Midnight",onClick=function()Lighting.ClockTime=6 end}});B(pu,"Rejoin",function()pcall(function()TeleportService:TeleportToPlaceInstance(game.PlaceId,game.JobId,Player)end)end)
+UserInputService.JumpRequest:Connect(function()if ij then local h=hum();if h then h:ChangeState(Enum.HumanoidStateType.Jumping)end end end)
+
+-- KILLING
+local kp=pages.killing;local kk=P(kp,"Killing / Combat","☠");T(kk,"Fast Punch","fastPunch",false,function(v)local t=tool("Punch");local a=t and t:FindFirstChild("attackTime");if a then pcall(function()a.Value=v and 0 or .35 end)end end);B(kk,"Punch",function()pcall(function()muscleEvent:FireServer("rep")end)end);kk:AddRow({label="Source status","Johnny feature source contains no separate killing remote."})
+
+-- STATS
+local sp=pages.stats;sp:AddStat({label="Strength",value=fmt(strengthStat.Value),accent=true});sp:AddStat({label="Durability",value=fmt(durabilityStat.Value),accent=true});sp:AddStat({label="Rebirths",value=fmt(rebirthsStat.Value),accent=true})
+local sl=P(sp,"Live Statistics","📊");local _,sv=sl:AddRow({label="Strength",value=""});local _,dv=sl:AddRow({label="Durability",value=""});local _,rv=sl:AddRow({label="Rebirths",value=""});local _,pv=sl:AddRow({label="Ping",value=""})
+task.spawn(function()while not _G.JohnnyScriptDestroyed do sv.Text=fmt(strengthStat.Value);dv.Text=fmt(durabilityStat.Value);rv.Text=fmt(rebirthsStat.Value);pv.Text=string.format("%d ms",ping());task.wait(1)end end)
+
+-- ADMIN
+local ad=pages.admin;local ap=P(ad,"Admin / Tools","🔧")
+BR(ap,{{text="Remove Portals",onClick=function()for _,o in ipairs(game:GetDescendants())do if o.Name=="RobloxForwardPortals"then pcall(function()o:Destroy()end)end end end},{text="Rejoin",onClick=function()pcall(function()TeleportService:TeleportToPlaceInstance(game.PlaceId,game.JobId,Player)end)end}})
+BR(ap,{{text="Infinite Yield",onClick=function()pcall(function()loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source"))()end)end},{text="Anti-Lag",onClick=function()for _,o in ipairs(Lighting:GetChildren())do if o:IsA("PostEffect")or o:IsA("Sky")then pcall(function()o:Destroy()end)end end;for _,o in ipairs(workspace:GetDescendants())do if o:IsA("ParticleEmitter")or o:IsA("Trail")or o:IsA("Beam")or o:IsA("PointLight")or o:IsA("SpotLight")or o:IsA("SurfaceLight")then pcall(function()o:Destroy()end)end end end}})
+local ft=false;T(ap,"Fast Tools","fastTools",false,function(v)ft=v;for _,x in ipairs({{"Punch","attackTime",v and 0 or .35},{"Ground Slam","attackTime",v and 0 or 6},{"Stomp","attackTime",v and 0 or 7},{"Handstands","repTime",v and 0 or 1},{"Pushups","repTime",v and 0 or 1},{"Weight","repTime",v and 0 or 1},{"Situps","repTime",v and 0 or 1}})do local t=tool(x[1]);local a=t and t:FindFirstChild(x[2]);if a then pcall(function()a.Value=x[3]end)end end end)
+local ex=P(ad,"Auto Exercises","💪");local exs={};for _,n in ipairs({"Weight","Pushups","Handstands","Situps","Punch"})do T(ex,"Auto "..n,"auto"..n,false,function(v)exs[n]=v;if v then task.spawn(function()while exs[n] and not _G.JohnnyScriptDestroyed do local t=tool(n);local h=hum();if t and h and t.Parent==Player:FindFirstChild("Backpack")then pcall(function()h:EquipTool(t)end)end;pcall(function()muscleEvent:FireServer("rep")end);task.wait(.1)end end)end end end
+
+-- PERF
+local perf=pages.perf;local ppn=P(perf,"Performance","🚀");T(ppn,"Anti-Lag","antiLag",false,function(v)if v then for _,o in ipairs(Lighting:GetChildren())do if o:IsA("PostEffect")or o:IsA("Sky")then pcall(function()o:Destroy()end)end end;for _,o in ipairs(workspace:GetDescendants())do if o:IsA("ParticleEmitter")or o:IsA("Trail")or o:IsA("Beam")or o:IsA("PointLight")or o:IsA("SpotLight")or o:IsA("SurfaceLight")then pcall(function()o:Destroy()end)end end end end);ppn:AddRow({label="UI base","GlassUI Standalone"});ppn:AddRow({label="Window","760 × 500"})
+
+-- THEMES/MISC are the standalone library's native pages.
+window:BuildThemesPage(pages.themes)
+window:BuildSettingsPage(pages.misc)
+local mx=P(pages.misc,"Johnny Utilities","🧰")
+B(mx,"Save Settings",function()window:SaveSettings()end,true)
+BR(mx,{{text="Load Settings",onClick=function()window:LoadSettings()end},{text="Recenter",onClick=function()window:Recenter()end}})
+B(mx,"Destroy Script",function()_G.JohnnyScriptDestroyed=true;window:Destroy()end,false,true)
+mx:AddRow({label="Automation","Tabs/pages only select UI; automation is controlled by switches."})
+
+return window
