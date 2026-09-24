@@ -1,3 +1,6 @@
+-- GlassUI direct-execution demo
+-- This file contains the GlassUI library and then creates the demo window.
+
 --[[
 	GlassUI
 	A small "black glass" macOS-style UI library for Roblox.
@@ -1095,3 +1098,61 @@ function Panel:AddToggleRow(opts)
 end
 
 return GlassUI
+
+-- ===================== demo / runner =====================
+local window = GlassUI.new({
+	title = "Panel",
+	subtitle = "UI Kit Demo",
+	size = UDim2.fromOffset(760, 500),
+	configName = "PanelDemo",
+	autoLoad = true,
+})
+
+local function buildOverviewPage()
+	window:AddStat({ label = "Active sessions", value = "128" })
+	window:AddStat({ label = "New this week", value = "+42", accent = true })
+	window:AddStat({ label = "Avg. response", value = "212ms" })
+	window:AddStat({ label = "Uptime", value = "99.98%" })
+
+	local sessionPanel = window:AddPanel({ title = "Gained this session", open = true })
+	sessionPanel:AddRow({ label = "Requests handled", value = "3,204", checked = true })
+	sessionPanel:AddRow({ label = "Errors", value = "0", checked = true })
+	sessionPanel:AddRow({ label = "Peak concurrency", value = "61" })
+
+	local notifPanel = window:AddPanel({ title = "Notifications", open = false })
+	notifPanel:AddToggleRow({ label = "Email digests", on = true })
+	notifPanel:AddToggleRow({ label = "Desktop alerts", on = false })
+end
+
+local NAV = {
+	{ id = "farming", label = "Farming", color = "green" },
+	{ id = "rebirth", label = "Rebirth", color = "amber" },
+	{ id = "pets", label = "Pets", color = "purple" },
+	{ id = "player", label = "Player", color = "blue" },
+	{ id = "killing", label = "Killing", color = "red" },
+	{ id = "stats", label = "Stats", color = "green" },
+	{ id = "admin", label = "Admin", color = "gray" },
+	{ id = "perf", label = "Perf", color = "blue" },
+	{ id = "themes", label = "Themes", color = "purple" },
+	{ id = "misc", label = "Misc", color = "gray" },
+}
+
+for i, item in ipairs(NAV) do
+	window:AddNavItem({
+		label = item.label,
+		color = item.color,
+		active = i == 1,
+		onClick = function()
+			window:ClearContent()
+			if item.id == "themes" then
+				window:BuildThemesPage()
+			elseif item.id == "misc" then
+				window:BuildSettingsPage()
+			else
+				buildOverviewPage()
+			end
+		end,
+	})
+end
+
+buildOverviewPage()
