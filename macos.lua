@@ -113,7 +113,7 @@ local function getGuiParent()
 
     if LocalPlayer then
         local ok, result = pcall(function()
-            return LocalPlayer:WaitForChild("PlayerGui", 10)
+            return LocalPlayer:WaitForChild("PlayerGui", 15)
         end)
         if ok and result then
             return result
@@ -543,7 +543,9 @@ function Window:AddTab(name)
     page.BackgroundTransparency = 1
     page.BorderSizePixel = 0
     page.ScrollBarThickness = 4
+    page.ScrollBarImageTransparency = 0.15
     page.ScrollBarImageColor3 = Color3.fromRGB(95,95,105)
+    page.Active = true
     page.CanvasSize = UDim2.fromOffset(0, 0)
     page.AutomaticCanvasSize = Enum.AutomaticSize.Y
     page.ScrollingDirection = Enum.ScrollingDirection.Y
@@ -586,21 +588,43 @@ function MacOSKit:AddWindow(title, config)
     gui.Name = "MacOSKit"
     gui.Enabled = true
     gui.ResetOnSpawn = false
-    gui.IgnoreGuiInset = true
+    gui.IgnoreGuiInset = false
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     gui.DisplayOrder = 999
-    gui.ScreenInsets = Enum.ScreenInsets.None
+    gui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
+
+    -- Remove stale copies left behind by a previous execution.
+    local parent = getGuiParent()
+    if parent then
+        local old = parent:FindFirstChild("MacOSKit")
+        if old then
+            pcall(function()
+                old:Destroy()
+            end)
+        end
+    end
 
     protectGui(gui)
 
-    local width = math.max(
+    -- Respect the requested minimum size, but never create a window larger
+    -- than the current viewport. Oversized fixed windows can look "invisible"
+    -- because their center is outside the usable area on smaller screens.
+    local requestedWidth = math.max(
         tonumber(config.min_size and config.min_size.X) or 900,
         720
     )
-    local height = math.max(
+    local requestedHeight = math.max(
         tonumber(config.min_size and config.min_size.Y) or 640,
         500
     )
+
+    local camera = workspace.CurrentCamera
+    local viewport = camera and camera.ViewportSize or Vector2.new(1280, 720)
+    local width = math.min(requestedWidth, math.max(720, viewport.X * 0.94))
+    local height = math.min(requestedHeight, math.max(500, viewport.Y * 0.88))
+
+    width = math.floor(width)
+    height = math.floor(height)
 
     local root = Instance.new("Frame")
     root.Name = "Window"
@@ -611,6 +635,8 @@ function MacOSKit:AddWindow(title, config)
     root.BackgroundTransparency = 0.08
     root.BorderSizePixel = 0
     root.Visible = true
+    root.Active = true
+    root.ClipsDescendants = true
     root.ZIndex = 1
     root.Parent = gui
     corner(root, 14)
@@ -739,7 +765,9 @@ function MacOSKit:AddWindow(title, config)
     sidebarList.Size = UDim2.new(1,-18,1,-58)
     sidebarList.BackgroundTransparency = 1
     sidebarList.BorderSizePixel = 0
-    sidebarList.ScrollBarThickness = 0
+    sidebarList.ScrollBarThickness = 3
+    sidebarList.ScrollBarImageTransparency = 0.35
+    sidebarList.Active = true
     sidebarList.CanvasSize = UDim2.fromOffset(0,0)
     sidebarList.AutomaticCanvasSize = Enum.AutomaticSize.Y
     sidebarList.ZIndex = 4
