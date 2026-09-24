@@ -979,7 +979,8 @@ end
 -- JOHNNY SCRIPT
 --========================================================--
 
-local library = MacOSKit
+local function runJohnny()
+    local library = MacOSKit
 --========================================================--
 -- JOHNNY | CLAUDE ELERIUM FEATURE PORT
 -- Uses the supplied Elerium window/library as the UI shell.
@@ -5481,6 +5482,10 @@ _G.JohnnyAntiAfkConnection =
 end
 
 -- Latest compiler-compatible build
+end
+
+runJohnny()
+
 --========================================================--
 -- END
 --========================================================--
