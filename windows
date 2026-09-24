@@ -25,17 +25,20 @@ local Player = Players.LocalPlayer
 -- LIBRARY
 --========================================================--
 
+-- MacOSKit is the local UI shell for this project.
+-- It keeps the existing window/tab/control API while replacing Elerium
+-- with the supplied macOS-style glass design.
 local library = loadstring(
     game:HttpGet(
-        "https://raw.githubusercontent.com/memejames/elerium-v2-ui-library/main/Library",
+        "https://raw.githubusercontent.com/zyyer4/windows11-/main/macos.lua",
         true
     )
 )()
 
 local window = library:AddWindow("Johnny | Farming", {
-    main_color = Color3.fromRGB(138, 0, 0),
     min_size = Vector2.new(900, 900),
-    can_resize = true
+    can_resize = true,
+    theme = "Violet"
 })
 
 --========================================================--
