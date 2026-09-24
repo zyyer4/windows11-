@@ -545,13 +545,46 @@ function Window:AddTab(name)
     local tabName = tostring(name or "Tab")
     local tab = setmetatable({Window = self, Name = tabName}, Tab)
 
+    local icons = {
+        Farming = "🌿",
+        Rebirth = "🔄",
+        Pets = "🐾",
+        Player = "👤",
+        Killing = "🎯",
+        Stats = "📊",
+        Admin = "🛡️",
+        Perf = "⚡",
+        Theme = "🎨",
+        Themes = "🎨",
+        Misc = "⚙️",
+        Tools = "🧰",
+        Info = "ℹ️",
+    }
+
+    local tabOrder = {
+        Farming = 1,
+        Rebirth = 2,
+        Pets = 3,
+        Player = 4,
+        Killing = 5,
+        Stats = 6,
+        Admin = 7,
+        Perf = 8,
+        Theme = 9,
+        Themes = 9,
+        Misc = 10,
+        Tools = 11,
+        Info = 12,
+    }
+
     local nav = Instance.new("TextButton")
     nav.Name = tabName
     nav.Size = UDim2.new(1, 0, 0, 35)
+    nav.LayoutOrder = tabOrder[tabName] or 100
     nav.BackgroundColor3 = self.Theme.accent
     nav.BackgroundTransparency = 1
     nav.BorderSizePixel = 0
-    nav.Text = tabName
+    nav.Text = (icons[tabName] or "•") .. "  " .. tabName
     nav.TextColor3 = Color3.fromRGB(155,155,163)
     nav.TextSize = 12
     nav.Font = Enum.Font.GothamMedium
@@ -559,7 +592,7 @@ function Window:AddTab(name)
     nav.AutoButtonColor = false
     nav.Parent = self.Sidebar
     corner(nav, 7)
-    addPadding(nav, 12, 8)
+    addPadding(nav, 10, 8)
 
     local page = Instance.new("ScrollingFrame")
     page.Name = tabName .. "Page"
@@ -654,8 +687,8 @@ function MacOSKit:AddWindow(title, config)
     root.AnchorPoint = Vector2.new(0.5, 0.5)
     root.Position = UDim2.fromScale(0.5, 0.5)
     root.Size = UDim2.fromOffset(width, height)
-    root.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
-    root.BackgroundTransparency = 0.02
+    root.BackgroundColor3 = Color3.fromRGB(8, 9, 12)
+    root.BackgroundTransparency = 0.14
     root.BorderSizePixel = 0
     root.Visible = true
     root.Active = true
@@ -668,16 +701,60 @@ function MacOSKit:AddWindow(title, config)
     local gradient = Instance.new("UIGradient")
     gradient.Rotation = 145
     gradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(22, 22, 27)),
-        ColorSequenceKeypoint.new(0.52, Color3.fromRGB(12, 12, 16)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(7, 7, 9)),
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(62, 54, 98)),
+        ColorSequenceKeypoint.new(0.18, Color3.fromRGB(28, 39, 72)),
+        ColorSequenceKeypoint.new(0.50, Color3.fromRGB(10, 13, 19)),
+        ColorSequenceKeypoint.new(0.82, Color3.fromRGB(23, 14, 37)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(5, 6, 9)),
     })
     gradient.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 0.05),
-        NumberSequenceKeypoint.new(0.55, 0.02),
-        NumberSequenceKeypoint.new(1, 0.00),
+        NumberSequenceKeypoint.new(0, 0.34),
+        NumberSequenceKeypoint.new(0.18, 0.18),
+        NumberSequenceKeypoint.new(0.50, 0.08),
+        NumberSequenceKeypoint.new(0.82, 0.20),
+        NumberSequenceKeypoint.new(1, 0.32),
     })
     gradient.Parent = root
+
+    local glowA = Instance.new("Frame")
+    glowA.Name = "GlassGlowA"
+    glowA.Size = UDim2.fromOffset(420, 420)
+    glowA.Position = UDim2.fromOffset(-190, -190)
+    glowA.BackgroundColor3 = Color3.fromRGB(69, 101, 210)
+    glowA.BackgroundTransparency = 0.91
+    glowA.BorderSizePixel = 0
+    glowA.ZIndex = 1
+    glowA.Parent = root
+    corner(glowA, 210)
+
+    local glowAGradient = Instance.new("UIGradient")
+    glowAGradient.Rotation = 35
+    glowAGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(115, 90, 230)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(30, 120, 255)),
+    })
+    glowAGradient.Transparency = NumberSequence.new(0.30)
+    glowAGradient.Parent = glowA
+
+    local glowB = Instance.new("Frame")
+    glowB.Name = "GlassGlowB"
+    glowB.Size = UDim2.fromOffset(380, 380)
+    glowB.Position = UDim2.new(1, -170, 1, -170)
+    glowB.BackgroundColor3 = Color3.fromRGB(115, 61, 185)
+    glowB.BackgroundTransparency = 0.93
+    glowB.BorderSizePixel = 0
+    glowB.ZIndex = 1
+    glowB.Parent = root
+    corner(glowB, 190)
+
+    local glowBGradient = Instance.new("UIGradient")
+    glowBGradient.Rotation = 215
+    glowBGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(119, 73, 210)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(53, 91, 220)),
+    })
+    glowBGradient.Transparency = NumberSequence.new(0.34)
+    glowBGradient.Parent = glowB
 
     local titleBar = Instance.new("Frame")
     titleBar.Name = "TitleBar"
@@ -756,8 +833,8 @@ function MacOSKit:AddWindow(title, config)
     local sidebar = Instance.new("Frame")
     sidebar.Name = "Sidebar"
     sidebar.Size = UDim2.new(0, 224, 1, 0)
-    sidebar.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
-    sidebar.BackgroundTransparency = 0.03
+    sidebar.BackgroundColor3 = Color3.fromRGB(7, 8, 11)
+    sidebar.BackgroundTransparency = 0.14
     sidebar.BorderSizePixel = 0
     sidebar.ZIndex = 3
     sidebar.Parent = body
@@ -814,8 +891,8 @@ function MacOSKit:AddWindow(title, config)
     pages.Name = "Pages"
     pages.Position = UDim2.fromOffset(225,0)
     pages.Size = UDim2.new(1,-225,1,0)
-    pages.BackgroundColor3 = Color3.fromRGB(12, 12, 15)
-    pages.BackgroundTransparency = 0.04
+    pages.BackgroundColor3 = Color3.fromRGB(9, 11, 15)
+    pages.BackgroundTransparency = 0.13
     pages.BorderSizePixel = 0
     pages.ZIndex = 3
     pages.Parent = body
@@ -4203,7 +4280,7 @@ infiniteToggle =
 --========================================================--
 
 
-ToolsTab = window:AddTab("Misc")
+ToolsTab = window:AddTab("Tools")
 
 --========================================================--
 -- AUTO EXERCISES
@@ -4987,6 +5064,11 @@ end)
 
 --========================================================--
 
+
+miscTabCompat = window:AddTab("Misc")
+miscTabCompat:AddLabel("").TextSize = 10
+miscTabCompat:AddLabel("Misc").TextSize = 20
+miscTabCompat:AddLabel("General preferences and utility controls.")
 
 infoTab =
     window:AddTab("Info")
