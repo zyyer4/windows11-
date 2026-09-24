@@ -348,8 +348,8 @@ function Tab:AddButton(text, callback)
     local button = Instance.new("TextButton")
     button.Name = "Button"
     button.Size = UDim2.new(1, 0, 0, 36)
-    button.BackgroundColor3 = Color3.fromRGB(255,255,255)
-    button.BackgroundTransparency = 0.93
+    button.BackgroundColor3 = Color3.fromRGB(30, 30, 36)
+    button.BackgroundTransparency = 0.12
     button.BorderSizePixel = 0
     button.AutoButtonColor = false
     button.Text = tostring(text or "Button")
@@ -364,12 +364,12 @@ function Tab:AddButton(text, callback)
     local outline = addStroke(button, Color3.fromRGB(255,255,255), 0.90, 1)
 
     button.MouseEnter:Connect(function()
-        tween(button, 0.12, {BackgroundTransparency = 0.87})
+        tween(button, 0.12, {BackgroundTransparency = 0.02})
         tween(outline, 0.12, {Transparency = 0.76})
     end)
 
     button.MouseLeave:Connect(function()
-        tween(button, 0.12, {BackgroundTransparency = 0.93})
+        tween(button, 0.12, {BackgroundTransparency = 0.12})
         tween(outline, 0.12, {Transparency = 0.90})
     end)
 
@@ -399,8 +399,8 @@ function Tab:AddTextBox(labelText, callback)
     local box = Instance.new("TextBox")
     box.Size = UDim2.new(1, 0, 0, 34)
     box.Position = UDim2.fromOffset(0, 23)
-    box.BackgroundColor3 = Color3.fromRGB(255,255,255)
-    box.BackgroundTransparency = 0.94
+    box.BackgroundColor3 = Color3.fromRGB(24, 24, 29)
+    box.BackgroundTransparency = 0.08
     box.BorderSizePixel = 0
     box.Text = ""
     box.PlaceholderText = "Enter value..."
@@ -631,8 +631,8 @@ function MacOSKit:AddWindow(title, config)
     root.AnchorPoint = Vector2.new(0.5, 0.5)
     root.Position = UDim2.fromScale(0.5, 0.5)
     root.Size = UDim2.fromOffset(width, height)
-    root.BackgroundColor3 = Color3.fromRGB(18,18,22)
-    root.BackgroundTransparency = 0.08
+    root.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
+    root.BackgroundTransparency = 0.02
     root.BorderSizePixel = 0
     root.Visible = true
     root.Active = true
@@ -640,19 +640,19 @@ function MacOSKit:AddWindow(title, config)
     root.ZIndex = 1
     root.Parent = gui
     corner(root, 14)
-    addStroke(root, Color3.fromRGB(255,255,255), 0.84, 1)
+    addStroke(root, Color3.fromRGB(110, 110, 125), 0.55, 1)
 
     local gradient = Instance.new("UIGradient")
     gradient.Rotation = 145
     gradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Themes.Violet.accent),
-        ColorSequenceKeypoint.new(0.52, Themes.Violet.accent2),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(18,18,22)),
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(22, 22, 27)),
+        ColorSequenceKeypoint.new(0.52, Color3.fromRGB(12, 12, 16)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(7, 7, 9)),
     })
     gradient.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 0.78),
-        NumberSequenceKeypoint.new(0.55, 0.90),
-        NumberSequenceKeypoint.new(1, 0.96),
+        NumberSequenceKeypoint.new(0, 0.05),
+        NumberSequenceKeypoint.new(0.55, 0.02),
+        NumberSequenceKeypoint.new(1, 0.00),
     })
     gradient.Parent = root
 
@@ -709,8 +709,8 @@ function MacOSKit:AddWindow(title, config)
     settings.Name = "Settings"
     settings.Size = UDim2.fromOffset(28,28)
     settings.Position = UDim2.new(1,-40,0,9)
-    settings.BackgroundColor3 = Color3.fromRGB(255,255,255)
-    settings.BackgroundTransparency = 0.94
+    settings.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+    settings.BackgroundTransparency = 0.08
     settings.BorderSizePixel = 0
     settings.Text = "•"
     settings.TextColor3 = Color3.fromRGB(175,175,182)
@@ -732,9 +732,9 @@ function MacOSKit:AddWindow(title, config)
 
     local sidebar = Instance.new("Frame")
     sidebar.Name = "Sidebar"
-    sidebar.Size = UDim2.fromOffset(210,1)
-    sidebar.BackgroundColor3 = Color3.fromRGB(9,9,12)
-    sidebar.BackgroundTransparency = 0.24
+    sidebar.Size = UDim2.new(0, 210, 1, 0)
+    sidebar.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
+    sidebar.BackgroundTransparency = 0.03
     sidebar.BorderSizePixel = 0
     sidebar.ZIndex = 3
     sidebar.Parent = body
@@ -743,8 +743,8 @@ function MacOSKit:AddWindow(title, config)
     search.Name = "Search"
     search.Position = UDim2.fromOffset(9,11)
     search.Size = UDim2.new(1,-18,0,31)
-    search.BackgroundColor3 = Color3.fromRGB(255,255,255)
-    search.BackgroundTransparency = 0.94
+    search.BackgroundColor3 = Color3.fromRGB(24, 24, 29)
+    search.BackgroundTransparency = 0.08
     search.BorderSizePixel = 0
     search.Text = ""
     search.PlaceholderText = "Search tabs..."
@@ -791,7 +791,8 @@ function MacOSKit:AddWindow(title, config)
     pages.Name = "Pages"
     pages.Position = UDim2.fromOffset(211,0)
     pages.Size = UDim2.new(1,-211,1,0)
-    pages.BackgroundTransparency = 1
+    pages.BackgroundColor3 = Color3.fromRGB(12, 12, 15)
+    pages.BackgroundTransparency = 0.04
     pages.BorderSizePixel = 0
     pages.ZIndex = 3
     pages.Parent = body
