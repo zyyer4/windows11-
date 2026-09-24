@@ -5168,6 +5168,8 @@ versionLabel.Font =
 -- ANTI AFK
 --========================================================--
 
+do
+
 task.wait(0.5)
 
 pcall(function()
@@ -5393,6 +5395,8 @@ _G.JohnnyAntiAfkConnection =
             end
         end
     )
+
+end
 
 --========================================================--
 -- END
