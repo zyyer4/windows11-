@@ -590,8 +590,7 @@ function MacOSKit:AddWindow(title, config)
     gui.ResetOnSpawn = false
     gui.IgnoreGuiInset = false
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    gui.DisplayOrder = 999
-    gui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
+    gui.DisplayOrder = 9999
 
     -- Remove stale copies left behind by a previous execution.
     local parent = getGuiParent()
