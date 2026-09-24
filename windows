@@ -331,6 +331,20 @@ function Tab:_refresh()
         and Color3.fromRGB(248,248,250)
         or Color3.fromRGB(155,155,163)
 
+    local navTitle = self.Nav:FindFirstChild("Title")
+    local icon = self.Nav:FindFirstChild("Icon")
+
+    if navTitle then
+        navTitle.TextColor3 = selected
+            and Color3.fromRGB(248,248,250)
+            or Color3.fromRGB(155,155,163)
+    end
+
+    if icon then
+        icon.BackgroundColor3 = theme.accent
+        icon.BackgroundTransparency = selected and 0.02 or 0.18
+    end
+
     self.Page.Visible = selected
 end
 
@@ -546,19 +560,19 @@ function Window:AddTab(name)
     local tab = setmetatable({Window = self, Name = tabName}, Tab)
 
     local icons = {
-        Farming = "🌿",
-        Rebirth = "🔄",
-        Pets = "🐾",
-        Player = "👤",
-        Killing = "🎯",
-        Stats = "📊",
-        Admin = "🛡️",
-        Perf = "⚡",
-        Theme = "🎨",
-        Themes = "🎨",
-        Misc = "⚙️",
-        Tools = "🧰",
-        Info = "ℹ️",
+        Farming = "✦",
+        Rebirth = "↻",
+        Pets = "✿",
+        Player = "●",
+        Killing = "◎",
+        Stats = "▥",
+        Admin = "◇",
+        Perf = "ϟ",
+        Themes = "✺",
+        Theme = "✺",
+        Misc = "⚙",
+        Tools = "▦",
+        Info = "ⓘ",
     }
 
     local tabOrder = {
@@ -570,8 +584,8 @@ function Window:AddTab(name)
         Stats = 6,
         Admin = 7,
         Perf = 8,
-        Theme = 9,
         Themes = 9,
+        Theme = 9,
         Misc = 10,
         Tools = 11,
         Info = 12,
@@ -579,20 +593,50 @@ function Window:AddTab(name)
 
     local nav = Instance.new("TextButton")
     nav.Name = tabName
-    nav.Size = UDim2.new(1, 0, 0, 35)
+    nav.Size = UDim2.new(1, 0, 0, 36)
     nav.LayoutOrder = tabOrder[tabName] or 100
     nav.BackgroundColor3 = self.Theme.accent
     nav.BackgroundTransparency = 1
     nav.BorderSizePixel = 0
-    nav.Text = (icons[tabName] or "•") .. "  " .. tabName
+    nav.Text = ""
     nav.TextColor3 = Color3.fromRGB(155,155,163)
-    nav.TextSize = 12
-    nav.Font = Enum.Font.GothamMedium
-    nav.TextXAlignment = Enum.TextXAlignment.Left
     nav.AutoButtonColor = false
     nav.Parent = self.Sidebar
-    corner(nav, 7)
-    addPadding(nav, 10, 8)
+    corner(nav, 8)
+
+    local icon = Instance.new("TextLabel")
+    icon.Name = "Icon"
+    icon.Size = UDim2.fromOffset(24, 24)
+    icon.Position = UDim2.fromOffset(7, 6)
+    icon.BackgroundColor3 = self.Theme.accent
+    icon.BackgroundTransparency = 0.08
+    icon.BorderSizePixel = 0
+    icon.Text = icons[tabName] or "•"
+    icon.TextColor3 = Color3.fromRGB(255,255,255)
+    icon.TextSize = 14
+    icon.Font = Enum.Font.GothamBold
+    icon.TextXAlignment = Enum.TextXAlignment.Center
+    icon.TextYAlignment = Enum.TextYAlignment.Center
+    icon.ZIndex = 5
+    icon.Parent = nav
+    corner(icon, 6)
+    addStroke(icon, Color3.fromRGB(255,255,255), 0.78, 1)
+
+    local navTitle = Instance.new("TextLabel")
+    navTitle.Name = "Title"
+    navTitle.Size = UDim2.new(1, -44, 1, 0)
+    navTitle.Position = UDim2.fromOffset(39, 0)
+    navTitle.BackgroundTransparency = 1
+    navTitle.Text = tabName
+    navTitle.TextColor3 = Color3.fromRGB(155,155,163)
+    navTitle.TextSize = 12
+    navTitle.Font = Enum.Font.GothamMedium
+    navTitle.TextXAlignment = Enum.TextXAlignment.Left
+    navTitle.TextYAlignment = Enum.TextYAlignment.Center
+    navTitle.ZIndex = 5
+    navTitle.Parent = nav
+
+    addPadding(nav, 0, 6)
 
     local page = Instance.new("ScrollingFrame")
     page.Name = tabName .. "Page"
@@ -687,8 +731,8 @@ function MacOSKit:AddWindow(title, config)
     root.AnchorPoint = Vector2.new(0.5, 0.5)
     root.Position = UDim2.fromScale(0.5, 0.5)
     root.Size = UDim2.fromOffset(width, height)
-    root.BackgroundColor3 = Color3.fromRGB(8, 9, 12)
-    root.BackgroundTransparency = 0.14
+    root.BackgroundColor3 = Color3.fromRGB(3, 4, 7)
+    root.BackgroundTransparency = 0.06
     root.BorderSizePixel = 0
     root.Visible = true
     root.Active = true
@@ -833,11 +877,25 @@ function MacOSKit:AddWindow(title, config)
     local sidebar = Instance.new("Frame")
     sidebar.Name = "Sidebar"
     sidebar.Size = UDim2.new(0, 224, 1, 0)
-    sidebar.BackgroundColor3 = Color3.fromRGB(7, 8, 11)
-    sidebar.BackgroundTransparency = 0.14
+    sidebar.BackgroundColor3 = Color3.fromRGB(5, 7, 10)
+    sidebar.BackgroundTransparency = 0.24
     sidebar.BorderSizePixel = 0
     sidebar.ZIndex = 3
     sidebar.Parent = body
+
+    local sidebarGradient = Instance.new("UIGradient")
+    sidebarGradient.Rotation = 90
+    sidebarGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(24, 28, 42)),
+        ColorSequenceKeypoint.new(0.32, Color3.fromRGB(10, 13, 19)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(5, 6, 9)),
+    })
+    sidebarGradient.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.26),
+        NumberSequenceKeypoint.new(0.45, 0.08),
+        NumberSequenceKeypoint.new(1, 0.20),
+    })
+    sidebarGradient.Parent = sidebar
 
     local search = Instance.new("TextBox")
     search.Name = "Search"
@@ -891,11 +949,29 @@ function MacOSKit:AddWindow(title, config)
     pages.Name = "Pages"
     pages.Position = UDim2.fromOffset(225,0)
     pages.Size = UDim2.new(1,-225,1,0)
-    pages.BackgroundColor3 = Color3.fromRGB(9, 11, 15)
-    pages.BackgroundTransparency = 0.13
+    pages.BackgroundColor3 = Color3.fromRGB(7, 9, 13)
+    pages.BackgroundTransparency = 0.22
     pages.BorderSizePixel = 0
     pages.ZIndex = 3
     pages.Parent = body
+
+    local pagesGradient = Instance.new("UIGradient")
+    pagesGradient.Rotation = 155
+    pagesGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(29, 37, 62)),
+        ColorSequenceKeypoint.new(0.22, Color3.fromRGB(15, 19, 29)),
+        ColorSequenceKeypoint.new(0.58, Color3.fromRGB(8, 10, 14)),
+        ColorSequenceKeypoint.new(0.84, Color3.fromRGB(28, 16, 39)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(6, 7, 10)),
+    })
+    pagesGradient.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.18),
+        NumberSequenceKeypoint.new(0.28, 0.05),
+        NumberSequenceKeypoint.new(0.62, 0.04),
+        NumberSequenceKeypoint.new(0.86, 0.14),
+        NumberSequenceKeypoint.new(1, 0.20),
+    })
+    pagesGradient.Parent = pages
     addPadding(pages, 24, 28, 24, 32)
 
     local self = setmetatable({
@@ -1250,7 +1326,7 @@ local MainTab = window:AddTab("Player")
 local PetsTab = window:AddTab("Pets")
 local KillingTab = window:AddTab("Killing")
 local StatsTab = window:AddTab("Stats")
-local ThemeTab = window:AddTab("Theme")
+local ThemeTab = window:AddTab("Themes")
 local PerfTab = window:AddTab("Perf")
 
 
