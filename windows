@@ -38,8 +38,7 @@ local library = loadstring(
 local window = library:AddWindow("Johnny | Farming", {
     min_size = Vector2.new(1080, 760),
     theme = "Midnight",
-    can_resize = true,
-    theme = "Violet"
+    can_resize = true
 })
 
 --========================================================--
