@@ -2202,15 +2202,6 @@ end
 
 return GlassUI
 
-end)()
-
-
-
---========================================================--
--- JOHNNY FEATURE RUNTIME SERVICES
--- These are intentionally declared outside the GlassUI library
--- so the original feature body can run after the UI is created.
---========================================================--
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -2222,220 +2213,135 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 local Stats = game:GetService("Stats")
 local Player = Players.LocalPlayer
 
---========================================================--
--- GLASSUI FEATURE ADAPTER
--- Turns the headless feature API into real GlassUI controls.
---========================================================--
-
 local Window = GlassUI.new({
     title = "Johnny | Farming",
-    subtitle = "GlassUI Standalone",
-    size = UDim2.fromOffset(860, 600),
+    subtitle = "GlassUI",
+    size = UDim2.fromOffset(720, 500),
     configName = "Johnny_Farming_GlassUI",
     autoLoad = true,
 })
 
-local FeatureWindow = {
-    _tabs = {},
-}
-
-local featureColors = {
-    ["Main"] = "blue",
-    ["Fast Farm"] = "green",
-    ["Fast Rebirth"] = "purple",
-    ["Rebirth"] = "amber",
-    ["Tools"] = "blue",
-    ["Info"] = "gray",
-    ["Admin"] = "red",
-}
-
-local featureIcons = {
-    ["Main"] = "⌂",
-    ["Fast Farm"] = "⚡",
-    ["Fast Rebirth"] = "↻",
-    ["Rebirth"] = "♻",
-    ["Tools"] = "⚒",
-    ["Info"] = "ℹ",
-    ["Admin"] = "🔒",
-}
+local FeatureWindow = { _tabs = {} }
+local tabColors = {Main="blue", ["Fast Farm"]="green", ["Fast Rebirth"]="purple", Rebirth="amber", Tools="blue", Info="gray", Admin="red"}
+local tabIcons = {Main="⌂", ["Fast Farm"]="⚡", ["Fast Rebirth"]="↻", Rebirth="♻", Tools="⚒", Info="ℹ", Admin="🔒"}
 
 local function nextOrder(page)
     page._featureOrder = (page._featureOrder or 0) + 1
     return page._featureOrder
 end
 
-local function addFeatureLabel(page, value)
-    local label = Instance.new("TextLabel")
-    label.Name = "FeatureLabel"
-    label.Text = tostring(value or "")
-    label.Font = Enum.Font.GothamMedium
-    label.TextSize = 14
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.TextWrapped = true
-    label.Size = UDim2.new(1, 0, 0, 28)
-    label.BackgroundTransparency = 1
-    label.LayoutOrder = nextOrder(page)
-    label.Parent = page.content
-    page.window:_bind(label, "TextColor3", "textDim")
-    return label
+local function bindText(page, obj)
+    page.window:_bind(obj, "TextColor3", "textDim")
 end
 
-local function addFeatureButton(page, name, callback)
-    local row = Instance.new("Frame")
-    row.Name = "FeatureButtonRow"
-    row.Size = UDim2.new(1, 0, 0, 38)
+local function addLabel(page, text)
+    local row = Instance.new("TextLabel")
+    row.Name = "Label"
     row.BackgroundTransparency = 1
+    row.Size = UDim2.new(1, 0, 0, 28)
     row.LayoutOrder = nextOrder(page)
+    row.Text = tostring(text or "")
+    row.TextSize = 13
+    row.Font = Enum.Font.Gotham
+    row.TextXAlignment = Enum.TextXAlignment.Left
+    row.TextWrapped = true
     row.Parent = page.content
+    bindText(page, row)
+    return row
+end
 
+local function addButton(page, name, callback)
     local button = Instance.new("TextButton")
     button.Name = "Button"
-    button.Size = UDim2.new(1, 0, 1, 0)
-    button.BackgroundTransparency = 0.86
+    button.Size = UDim2.new(1, 0, 0, 36)
+    button.LayoutOrder = nextOrder(page)
+    button.BackgroundTransparency = 0.84
     button.BorderSizePixel = 0
     button.AutoButtonColor = false
     button.Text = tostring(name or "Button")
     button.TextSize = 12
     button.Font = Enum.Font.GothamMedium
     button.TextXAlignment = Enum.TextXAlignment.Left
-    button.Parent = row
-
-    local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, 8)
-    c.Parent = button
-
+    button.Parent = page.content
+    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 8)
     page.window:_bind(button, "BackgroundColor3", "surface")
     page.window:_bind(button, "TextColor3", "text")
-
-    button.MouseEnter:Connect(function()
-        button.BackgroundTransparency = 0.76
-    end)
-    button.MouseLeave:Connect(function()
-        button.BackgroundTransparency = 0.86
-    end)
-    button.MouseButton1Click:Connect(function()
-        if callback then
-            task.spawn(callback)
-        end
-    end)
-
-    local padding = Instance.new("UIPadding")
-    padding.PaddingLeft = UDim.new(0, 12)
-    padding.Parent = button
-
+    local pad = Instance.new("UIPadding", button)
+    pad.PaddingLeft = UDim.new(0, 12)
+    button.MouseEnter:Connect(function() button.BackgroundTransparency = 0.76 end)
+    button.MouseLeave:Connect(function() button.BackgroundTransparency = 0.84 end)
+    button.MouseButton1Click:Connect(function() if callback then task.spawn(callback) end end)
     return button
 end
 
-local function addFeatureSwitch(page, name, callback)
+local function addSwitch(page, name, callback)
     local row = Instance.new("Frame")
-    row.Name = "FeatureSwitchRow"
-    row.Size = UDim2.new(1, 0, 0, 38)
+    row.Name = "SwitchRow"
+    row.Size = UDim2.new(1, 0, 0, 34)
     row.BackgroundTransparency = 1
     row.LayoutOrder = nextOrder(page)
     row.Parent = page.content
-
     local label = Instance.new("TextLabel")
     label.BackgroundTransparency = 1
-    label.Size = UDim2.new(1, -60, 1, 0)
+    label.Size = UDim2.new(1, -52, 1, 0)
     label.Text = tostring(name or "Switch")
     label.TextSize = 12
     label.Font = Enum.Font.Gotham
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Parent = row
     page.window:_bind(label, "TextColor3", "textDim")
-
     local track = Instance.new("TextButton")
-    track.Name = "Switch"
-    track.Size = UDim2.fromOffset(40, 22)
-    track.Position = UDim2.new(1, -40, 0.5, -11)
+    track.Size = UDim2.fromOffset(38, 22)
+    track.Position = UDim2.new(1, -38, 0.5, -11)
     track.Text = ""
     track.AutoButtonColor = false
     track.BorderSizePixel = 0
     track.Parent = row
-
-    local trackCorner = Instance.new("UICorner")
-    trackCorner.CornerRadius = UDim.new(0, 11)
-    trackCorner.Parent = track
-
+    Instance.new("UICorner", track).CornerRadius = UDim.new(0, 11)
     local knob = Instance.new("Frame")
     knob.Size = UDim2.fromOffset(18, 18)
     knob.BorderSizePixel = 0
     knob.Parent = track
-
-    local knobCorner = Instance.new("UICorner")
-    knobCorner.CornerRadius = UDim.new(0, 9)
-    knobCorner.Parent = knob
-
-    local state = {
-        Name = name,
-        Type = "Switch",
-        Enabled = false,
-        _on = false,
-    }
-
+    Instance.new("UICorner", knob).CornerRadius = UDim.new(0, 9)
+    local state = {Name=name, Type="Switch", Enabled=false, _on=false}
     local function paint()
-        local theme = page.window.theme
-        track.BackgroundColor3 = state._on and theme.accent or theme.surface
+        local t = page.window.theme
+        track.BackgroundColor3 = state._on and t.accent or t.surface
         track.BackgroundTransparency = state._on and 0.08 or 0.82
-        knob.BackgroundColor3 = state._on and theme.accentOn or theme.text
-        knob.Position = state._on
-            and UDim2.new(1, -20, 0.5, -9)
-            or UDim2.new(0, 2, 0.5, -9)
+        knob.BackgroundColor3 = state._on and t.accentOn or t.text
+        knob.Position = state._on and UDim2.new(1,-20,0.5,-9) or UDim2.new(0,2,0.5,-9)
     end
-
-    page.window:_themed(function()
-        paint()
-    end)
-
+    page.window:_themed(paint)
     function state:Set(value, fire)
         local wanted = value == true
-        if state._on == wanted then
-            state.Enabled = wanted
-            if fire and callback then
-                callback(wanted)
-            end
-            return
-        end
-
-        state._on = wanted
-        state.Enabled = wanted
+        state._on, state.Enabled = wanted, wanted
         paint()
-
-        if fire ~= false and callback then
-            callback(wanted)
-        end
+        if fire ~= false and callback then callback(wanted) end
     end
-
-    track.MouseButton1Click:Connect(function()
-        state:Set(not state._on, true)
-    end)
-
+    track.MouseButton1Click:Connect(function() state:Set(not state._on, true) end)
     return state
 end
 
-local function addFeatureTextBox(page, name, callback, options)
+local function addTextBox(page, name, callback, options)
     local row = Instance.new("Frame")
-    row.Name = "FeatureTextBoxRow"
-    row.Size = UDim2.new(1, 0, 0, 48)
+    row.Name = "TextBoxRow"
+    row.Size = UDim2.new(1,0,0,42)
     row.BackgroundTransparency = 1
     row.LayoutOrder = nextOrder(page)
     row.Parent = page.content
-
     local label = Instance.new("TextLabel")
     label.BackgroundTransparency = 1
-    label.Size = UDim2.new(0.48, 0, 1, 0)
+    label.Size = UDim2.new(0.48,0,1,0)
     label.Text = tostring(name or "Value")
     label.TextSize = 12
     label.Font = Enum.Font.Gotham
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Parent = row
-    page.window:_bind(label, "TextColor3", "textDim")
-
+    page.window:_bind(label,"TextColor3","textDim")
     local box = Instance.new("TextBox")
-    box.Name = "Input"
-    box.Size = UDim2.new(0.52, -4, 0, 34)
-    box.Position = UDim2.new(0.48, 4, 0.5, -17)
-    box.BackgroundTransparency = 0.86
+    box.Size = UDim2.new(0.52,-4,0,32)
+    box.Position = UDim2.new(0.48,4,0.5,-16)
+    box.BackgroundTransparency = 0.84
     box.BorderSizePixel = 0
     box.ClearTextOnFocus = false
     box.Text = ""
@@ -2444,122 +2350,41 @@ local function addFeatureTextBox(page, name, callback, options)
     box.Font = Enum.Font.Gotham
     box.TextXAlignment = Enum.TextXAlignment.Left
     box.Parent = row
-
-    local bc = Instance.new("UICorner")
-    bc.CornerRadius = UDim.new(0, 8)
-    bc.Parent = box
-
-    local bp = Instance.new("UIPadding")
-    bp.PaddingLeft = UDim.new(0, 10)
-    bp.PaddingRight = UDim.new(0, 10)
-    bp.Parent = box
-
-    page.window:_bind(box, "BackgroundColor3", "surface")
-    page.window:_bind(box, "TextColor3", "text")
-    page.window:_bind(box, "PlaceholderColor3", "textFaint")
-
-    local feature = {
-        Name = name,
-        Type = "TextBox",
-        Value = box.Text,
-        Input = box,
-    }
-
-    function feature:Set(value)
-        feature.Value = tostring(value)
-        box.Text = feature.Value
-        if callback then
-            callback(feature.Value)
-        end
+    Instance.new("UICorner",box).CornerRadius=UDim.new(0,8)
+    page.window:_bind(box,"BackgroundColor3","surface")
+    page.window:_bind(box,"TextColor3","text")
+    page.window:_bind(box,"PlaceholderColor3","textFaint")
+    local pad=Instance.new("UIPadding",box); pad.PaddingLeft=UDim.new(0,10); pad.PaddingRight=UDim.new(0,10)
+    local state={Name=name,Type="TextBox",Value="",Input=box}
+    function state:Set(value)
+        state.Value=tostring(value); box.Text=state.Value
+        if callback then callback(state.Value) end
     end
-
-    box.FocusLost:Connect(function()
-        feature.Value = box.Text
-        if callback then
-            callback(box.Text)
-        end
-    end)
-
-    return feature
+    box.FocusLost:Connect(function() state.Value=box.Text; if callback then callback(box.Text) end end)
+    return state
 end
 
 function FeatureWindow:AddTab(rawName)
     local name = tostring(rawName or "Tab"):gsub("^%s+", ""):gsub("%s+$", "")
     local id = "feature_" .. tostring(#self._tabs + 1) .. "_" .. name:gsub("%W", "_")
-
-    local _, page = Window:AddNavItem({
-        id = id,
-        label = name,
-        color = featureColors[name] or "blue",
-        icon = featureIcons[name] or "•",
-        active = (#self._tabs == 0),
-    })
-
-    local tab = {
-        Name = name,
-        Page = page,
-        Features = {},
-    }
-
-    function tab:AddLabel(text)
-        local label = addFeatureLabel(page, text)
-        return label
-    end
-
-    function tab:AddButton(name2, callback)
-        local button = addFeatureButton(page, name2, callback)
-        local feature = {
-            Name = name2,
-            Type = "Button",
-            Button = button,
-            Callback = callback,
-        }
-        function feature:Run(...)
-            if self.Callback then
-                return self.Callback(...)
-            end
-        end
-        tab.Features[name2] = feature
-        Johnny.Features[name2] = feature
-        return feature
-    end
-
-    function tab:AddSwitch(name2, callback)
-        local state = addFeatureSwitch(page, name2, callback)
-        tab.Features[name2] = state
-        Johnny.Features[name2] = state
-        return state
-    end
-
-    function tab:AddTextBox(name2, callback, options)
-        local feature = addFeatureTextBox(page, name2, callback, options)
-        tab.Features[name2] = feature
-        Johnny.Features[name2] = feature
-        return feature
-    end
-
-    function tab:Show()
-        Window:SelectNav(id)
-        return self
-    end
-
-    self._tabs[name] = tab
+    local _, page = Window:AddNavItem({id=id,label=name,color=tabColors[name] or "blue",icon=tabIcons[name] or "•",active=(#self._tabs==0)})
+    local tab={Name=name,Page=page,Features={}}
+    function tab:AddLabel(text) local x=addLabel(page,text); return x end
+    function tab:AddButton(n,cb) local x=addButton(page,n,cb); local f={Name=n,Type="Button",Button=x,Callback=cb}; function f:Run(...) if self.Callback then return self.Callback(...) end end; tab.Features[n]=f; Johnny.Features[n]=f; return f end
+    function tab:AddSwitch(n,cb) local f=addSwitch(page,n,cb); tab.Features[n]=f; Johnny.Features[n]=f; return f end
+    function tab:AddTextBox(n,cb,opt) local f=addTextBox(page,n,cb,opt); tab.Features[n]=f; Johnny.Features[n]=f; return f end
+    function tab:Show() Window:SelectNav(id); return self end
+    self._tabs[#self._tabs+1]=tab
+    self._tabs[name]=tab
     return tab
 end
 
-local Johnny = {
-    Tabs = FeatureWindow._tabs,
-    Features = {},
-}
-_G.JohnnyFeatures = Johnny
-
-local window = FeatureWindow
-
--- The actual GlassUI window is exposed for scripts that want its public API.
-_G.JohnnyGlassWindow = Window
+local Johnny={Tabs=FeatureWindow._tabs,Features={}}
+_G.JohnnyFeatures=Johnny
+local window=FeatureWindow
+_G.JohnnyGlassWindow=Window
 
 
---========================================================--
 -- COMMON REFERENCES
 --========================================================--
 
@@ -3688,7 +3513,6 @@ local farmingShakeSwitch =
 
 farmingShakeSwitch:Set(false)
 
--- Fortune Wheel automation omitted from this standalone build.
 
 --========================================================--
 -- AUTO TELEPORT MUSCLE KING
@@ -5105,7 +4929,6 @@ local autoShakeSwitch =
 
 autoShakeSwitch:Set(false)
 
--- Fortune Wheel automation intentionally omitted from the standalone build.
 
 --========================================================--
 -- REBIRTH TAB
@@ -6118,5 +5941,4 @@ do
         renderExecutions()
     end
 end
-
 
