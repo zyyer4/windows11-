@@ -98,26 +98,36 @@ end
 
 -- Executors differ in what GUI parents they allow. Never force CoreGui.
 local function getGuiParent()
-    local gethuiFn = rawget(getfenv and getfenv() or _G, "gethui")
-    if typeof(gethuiFn) == "function" then
+    -- Prefer executor gethui when available, but never require it.
+    local gethuiFn
+    pcall(function()
+        gethuiFn = gethui
+    end)
+
+    if type(gethuiFn) == "function" then
         local ok, hui = pcall(gethuiFn)
         if ok and hui then
             return hui
         end
     end
 
-    local playerGui = LocalPlayer and LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    -- Standard Roblox fallback.
+    local player = Players.LocalPlayer
+    if not player then
+        return nil
+    end
+
+    local playerGui = player:FindFirstChildOfClass("PlayerGui")
     if playerGui then
         return playerGui
     end
 
-    if LocalPlayer then
-        local ok, result = pcall(function()
-            return LocalPlayer:WaitForChild("PlayerGui", 15)
-        end)
-        if ok and result then
-            return result
-        end
+    local ok, result = pcall(function()
+        return player:WaitForChild("PlayerGui", 15)
+    end)
+
+    if ok and result then
+        return result
     end
 
     return nil
@@ -911,12 +921,89 @@ local Player = Players.LocalPlayer
 -- with the supplied macOS-style glass design.
 -- MacOSKit is embedded above; no external UI dependency is required.
 
-local window = library:AddWindow("Johnny | Farming", {
-    min_size = Vector2.new(1080, 760),
-    theme = "Midnight",
-    can_resize = true,
-    theme = "Violet"
-})
+local function showStartupError(err)
+    pcall(function()
+        local player = Players.LocalPlayer
+        if not player then return end
+
+        local playerGui = player:FindFirstChildOfClass("PlayerGui")
+            or player:WaitForChild("PlayerGui", 10)
+        if not playerGui then return end
+
+        local old = playerGui:FindFirstChild("JohnnyStartupError")
+        if old then
+            old:Destroy()
+        end
+
+        local debugGui = Instance.new("ScreenGui")
+        debugGui.Name = "JohnnyStartupError"
+        debugGui.ResetOnSpawn = false
+        debugGui.IgnoreGuiInset = true
+        debugGui.DisplayOrder = 2147483647
+        debugGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        debugGui.Parent = playerGui
+
+        local frame = Instance.new("Frame")
+        frame.AnchorPoint = Vector2.new(0.5, 0.5)
+        frame.Position = UDim2.fromScale(0.5, 0.5)
+        frame.Size = UDim2.fromOffset(760, 360)
+        frame.BackgroundColor3 = Color3.fromRGB(12, 12, 15)
+        frame.BorderSizePixel = 0
+        frame.Parent = debugGui
+
+        local stroke = Instance.new("UIStroke")
+        stroke.Color = Color3.fromRGB(255, 85, 85)
+        stroke.Thickness = 2
+        stroke.Parent = frame
+
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 12)
+        corner.Parent = frame
+
+        local title = Instance.new("TextLabel")
+        title.BackgroundTransparency = 1
+        title.Position = UDim2.fromOffset(20, 16)
+        title.Size = UDim2.new(1, -40, 0, 30)
+        title.Font = Enum.Font.GothamBold
+        title.Text = "JOHNNY UI FAILED TO LOAD"
+        title.TextColor3 = Color3.fromRGB(255, 100, 100)
+        title.TextSize = 20
+        title.TextXAlignment = Enum.TextXAlignment.Left
+        title.Parent = frame
+
+        local message = Instance.new("TextLabel")
+        message.BackgroundTransparency = 1
+        message.Position = UDim2.fromOffset(20, 58)
+        message.Size = UDim2.new(1, -40, 1, -78)
+        message.Font = Enum.Font.Code
+        message.Text = tostring(err)
+        message.TextColor3 = Color3.fromRGB(235, 235, 240)
+        message.TextSize = 13
+        message.TextWrapped = true
+        message.TextXAlignment = Enum.TextXAlignment.Left
+        message.TextYAlignment = Enum.TextYAlignment.Top
+        message.Parent = frame
+    end)
+end
+
+local okWindow, windowResult = xpcall(function()
+    return library:AddWindow("Johnny | Farming", {
+        min_size = Vector2.new(1080, 760),
+        theme = "Violet",
+        can_resize = true
+    })
+end, debug.traceback)
+
+if not okWindow then
+    showStartupError(windowResult)
+    return
+end
+
+local window = windowResult
+if not window then
+    showStartupError("MacOSKit:AddWindow returned nil")
+    return
+end
 
 --========================================================--
 -- COMMON REFERENCES
