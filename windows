@@ -1,24 +1,4 @@
---========================================================--
--- JOHNNY | FARMING
--- Cleaned / Organized Version
---========================================================--
-
---========================================================--
--- SERVICES
---========================================================--
-
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Lighting = game:GetService("Lighting")
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-local TeleportService = game:GetService("TeleportService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
-local Stats = game:GetService("Stats")
-
-local Player = Players.LocalPlayer
-
-
+local GlassUI = (function()
 --[[
 	GlassUI
 	A small "black glass" macOS-style UI library for Roblox.
@@ -732,249 +712,212 @@ function Panel:AddToggleRow(opts)
 	return row, state
 end
 
+return GlassUI
 
+end)()
+--========================================================--
+-- JOHNNY | FARMING
+-- Cleaned / Organized Version
+--========================================================--
 
 --========================================================--
--- JOHNNY GLASS UI ADAPTER
--- Uses the uploaded GlassUI implementation as the actual UI base.
+-- SERVICES
 --========================================================--
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Lighting = game:GetService("Lighting")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TeleportService = game:GetService("TeleportService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local Stats = game:GetService("Stats")
+
+local Player = Players.LocalPlayer
+
+--========================================================--
+-- LIBRARY
+--========================================================--
+
+--========================================================--
+-- GLASSUI COMPATIBILITY LAYER
+-- The original Johnny feature code stays intact; this adapter
+-- maps its tab/control API onto the uploaded GlassUI design.
+--========================================================--
+local GlassTab = {}
+GlassTab.__index = GlassTab
+
+local TAB_META = {
+    ["Main"]       = {label="Player",  color="blue"},
+    ["Fast Farm"]  = {label="Farming", color="green"},
+    ["Fast Rebirth"]={label="Rebirth", color="amber"},
+    ["Rebirth"]    = {label="Rebirth", color="amber"},
+    ["Tools"]      = {label="Admin",   color="purple"},
+    ["Info"]       = {label="Stats",   color="green"},
+}
 
 local window = GlassUI.new({
     title = "Johnny | Farming",
     subtitle = "GlassUI",
-    size = UDim2.fromOffset(720, 620)
+    size = UDim2.fromOffset(760, 500),
 })
 
-local GlassTab = {}
-GlassTab.__index = GlassTab
+local originalContent = window.content
+local tabPages = {}
+local tabButtons = {}
+local activeTab
 
-local function setTabVisible(tab, visible)
-    tab.page.Visible = visible
+local function makePage()
+    local page = Instance.new("Frame")
+    page.Name = "TabPage"
+    page.Size = UDim2.new(1, 0, 1, 0)
+    page.BackgroundTransparency = 1
+    page.BorderSizePixel = 0
+    page.Visible = false
+    page.Parent = originalContent
+    local pad = Instance.new("UIPadding")
+    pad.PaddingTop = UDim.new(0,18); pad.PaddingBottom = UDim.new(0,18)
+    pad.PaddingLeft = UDim.new(0,20); pad.PaddingRight = UDim.new(0,20)
+    pad.Parent = page
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0,10)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = page
+    return page
 end
 
-function GlassTab:AddLabel(text)
-    local label = new("TextLabel", {
-        Text = tostring(text or ""),
-        Font = Enum.Font.Gotham,
-        TextSize = 13,
-        TextColor3 = COLOR.textDim,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextYAlignment = Enum.TextYAlignment.Center,
-        Size = UDim2.new(1, 0, 0, 28),
-        BackgroundTransparency = 1,
-        LayoutOrder = self:_nextOrder(),
-    })
-    label.Parent = self.page
-    return label
+local function showTab(id)
+    for name,page in pairs(tabPages) do page.Visible = (name == id) end
+    activeTab = id
 end
 
-function GlassTab:AddButton(text, callback)
-    local button = new("TextButton", {
-        Text = tostring(text or "Button"),
-        Font = Enum.Font.GothamMedium,
-        TextSize = 13,
-        TextColor3 = COLOR.text,
-        AutoButtonColor = false,
-        Size = UDim2.new(1, 0, 0, 36),
-        BackgroundColor3 = Color3.fromRGB(255, 255, 255),
-        BackgroundTransparency = 0.92,
-        BorderSizePixel = 0,
-        LayoutOrder = self:_nextOrder(),
-    }, { corner(8), stroke(0.92, 1) })
-    button.MouseEnter:Connect(function()
-        tween(button, { BackgroundTransparency = 0.84 }, 0.12)
-    end)
-    button.MouseLeave:Connect(function()
-        tween(button, { BackgroundTransparency = 0.92 }, 0.12)
-    end)
-    button.MouseButton1Click:Connect(function()
-        if callback then
-            local ok, err = pcall(callback)
-            if not ok then warn("[Johnny] Button error: " .. tostring(err)) end
-        end
-    end)
-    button.Parent = self.page
-    return button
-end
-
-function GlassTab:AddSwitch(text, callback)
-    local row, state = self:_makeSwitch(text, false, callback)
-    return {
-        Set = function(_, value)
-            value = value == true
-            if state.on == value then
-                return
-            end
-            state.on = value
-            state.apply(value)
-            if callback then
-                local ok, err = pcall(callback, value)
-                if not ok then warn("[Johnny] Switch error: " .. tostring(err)) end
-            end
-        end,
-        Get = function()
-            return state.on
-        end,
-        Row = row,
-    }
-end
-
-function GlassTab:_makeSwitch(text, initial, callback)
-    local row = new("Frame", {
-        Size = UDim2.new(1, 0, 0, 38),
-        BackgroundTransparency = 1,
-        LayoutOrder = self:_nextOrder(),
-    })
-    local label = new("TextLabel", {
-        Text = tostring(text or ""),
-        Font = Enum.Font.Gotham,
-        TextSize = 13,
-        TextColor3 = COLOR.textDim,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Size = UDim2.new(1, -52, 1, 0),
-        BackgroundTransparency = 1,
-    })
-    label.Parent = row
-    local track = new("TextButton", {
-        Text = "",
-        AutoButtonColor = false,
-        Size = UDim2.fromOffset(38, 22),
-        Position = UDim2.new(1, -38, 0.5, -11),
-        BackgroundColor3 = Color3.fromRGB(255,255,255),
-        BackgroundTransparency = 0.85,
-        BorderSizePixel = 0,
-    }, { corner(11) })
-    track.Parent = row
-    local knob = new("Frame", {
-        Size = UDim2.fromOffset(18,18),
-        Position = UDim2.new(0,2,0.5,-9),
-        BackgroundColor3 = Color3.fromRGB(255,255,255),
-        BorderSizePixel = 0,
-    }, { corner(9) })
-    knob.Parent = track
-    row.Parent = self.page
-
-    local state = { on = initial == true }
-    function state.apply(value)
-        tween(knob, { Position = value and UDim2.new(1,-20,0.5,-9) or UDim2.new(0,2,0.5,-9) }, 0.16, Enum.EasingStyle.Back)
-        tween(track, {
-            BackgroundColor3 = value and COLOR.green or Color3.fromRGB(255,255,255),
-            BackgroundTransparency = value and 0 or 0.85,
-        }, 0.12)
-    end
-    state.apply(state.on)
-    track.MouseButton1Click:Connect(function()
-        state.on = not state.on
-        state.apply(state.on)
-        if callback then
-            local ok, err = pcall(callback, state.on)
-            if not ok then warn("[Johnny] Switch error: " .. tostring(err)) end
-        end
-    end)
-    return row, state
-end
-
-function GlassTab:AddTextBox(labelText, callback, opts)
-    opts = opts or {}
-    local row = new("Frame", {
-        Size = UDim2.new(1,0,0,40),
-        BackgroundTransparency = 1,
-        LayoutOrder = self:_nextOrder(),
-    })
-    local label = new("TextLabel", {
-        Text = tostring(labelText or ""),
-        Font = Enum.Font.Gotham,
-        TextSize = 13,
-        TextColor3 = COLOR.textDim,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Size = UDim2.new(0.48,-8,1,0),
-        BackgroundTransparency = 1,
-    })
-    label.Parent = row
-    local box = new("TextBox", {
-        Text = "",
-        PlaceholderText = tostring(opts.placeholder or ""),
-        ClearTextOnFocus = false,
-        Font = Enum.Font.Gotham,
-        TextSize = 13,
-        TextColor3 = COLOR.text,
-        PlaceholderColor3 = COLOR.textFaint,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        Size = UDim2.new(0.52,0,0,30),
-        Position = UDim2.new(0.48,0,0.5,-15),
-        BackgroundColor3 = Color3.fromRGB(255,255,255),
-        BackgroundTransparency = 0.91,
-        BorderSizePixel = 0,
-    }, { corner(7), stroke(0.92,1) })
-    box.Parent = row
-    box.FocusLost:Connect(function()
-        if callback then
-            local ok, err = pcall(callback, box.Text)
-            if not ok then warn("[Johnny] TextBox error: " .. tostring(err)) end
-        end
-    end)
-    row.Parent = self.page
-    return box
-end
-
-function GlassTab:_nextOrder()
-    self.order += 1
-    return self.order
-end
-
-function GlassTab:Show()
-    self.window:SelectTab(self.name)
-end
-
-function GlassTab:_setVisible(visible)
-    setTabVisible(self, visible)
-end
-
-function window:SelectTab(name)
-    for _, tab in pairs(self._johnnyTabs or {}) do
-        setTabVisible(tab, tab.name == name)
-    end
+local function colorFor(name)
+    return (TAB_META[name] and TAB_META[name].color) or "blue"
 end
 
 function window:AddTab(name)
-    self._johnnyTabs = self._johnnyTabs or {}
-    local tab = setmetatable({
-        name = tostring(name or "Tab"),
-        window = self,
-        order = 0,
-    }, GlassTab)
-    tab.page = new("Frame", {
-        Name = "Page_" .. tostring(#self._johnnyTabs + 1),
-        Size = UDim2.new(1,0,0,0),
-        AutomaticSize = Enum.AutomaticSize.Y,
-        BackgroundTransparency = 1,
-        Visible = false,
-    }, {
-        new("UIListLayout", { Padding = UDim.new(0,6), SortOrder = Enum.SortOrder.LayoutOrder }),
+    local id = name
+    if tabPages[id] then return tabPages[id]._tab end
+    local meta = TAB_META[name] or {label=name, color=colorFor(name)}
+    local page = makePage()
+    local tab = setmetatable({window=window, page=page, panels={}, activePanel=nil, name=name}, GlassTab)
+    page._tab = tab
+    tabPages[id] = page
+    local btn = window:AddNavItem({
+        id=id, label=meta.label, color=meta.color,
+        active=(not activeTab),
+        onClick=function() showTab(id) end
     })
-    tab.page.Parent = self.content
-    self._johnnyTabs[name] = tab
-    local count = 0
-    for _ in pairs(self._johnnyTabs) do count += 1 end
-    local nav = self:AddNavItem({
-        label = tostring(name or "Tab"),
-        color = ({"blue","green","purple","amber","gray","red"})[((count-1)%6)+1],
-        active = count == 1,
-        onClick = function() self:SelectTab(name) end,
-    })
-    tab.nav = nav
-    if count == 1 then tab.page.Visible = true end
+    tabButtons[id]=btn
+    if not activeTab then showTab(id) end
     return tab
 end
 
-local _oldDestroy = window.Destroy
-function window:Destroy()
-    if self._johnnyDestroyed then return end
-    self._johnnyDestroyed = true
-    return _oldDestroy(self)
+function GlassTab:_panel(title)
+    if not self.activePanel then
+        local old=window.content
+        window.content=self.page
+        local p=window:AddPanel({title=title or "Controls", open=true})
+        window.content=old
+        self.activePanel=p
+        table.insert(self.panels,p)
+    end
+    return self.activePanel
 end
 
-window._johnnyTabs = {}
+function GlassTab:AddLabel(text)
+    local holder=Instance.new("Frame")
+    holder.BackgroundTransparency=1; holder.Size=UDim2.new(1,0,0,30)
+    holder.Parent=self.page
+    local l=Instance.new("TextLabel")
+    l.BackgroundTransparency=1; l.Size=UDim2.new(1,0,1,0)
+    l.Text=text or ""; l.TextColor3=Color3.fromRGB(242,242,244)
+    l.Font=Enum.Font.GothamBold; l.TextXAlignment=Enum.TextXAlignment.Left
+    l.TextSize=13; l.Parent=holder
+    return l
+end
+
+function GlassTab:AddSwitch(label, cb)
+    local p=self:_panel("Controls")
+    local row,state=p:AddToggleRow({label=label,on=false,onChange=cb})
+    local obj={_state=state}
+    function obj:Set(v)
+        if state.on==v then return end
+        -- ToggleRow owns the visual callback; emulate a click by invoking callback
+        state.on=v
+        if cb then cb(v) end
+        -- update visuals by clicking the actual switch is unavailable here;
+        -- use direct visual discovery.
+        local track=row:FindFirstChildWhichIsA("TextButton",true)
+        if track then
+            local knob=track:FindFirstChildWhichIsA("Frame",true)
+            track.BackgroundTransparency=v and 0 or .85
+            track.BackgroundColor3=v and Color3.fromRGB(51,209,122) or Color3.fromRGB(255,255,255)
+            if knob then knob.Position=v and UDim2.new(1,-20,.5,-9) or UDim2.new(0,2,.5,-9) end
+        end
+    end
+    return obj
+end
+
+function GlassTab:AddButton(label, cb)
+    local p=self:_panel("Actions")
+    local row=Instance.new("Frame")
+    row.Size=UDim2.new(1,0,0,34); row.BackgroundTransparency=1
+    row.Parent=p.body
+    local b=Instance.new("TextButton")
+    b.Size=UDim2.new(1,0,0,28); b.Position=UDim2.new(0,0,0,2)
+    b.Text=label or "Button"; b.Font=Enum.Font.GothamMedium; b.TextSize=12
+    b.TextColor3=Color3.fromRGB(242,242,244); b.BackgroundColor3=Color3.fromRGB(255,255,255)
+    b.BackgroundTransparency=.88; b.AutoButtonColor=false; b.BorderSizePixel=0
+    local c=Instance.new("UICorner"); c.CornerRadius=UDim.new(0,7); c.Parent=b
+    b.MouseButton1Click:Connect(cb or function() end); b.Parent=row
+    return b
+end
+
+function GlassTab:AddTextBox(label, cb, opts)
+    local p=self:_panel("Settings")
+    local row=Instance.new("Frame"); row.Size=UDim2.new(1,0,0,36); row.BackgroundTransparency=1; row.Parent=p.body
+    local l=Instance.new("TextLabel"); l.Size=UDim2.new(.58,0,1,0); l.BackgroundTransparency=1; l.Text=label or ""; l.TextColor3=Color3.fromRGB(152,152,158); l.Font=Enum.Font.Gotham; l.TextSize=12; l.TextXAlignment=Enum.TextXAlignment.Left; l.Parent=row
+    local box=Instance.new("TextBox"); box.Size=UDim2.new(.38,0,0,26); box.Position=UDim2.new(.62,0,.5,-13); box.BackgroundColor3=Color3.fromRGB(255,255,255); box.BackgroundTransparency=.88; box.TextColor3=Color3.fromRGB(242,242,244); box.PlaceholderColor3=Color3.fromRGB(120,120,126); box.Font=Enum.Font.Gotham; box.TextSize=12; box.Text=opts and opts.placeholder or ""; box.PlaceholderText=opts and opts.placeholder or ""; box.ClearTextOnFocus=false; box.Parent=row
+    local c=Instance.new("UICorner"); c.CornerRadius=UDim.new(0,6); c.Parent=box
+    box.FocusLost:Connect(function() if cb then cb(box.Text) end end)
+    return box
+end
+
+-- Full sidebar from the supplied HTML preview, in its exact order.
+local FarmingTab=window:AddTab("Fast Farm")
+local FastRebTab=window:AddTab("Fast Rebirth")
+local PetsTab=window:AddTab("Pets")
+local MainTab=window:AddTab("Main")
+local KillingTab=window:AddTab("Killing")
+local infoTab=window:AddTab("Info")
+local ToolsTab=window:AddTab("Tools")
+local PerfTab=window:AddTab("Perf")
+local ThemesTab=window:AddTab("Themes")
+local MiscTab=window:AddTab("Misc")
+
+-- Keep the feature source's original tabs mapped onto the preview's tabs.
+-- Source tab variables are already initialized above. Rebirth aliases to Fast Rebirth.
+local RebirthTab = window:AddTab("Rebirth")
+
+-- Preview-style utility panels for tabs that the original feature script
+-- did not populate itself.
+local pp=PerfTab:_panel("Performance")
+pp:AddToggleRow({label="Anti-Lag",on=false,onChange=function(v) _G.JohnnyAntiLag=v end})
+pp:AddToggleRow({label="Low Graphics",on=false,onChange=function(v) _G.JohnnyLowGraphics=v end})
+local mp=MiscTab:_panel("Behavior")
+mp:AddToggleRow({label="Anti-AFK",on=false,onChange=function(v) _G.JohnnyAntiAFK=v end})
+mp:AddRow({label="UI key",value="Right Shift"})
+local tp=ThemesTab:_panel("Theme")
+tp:AddRow({label="Midnight",value="Default"})
+tp:AddRow({label="Ocean",value="GlassUI"})
+tp:AddRow({label="Sunset",value="GlassUI"})
+local ap=PetsTab:_panel("Pet Management")
+ap:AddRow({label="Pet controls",value="See Farming"})
+local kp=KillingTab:_panel("Killing")
+kp:AddRow({label="Combat controls",value="See original"})
+
+showTab("Fast Farm")
 
 
 --========================================================--
@@ -4248,7 +4191,7 @@ for name, target in pairs(
 end
 
 --========================================================--
--- MODE SHORTCUTS
+-- COMPACT MODE UI
 --========================================================--
 
 local compactModeGui = nil
@@ -4262,12 +4205,92 @@ local compactPaceFormats = {
     Mini = { reb = "%sH / %sD / %sW", farm = "S %s/%s/%s" }
 }
 
+local function getJohnnyGuiRoot()
+    local root
+    if type(gethui) == "function" then
+        local ok, result = pcall(gethui)
+        if ok and typeof(result) == "Instance" then
+            root = result
+        end
+    end
+    if not root then
+        local ok, result = pcall(function() return game:GetService("CoreGui") end)
+        if ok and typeof(result) == "Instance" then
+            root = result
+        end
+    end
+    if not root then
+        root = Player:WaitForChild("PlayerGui")
+    end
+    return root
+end
+
+local function findMainJohnnyGui()
+    local roots = { getJohnnyGuiRoot() }
+    pcall(function() table.insert(roots, game:GetService("CoreGui")) end)
+    pcall(function() table.insert(roots, Player:WaitForChild("PlayerGui")) end)
+
+    for _, root in ipairs(roots) do
+        if root and typeof(root) == "Instance" then
+            local found = root:FindFirstChild("imgui", true)
+            if found then
+                return found
+            end
+        end
+    end
+    return nil
+end
+
 local function destroyMainUiForCompactMode()
-    -- GlassUI remains the main UI; never destroy it when opening a mode shortcut.
+    local imgui = findMainJohnnyGui()
+    if imgui then
+        pcall(function() imgui:Destroy() end)
+    end
 end
 
 local function destroyCompactMode()
-    -- No separate compact GUI is created in the GlassUI version.
+    if compactModeGui then
+        pcall(function() compactModeGui:Destroy() end)
+        compactModeGui = nil
+    end
+    local root = getJohnnyGuiRoot()
+    pcall(function()
+        local old = root:FindFirstChild("JohnnyCompactMode")
+        if old then old:Destroy() end
+    end)
+end
+
+local function makeModeButton(parent, text, callback, width)
+    local button = Instance.new("TextButton")
+    button.Name = "ModeButton"
+    button.Size = UDim2.new(0, width or 120, 0, 32)
+    button.BackgroundColor3 = Color3.fromRGB(55, 70, 105)
+    button.BackgroundTransparency = 0.08
+    button.BorderSizePixel = 0
+    button.Text = text
+    button.TextColor3 = Color3.fromRGB(255,255,255)
+    button.TextSize = 13
+    button.Font = Enum.Font.GothamSemibold
+    button.AutoButtonColor = true
+    button.Active = true
+    button.ZIndex = 10
+    button.Parent = parent
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 7)
+    corner.Parent = button
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Thickness = 1
+    stroke.Transparency = 0.35
+    stroke.Color = Color3.fromRGB(210,230,255)
+    stroke.Parent = button
+
+    button.MouseButton1Click:Connect(function()
+        local ok, err = pcall(callback)
+        if not ok then warn("[Johnny Compact] button error: " .. tostring(err)) end
+    end)
+    return button
 end
 
 local function getFarmPaceNumbers()
@@ -4283,17 +4306,222 @@ local function getFarmPaceNumbers()
 end
 
 openCompactMode = function(modeName)
-    -- Mode shortcuts only select the corresponding GlassUI tab.
-    -- They NEVER start automation.
+    -- Mode switching never starts automation.
+    -- Each compact mode always opens with its automation OFF.
     if modeName == "Fast Farm" then
         fastRepRunning = false
     elseif modeName == "Fast Rebirth" then
         isFastRebirthRunning = false
     end
     compactNightMode = false
-    if window and window.SelectTab then
-        window:SelectTab(modeName == "Fast Farm" and "Fast Farm" or "Fast Rebirth")
+
+    -- Build the replacement first, then remove the old Elerium UI.
+    destroyCompactMode()
+
+    local root = getJohnnyGuiRoot()
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "JohnnyCompactMode"
+    gui.ResetOnSpawn = false
+    gui.IgnoreGuiInset = true
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    gui.DisplayOrder = 1000000
+    gui.Enabled = true
+    local parented = pcall(function() gui.Parent = root end)
+    if not parented or not gui.Parent then
+        local playerGui = Player:FindFirstChildOfClass("PlayerGui") or Player:WaitForChild("PlayerGui")
+        gui.Parent = playerGui
     end
+    compactModeGui = gui
+
+    local frame = Instance.new("Frame")
+    frame.Name = "ModePanel"
+    frame.Size = UDim2.fromOffset(390, modeName == "Fast Farm" and 300 or 260)
+    frame.Position = UDim2.fromOffset(25, 100)
+    frame.BackgroundColor3 = Color3.fromRGB(45, 35, 75)
+    frame.BackgroundTransparency = 0.10
+    frame.BorderSizePixel = 0
+    frame.ClipsDescendants = false
+    frame.Active = true
+    frame.Draggable = true
+    frame.ZIndex = 2
+    frame.Parent = gui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 14)
+    corner.Parent = frame
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Thickness = 2
+    stroke.Color = Color3.fromRGB(150,210,255)
+    stroke.Transparency = 0.05
+    stroke.Parent = frame
+
+    local gradient = Instance.new("UIGradient")
+    gradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(155,45,210)),
+        ColorSequenceKeypoint.new(0.35, Color3.fromRGB(55,90,220)),
+        ColorSequenceKeypoint.new(0.7, Color3.fromRGB(20,180,190)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(45,220,125))
+    })
+    gradient.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0,0.05),
+        NumberSequenceKeypoint.new(0.5,0.16),
+        NumberSequenceKeypoint.new(1,0.25)
+    })
+    gradient.Rotation = 25
+    gradient.Parent = frame
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1,-58,0,34)
+    title.Position = UDim2.fromOffset(12,7)
+    title.BackgroundTransparency = 1
+    title.Text = "JOHNNY | " .. string.upper(modeName) .. " MODE"
+    title.TextColor3 = Color3.new(1,1,1)
+    title.TextSize = 17
+    title.Font = Enum.Font.GothamBold
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.ZIndex = 10
+    title.Parent = frame
+
+    local close = Instance.new("TextButton")
+    close.Size = UDim2.fromOffset(32,30)
+    close.Position = UDim2.new(1,-42,0,7)
+    close.BackgroundColor3 = Color3.fromRGB(190,55,80)
+    close.BackgroundTransparency = 0.05
+    close.BorderSizePixel = 0
+    close.Text = "X"
+    close.TextColor3 = Color3.new(1,1,1)
+    close.TextSize = 15
+    close.Font = Enum.Font.GothamBold
+    close.ZIndex = 10
+    close.Parent = frame
+    Instance.new("UICorner", close).CornerRadius = UDim.new(0,7)
+    close.MouseButton1Click:Connect(destroyCompactMode)
+
+    local content = Instance.new("Frame")
+    content.Size = UDim2.new(1,-24,1,-52)
+    content.Position = UDim2.fromOffset(12,48)
+    content.BackgroundTransparency = 1
+    content.ZIndex = 5
+    content.Parent = frame
+
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0,7)
+    layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = content
+
+    local status = Instance.new("TextLabel")
+    status.Size = UDim2.new(1,0,0,26)
+    status.BackgroundTransparency = 1
+    status.TextSize = 13
+    status.Font = Enum.Font.GothamBold
+    status.ZIndex = 10
+    status.Parent = content
+
+    local pace = Instance.new("TextLabel")
+    pace.Size = UDim2.new(1,0,0,34)
+    pace.BackgroundTransparency = 1
+    pace.TextColor3 = Color3.fromRGB(255,245,130)
+    pace.TextSize = 13
+    pace.Font = Enum.Font.GothamSemibold
+    pace.TextWrapped = true
+    pace.ZIndex = 10
+    pace.Parent = content
+
+    local stats = Instance.new("TextLabel")
+    stats.Size = UDim2.new(1,0,0,24)
+    stats.BackgroundTransparency = 1
+    stats.TextColor3 = Color3.fromRGB(235,245,255)
+    stats.TextSize = 12
+    stats.Font = Enum.Font.Gotham
+    stats.ZIndex = 10
+    stats.Parent = content
+
+    local function refreshFarm()
+        local ping = getPing()
+        local running = fastRepRunning
+        status.Text = string.format("Fast Farm: %s | %dms | PA: %s", running and "ON" or "OFF", math.floor(ping+0.5), pingAdjusterEnabled and "ON" or "OFF")
+        status.TextColor3 = running and Color3.fromRGB(100,255,145) or Color3.fromRGB(255,120,130)
+        local h,d,w = getFarmPaceNumbers()
+        pace.Text = string.format(compactPaceFormats[compactModePaceFormat].farm,h,d,w)
+        stats.Text = string.format("Strength: %s | Durability: %s",formatStatNumber(strengthStat.Value),formatStatNumber(durabilityStat.Value))
+    end
+
+    local function refreshReb()
+        local running = isFastRebirthRunning
+        status.Text = running and "Fast Rebirth: ON" or "Fast Rebirth: OFF"
+        status.TextColor3 = running and Color3.fromRGB(100,255,145) or Color3.fromRGB(255,120,130)
+        pace.Text = string.format(compactPaceFormats[compactModePaceFormat].reb,formatRebirthNumber(averageTable(paceHistoryHour)),formatRebirthNumber(averageTable(paceHistoryDay)),formatRebirthNumber(averageTable(paceHistoryWeek)))
+        stats.Text = string.format("Rebirths: %s",formatRebirthNumber(rebirthsStat.Value))
+    end
+
+    local startButton = makeModeButton(content, modeName == "Fast Farm" and "START FAST FARM" or "START FAST REBIRTH", function()
+        if modeName == "Fast Farm" then
+            if not fastRepRunning then
+                fastRepRunning = true
+                task.spawn(fastRepLoop)
+            end
+        else
+            if not isFastRebirthRunning then
+                isFastRebirthRunning = true
+                fastRebirthStartTime = tick()
+                task.spawn(fastRebirthLoop)
+            end
+        end
+    end, 235)
+
+    local nightButton = makeModeButton(content, "Night Mode: OFF", function()
+        compactNightMode = not compactNightMode
+        nightButton.Text = compactNightMode and "Night Mode: ON" or "Night Mode: OFF"
+        if compactNightMode then
+            frame.BackgroundColor3 = Color3.fromRGB(8, 10, 20)
+            frame.BackgroundTransparency = 0.08
+            gradient.Enabled = false
+            stroke.Color = Color3.fromRGB(90, 105, 150)
+        else
+            frame.BackgroundColor3 = Color3.fromRGB(45, 35, 75)
+            frame.BackgroundTransparency = 0.10
+            gradient.Enabled = true
+            stroke.Color = Color3.fromRGB(150,210,255)
+        end
+    end, 235)
+
+    if modeName == "Fast Farm" then
+
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1,0,0,32); row.BackgroundTransparency=1; row.Parent=content
+        local rl=Instance.new("UIListLayout",row); rl.FillDirection=Enum.FillDirection.Horizontal; rl.HorizontalAlignment=Enum.HorizontalAlignment.Center; rl.Padding=UDim.new(0,4)
+        for _,name in ipairs({"Full","Short","Compact","Mini"}) do
+            makeModeButton(row,name,function() compactModePaceFormat=name; refreshFarm() end,75)
+        end
+
+        local pingRow=Instance.new("Frame")
+        pingRow.Size=UDim2.new(1,0,0,32); pingRow.BackgroundTransparency=1; pingRow.Parent=content
+        local pl=Instance.new("UIListLayout",pingRow); pl.FillDirection=Enum.FillDirection.Horizontal; pl.HorizontalAlignment=Enum.HorizontalAlignment.Center; pl.Padding=UDim.new(0,4)
+        for _,x in ipairs({{"250/200",250,200},{"300/250",300,250},{"400/300",400,300},{"OFF",nil,nil}}) do
+            makeModeButton(pingRow,x[1],function()
+                if x[2] then pausePing=x[2]; resumePing=x[3]; pingAdjusterEnabled=true else pingAdjusterEnabled=false; pingPaused=false end
+                refreshFarm()
+            end,82)
+        end
+
+        makeModeButton(content,"Industrial Gym Regular Squat",function() local r=getRootPart(); if r then r.CFrame=CFrame.new(-5218,61,5412); task.wait(.2); pressE() end end,235)
+
+        task.spawn(function() while compactModeGui==gui and gui.Parent do refreshFarm(); task.wait(.5) end end)
+        refreshFarm()
+    else
+        local row=Instance.new("Frame"); row.Size=UDim2.new(1,0,0,32); row.BackgroundTransparency=1; row.Parent=content
+        local rl=Instance.new("UIListLayout",row); rl.FillDirection=Enum.FillDirection.Horizontal; rl.HorizontalAlignment=Enum.HorizontalAlignment.Center; rl.Padding=UDim.new(0,4)
+        for _,name in ipairs({"Full","Short","Compact","Mini"}) do makeModeButton(row,name,function() compactModePaceFormat=name; refreshReb() end,75) end
+        makeModeButton(content,"Industrial Gym Super Squat",function() local r=getRootPart(); if r then r.CFrame=CFrame.new(-5488,61,4641); task.wait(.2); pressE() end end,220)
+        task.spawn(function() while compactModeGui==gui and gui.Parent do refreshReb(); task.wait(.5) end end)
+        refreshReb()
+    end
+
+    -- Hand off completely to the selected mode: remove the full Elerium UI
+    -- immediately. The selected mode remains OFF until its START button is pressed.
+    destroyMainUiForCompactMode()
 end
 
 --========================================================--
@@ -4402,9 +4630,25 @@ infoTab:AddButton(
         end
 
         -- Destroy UI.
-        pcall(function()
-            window:Destroy()
-        end)
+        local guiRoot =
+            (gethui and gethui())
+            or
+            game:GetService(
+                "CoreGui"
+            )
+
+        local imgui =
+            guiRoot:FindFirstChild(
+                "imgui"
+            )
+
+        if imgui then
+
+            pcall(function()
+                imgui:Destroy()
+            end)
+
+        end
 
         if script then
 
