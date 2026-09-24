@@ -2240,7 +2240,7 @@ local function unequipAll()local p=Player:FindFirstChild("petsFolder");if not p 
 local function equip(n)local p=uniquePets();if not p then return end;for _,pet in ipairs(p:GetChildren())do if pet.Name==n then pcall(function()equipPetEvent:FireServer("equipPet",pet)end)end end end
 local function manage(n)unequipAll();task.wait(.05);equip(n)end
 
-local window=GlassUI.new({title="Johnny | Farming",subtitle="GlassUI Standalone • Johnny Feature Pack",size=Vector2.new(760,500),configName="Johnny_GlassUI",autoLoad=true})
+local window=GlassUI.new({title="Johnny | Farming",subtitle="GlassUI Standalone • Johnny Feature Pack",size=UDim2.fromOffset(760,500),configName="Johnny_GlassUI",autoLoad=false})
 local defs={{"farming","Farming","green"},{"rebirth","Rebirth","amber"},{"pets","Pets","purple"},{"player","Player","blue"},{"killing","Killing","red"},{"stats","Stats","green"},{"admin","Admin","gray"},{"perf","Perf","blue"},{"themes","Themes","purple"},{"misc","Misc","gray"}}
 local pages={}
 for i,d in ipairs(defs)do local _,p=window:AddNavItem({id=d[1],label=d[2],color=d[3],active=i==1});pages[d[1]]=p end
