@@ -670,7 +670,7 @@ function MacOSKit:AddWindow(title, config)
     root.Position = UDim2.fromScale(0.5, 0.5)
     root.Size = UDim2.fromOffset(width, height)
     root.BackgroundColor3 = Color3.fromRGB(13, 16, 21)
-    root.BackgroundTransparency = 0.08
+    root.BackgroundTransparency = 0
     root.BorderSizePixel = 0
     root.Visible = true
     root.Active = true
@@ -678,14 +678,14 @@ function MacOSKit:AddWindow(title, config)
     root.ZIndex = 1
     root.Parent = gui
     corner(root, 14)
-    addStroke(root, Color3.fromRGB(72, 80, 94), 0.42, 1)
+    addStroke(root, Color3.fromRGB(48, 54, 64), 0, 1)
 
     local gradient = Instance.new("UIGradient")
     gradient.Rotation = 145
     gradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(27, 32, 40)),
-        ColorSequenceKeypoint.new(0.50, Color3.fromRGB(15, 19, 25)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(8, 10, 13)),
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(25, 30, 37)),
+        ColorSequenceKeypoint.new(0.50, Color3.fromRGB(19, 23, 29)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(13, 16, 21)),
     })
     gradient.Transparency = NumberSequence.new({
         NumberSequenceKeypoint.new(0, 0.05),
@@ -782,7 +782,7 @@ function MacOSKit:AddWindow(title, config)
     sidebar.Name = "Sidebar"
     sidebar.Size = UDim2.new(0, 224, 1, 0)
     sidebar.BackgroundColor3 = Color3.fromRGB(12, 15, 19)
-    sidebar.BackgroundTransparency = 0.10
+    sidebar.BackgroundTransparency = 0
     sidebar.BorderSizePixel = 0
     sidebar.ZIndex = 3
     sidebar.Parent = body
@@ -791,8 +791,8 @@ function MacOSKit:AddWindow(title, config)
     search.Name = "Search"
     search.Position = UDim2.fromOffset(9,11)
     search.Size = UDim2.new(1,-18,0,31)
-    search.BackgroundColor3 = Color3.fromRGB(18, 22, 28)
-    search.BackgroundTransparency = 0.04
+    search.BackgroundColor3 = Color3.fromRGB(21, 26, 32)
+    search.BackgroundTransparency = 0
     search.BorderSizePixel = 0
     search.Text = ""
     search.PlaceholderText = "Search tabs..."
@@ -839,8 +839,8 @@ function MacOSKit:AddWindow(title, config)
     pages.Name = "Pages"
     pages.Position = UDim2.fromOffset(225,0)
     pages.Size = UDim2.new(1,-225,1,0)
-    pages.BackgroundColor3 = Color3.fromRGB(15, 18, 23)
-    pages.BackgroundTransparency = 0.10
+    pages.BackgroundColor3 = Color3.fromRGB(21, 25, 31)
+    pages.BackgroundTransparency = 0
     pages.BorderSizePixel = 0
     pages.ZIndex = 3
     pages.Parent = body
