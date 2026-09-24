@@ -915,10 +915,9 @@ local library = MacOSKit
 -- SERVICES
 --========================================================--
 
-local Players = game:GetService("Players")
+-- Reuse the MacOSKit service locals above where possible.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Lighting = game:GetService("Lighting")
-local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local TeleportService = game:GetService("TeleportService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
