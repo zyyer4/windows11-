@@ -1,2471 +1,57 @@
---[[
-    Empire / Windows 11 Glass Layout Shell
-    ------------------------------------------------
-    Layout-only UI foundation.
+--========================================================--
+-- JOHNNY | CLAUDE ELERIUM FEATURE PORT
+-- Uses the supplied Elerium window/library as the UI shell.
+--========================================================--
+-- JOHNNY | FARMING
+-- Cleaned / Organized Version
+--========================================================--
 
-    Colored traffic-light controls:
-      RED    = close
-      YELLOW = minimize / restore
-      GREEN  = maximize / restore
+--========================================================--
+-- SERVICES
+--========================================================--
 
-    No feature logic is included. Build your own content on top.
-]]
-
-local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
-local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
-local Player = Players.LocalPlayer or Players.PlayerAdded:Wait()
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Lighting = game:GetService("Lighting")
+local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local TeleportService = game:GetService("TeleportService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
-local VirtualUser = game:GetService("VirtualUser")
 local Stats = game:GetService("Stats")
-local MarketplaceService = game:GetService("MarketplaceService")
-local HttpService = game:GetService("HttpService")
 
-local UI = {}
-UI.__index = UI
+local Player = Players.LocalPlayer
 
-local Theme = {
-    Window = Color3.fromRGB(7, 9, 12),
-    WindowTop = Color3.fromRGB(14, 17, 21),
-    Sidebar = Color3.fromRGB(8, 10, 13),
-    Surface = Color3.fromRGB(17, 20, 24),
-    SurfaceHover = Color3.fromRGB(25, 29, 34),
-    SurfaceSelected = Color3.fromRGB(28, 32, 38),
-    Surface2 = Color3.fromRGB(22, 25, 30),
+--========================================================--
+-- LIBRARY
+--========================================================--
 
-    Border = Color3.fromRGB(70, 77, 88),
-    Text = Color3.fromRGB(241, 243, 246),
-    SubText = Color3.fromRGB(151, 158, 168),
-    Muted = Color3.fromRGB(92, 99, 110),
-
-    Red = Color3.fromRGB(255, 95, 87),
-    Yellow = Color3.fromRGB(255, 189, 46),
-    Green = Color3.fromRGB(40, 200, 64),
-}
-
-local Tabs = {
-    {Title = "Farming", Emoji = "💪", Description = "Strength grinding and farming."},
-    {Title = "Rebirth", Emoji = "🔄", Description = "Rebirth tools and settings."},
-    {Title = "Pets", Emoji = "🐾", Description = "Pet management."},
-    {Title = "Player", Emoji = "👤", Description = "Player settings."},
-    {Title = "Killing", Emoji = "⚔️", Description = "Combat tools."},
-    {Title = "Stats", Emoji = "📊", Description = "Statistics and session information."},
-    {Title = "Admin", Emoji = "🛡️", Description = "Global execution monitoring and admin tools."},
-    {Title = "Perf", Emoji = "💻", Description = "Performance settings."},
-    {Title = "Misc", Emoji = "⚙️", Description = "Miscellaneous settings."},
-    {Title = "Info", Emoji = "ℹ️", Description = "Credits and community links."},
-}
-
-local function tween(object, duration, properties)
-    local ok, result = pcall(function()
-        local t = TweenService:Create(
-            object,
-            TweenInfo.new(duration or 0.16, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
-            properties
-        )
-        t:Play()
-        return t
-    end)
-    return ok and result or nil
-end
-
-local function corner(parent, radius)
-    local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, radius or 10)
-    c.Parent = parent
-    return c
-end
-
-local function stroke(parent, color, transparency, thickness)
-    local s = Instance.new("UIStroke")
-    s.Color = color or Theme.Border
-    s.Transparency = transparency == nil and 0.45 or transparency
-    s.Thickness = thickness or 1
-    s.Parent = parent
-    return s
-end
-
-local function padding(parent, left, top, right, bottom)
-    local p = Instance.new("UIPadding")
-    p.PaddingLeft = UDim.new(0, left or 0)
-    p.PaddingTop = UDim.new(0, top or 0)
-    p.PaddingRight = UDim.new(0, right or 0)
-    p.PaddingBottom = UDim.new(0, bottom or 0)
-    p.Parent = parent
-    return p
-end
-
-local function text(parent, value, size, color, font)
-    local l = Instance.new("TextLabel")
-    l.BackgroundTransparency = 1
-    l.Text = value or ""
-    l.TextSize = size or 14
-    l.TextColor3 = color or Theme.Text
-    l.Font = font or Enum.Font.Gotham
-    l.TextXAlignment = Enum.TextXAlignment.Left
-    l.TextYAlignment = Enum.TextYAlignment.Center
-    l.Parent = parent
-    return l
-end
-
-local function addGradient(parent, colorA, colorB, rotation)
-    local g = Instance.new("UIGradient")
-    g.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, colorA),
-        ColorSequenceKeypoint.new(1, colorB),
-    })
-    g.Rotation = rotation or 90
-    g.Parent = parent
-    return g
-end
-
-local function makeDraggable(handle, object)
-    local dragging = false
-    local dragStart
-    local startPosition
-
-    handle.InputBegan:Connect(function(input)
-        if input.UserInputType ~= Enum.UserInputType.MouseButton1
-            and input.UserInputType ~= Enum.UserInputType.Touch then
-            return
-        end
-
-        dragging = true
-        dragStart = input.Position
-        startPosition = object.Position
-
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
-        end)
-    end)
-
-    UserInputService.InputChanged:Connect(function(input)
-        if not dragging then
-            return
-        end
-
-        if input.UserInputType ~= Enum.UserInputType.MouseMovement
-            and input.UserInputType ~= Enum.UserInputType.Touch then
-            return
-        end
-
-        local delta = input.Position - dragStart
-
-        object.Position = UDim2.new(
-            startPosition.X.Scale,
-            startPosition.X.Offset + delta.X,
-            startPosition.Y.Scale,
-            startPosition.Y.Offset + delta.Y
-        )
-    end)
-end
-
-function UI:CreateWindow(config)
-    config = config or {}
-
-    local parent = (gethui and gethui()) or game:GetService("CoreGui")
-
-    local old = parent:FindFirstChild("Empire_Win11")
-    if old then
-        old:Destroy()
-    end
-
-    local self = setmetatable({}, UI)
-    self.Tabs = {}
-    self.ActiveTab = nil
-    self.IsMinimized = false
-    self.IsMaximized = false
-
-    local gui = Instance.new("ScreenGui")
-    gui.Name = "Empire_Win11"
-    gui.ResetOnSpawn = false
-    gui.IgnoreGuiInset = true
-    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    gui.DisplayOrder = 999
-    gui.Parent = parent
-    self.Gui = gui
-
-    -- Responsive shell. Dark translucent black, not white.
-    local root = Instance.new("Frame")
-    root.Name = "Window"
-    root.AnchorPoint = Vector2.new(0.5, 0.5)
-    root.Position = UDim2.fromScale(0.5, 0.5)
-    root.Size = config.Size or UDim2.fromScale(0.70, 0.76)
-    root.BackgroundColor3 = Color3.fromRGB(4, 5, 7)
-    root.BackgroundTransparency = 0.18
-    root.BorderSizePixel = 0
-    root.ClipsDescendants = true
-    root.Parent = gui
-    corner(root, 15)
-    stroke(root, Theme.Border, 0.28, 1)
-    self.Root = root
-
-    -- Scale controller used for the polished minimize/restore transformation.
-    local rootScale = Instance.new("UIScale")
-    rootScale.Scale = 1
-    rootScale.Parent = root
-    self.RootScale = rootScale
-
-    -- Black-glass gradient: visible depth while remaining translucent.
-    local gradient = Instance.new("UIGradient")
-    gradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(24, 27, 32)),
-        ColorSequenceKeypoint.new(0.42, Color3.fromRGB(10, 12, 15)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(2, 3, 5)),
-    })
-    gradient.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 0.12),
-        NumberSequenceKeypoint.new(0.48, 0.02),
-        NumberSequenceKeypoint.new(1, 0.10),
-    })
-    gradient.Rotation = 115
-    gradient.Parent = root
-
-    -- Header
-    local header = Instance.new("Frame")
-    header.Name = "Header"
-    header.BackgroundTransparency = 1
-    header.Size = UDim2.new(1, 0, 0, 70)
-    header.Parent = root
-    self.Header = header
-    makeDraggable(header, root)
-
-    -- Functional traffic lights. No symbols inside them.
-    local traffic = Instance.new("Frame")
-    traffic.Name = "TrafficLights"
-    traffic.BackgroundTransparency = 1
-    traffic.Position = UDim2.fromOffset(20, 26)
-    traffic.Size = UDim2.fromOffset(58, 16)
-    traffic.Parent = header
-
-    local trafficLayout = Instance.new("UIListLayout")
-    trafficLayout.FillDirection = Enum.FillDirection.Horizontal
-    trafficLayout.Padding = UDim.new(0, 8)
-    trafficLayout.Parent = traffic
-
-    local function trafficButton(color, name)
-        local b = Instance.new("TextButton")
-        b.Name = name
-        b.Text = ""
-        b.AutoButtonColor = false
-        b.BackgroundColor3 = color
-        b.BorderSizePixel = 0
-        b.Size = UDim2.fromOffset(14, 14)
-        b.Parent = traffic
-        corner(b, 7)
-        return b
-    end
-
-    local closeButton = trafficButton(Theme.Red, "Close")
-    local minimizeButton = trafficButton(Theme.Yellow, "Minimize")
-    local maximizeButton = trafficButton(Theme.Green, "Maximize")
-
-    addGradient(closeButton, Color3.fromRGB(255, 128, 120), Color3.fromRGB(210, 48, 44), 90)
-    addGradient(minimizeButton, Color3.fromRGB(255, 222, 106), Color3.fromRGB(221, 145, 20), 90)
-    addGradient(maximizeButton, Color3.fromRGB(105, 238, 122), Color3.fromRGB(22, 155, 47), 90)
-
-    for _, b in ipairs({closeButton, minimizeButton, maximizeButton}) do
-        stroke(b, Color3.fromRGB(255,255,255), 0.72, 1)
-    end
-
-    self.CloseButton = closeButton
-    self.MinimizeButton = minimizeButton
-    self.MaximizeButton = maximizeButton
-
-    -- Roblox does not guarantee Unicode/emoji glyphs in TextLabels; many fonts simply
-    -- omit them or render a tofu box. Use reliable vector UI marks for the brand instead.
-    local function makeBuildingMark(parentObject, x, y, scale)
-        scale = scale or 1
-        local holder = Instance.new("Frame")
-        holder.Name = "BuildingMark"
-        holder.BackgroundTransparency = 1
-        holder.Position = UDim2.fromOffset(x, y)
-        holder.Size = UDim2.fromOffset(math.floor(30 * scale), math.floor(30 * scale))
-        holder.Parent = parentObject
-
-        local bodyMark = Instance.new("Frame")
-        bodyMark.BackgroundColor3 = Color3.fromRGB(225, 231, 240)
-        bodyMark.BorderSizePixel = 0
-        bodyMark.Position = UDim2.fromOffset(math.floor(5 * scale), math.floor(6 * scale))
-        bodyMark.Size = UDim2.fromOffset(math.floor(20 * scale), math.floor(18 * scale))
-        bodyMark.Parent = holder
-        corner(bodyMark, math.max(2, math.floor(3 * scale)))
-
-        local roof = Instance.new("Frame")
-        roof.BackgroundColor3 = Color3.fromRGB(160, 169, 184)
-        roof.BorderSizePixel = 0
-        roof.Position = UDim2.fromOffset(math.floor(3 * scale), math.floor(3 * scale))
-        roof.Size = UDim2.fromOffset(math.floor(24 * scale), math.max(2, math.floor(3 * scale)))
-        roof.Parent = holder
-        corner(roof, math.max(1, math.floor(1.5 * scale)))
-
-        for row = 0, 1 do
-            for col = 0, 2 do
-                local windowMark = Instance.new("Frame")
-                windowMark.BackgroundColor3 = Color3.fromRGB(22, 28, 36)
-                windowMark.BorderSizePixel = 0
-                windowMark.Position = UDim2.fromOffset(
-                    math.floor((8 + col * 5) * scale),
-                    math.floor((9 + row * 6) * scale)
-                )
-                windowMark.Size = UDim2.fromOffset(math.max(2, math.floor(3 * scale)), math.max(2, math.floor(3 * scale)))
-                windowMark.Parent = holder
-                corner(windowMark, 1)
-            end
-        end
-
-        local door = Instance.new("Frame")
-        door.BackgroundColor3 = Color3.fromRGB(22, 28, 36)
-        door.BorderSizePixel = 0
-        door.Position = UDim2.fromOffset(math.floor(13 * scale), math.floor(18 * scale))
-        door.Size = UDim2.fromOffset(math.max(2, math.floor(4 * scale)), math.floor(6 * scale))
-        door.Parent = holder
-        corner(door, 1)
-
-        return holder
-    end
-
-    local leftBuilding = makeBuildingMark(header, 88, 10, 1.0)
-    self.LeftBrandMark = leftBuilding
-
-    -- Emoji overlay: Roblox supports emoji text, but glyph availability can vary;
-    -- the vector mark underneath keeps the branding visible if the emoji font is missing.
-    local leftBuildingEmoji = text(header, "", 23, Theme.Text, Enum.Font.Gotham)
-    leftBuildingEmoji.Position = UDim2.fromOffset(87, 8)
-    leftBuildingEmoji.Size = UDim2.fromOffset(32, 32)
-    leftBuildingEmoji.TextXAlignment = Enum.TextXAlignment.Center
-    leftBuildingEmoji.TextYAlignment = Enum.TextYAlignment.Center
-    leftBuildingEmoji.ZIndex = 3
-    self.LeftBrandEmoji = leftBuildingEmoji
-
-    local title = text(
-        header,
-        config.Title or "Empire",
-        20,
-        Theme.Text,
-        Enum.Font.GothamBold
+local library = loadstring(
+    game:HttpGet(
+        "https://raw.githubusercontent.com/memejames/elerium-v2-ui-library/main/Library",
+        true
     )
-    title.Position = UDim2.fromOffset(122, 8)
-    title.Size = UDim2.new(0, 210, 0, 30)
-    title.TextTruncate = Enum.TextTruncate.None
-    self.TitleLabel = title
-
-    local rightBuilding = makeBuildingMark(header, 0, 10, 0.82)
-    self.RightBrandMark = rightBuilding
-
-    local rightBuildingEmoji = text(header, "", 20, Theme.Text, Enum.Font.Gotham)
-    rightBuildingEmoji.Position = UDim2.fromOffset(0, 10)
-    rightBuildingEmoji.Size = UDim2.fromOffset(28, 28)
-    rightBuildingEmoji.TextXAlignment = Enum.TextXAlignment.Center
-    rightBuildingEmoji.TextYAlignment = Enum.TextYAlignment.Center
-    rightBuildingEmoji.ZIndex = 3
-    self.RightBrandEmoji = rightBuildingEmoji
-
-    local function updateBrandMark()
-        local x = 122 + title.TextBounds.X + 8
-        rightBuilding.Position = UDim2.fromOffset(x, 12)
-        rightBuildingEmoji.Position = UDim2.fromOffset(x - 1, 10)
-    end
-    title:GetPropertyChangedSignal("TextBounds"):Connect(updateBrandMark)
-    task.defer(updateBrandMark)
-
-    local subtitle = text(
-        header,
-        config.Subtitle or ("Logged in as : " .. ((Players.LocalPlayer and Players.LocalPlayer.Name) or "Unknown") .. "  -  V3.2.2"),
-        12,
-        Theme.SubText
-    )
-    subtitle.Position = UDim2.fromOffset(96, 38)
-    subtitle.Size = UDim2.new(1, -118, 0, 20)
-    subtitle.TextTruncate = Enum.TextTruncate.AtEnd
-    self.SubtitleLabel = subtitle
-
-    local statusBadge = Instance.new("Frame")
-    statusBadge.Name = "StatusBadge"
-    statusBadge.BackgroundColor3 = Theme.Green
-    statusBadge.BackgroundTransparency = 0.84
-    statusBadge.BorderSizePixel = 0
-    statusBadge.Position = UDim2.new(1, -126, 0, 13)
-    statusBadge.Size = UDim2.fromOffset(76, 24)
-    statusBadge.Parent = header
-    corner(statusBadge, 12)
-    stroke(statusBadge, Theme.Green, 0.72, 1)
-
-    local statusDot = Instance.new("Frame")
-    statusDot.BackgroundColor3 = Theme.Green
-    statusDot.BorderSizePixel = 0
-    statusDot.Position = UDim2.fromOffset(9, 8)
-    statusDot.Size = UDim2.fromOffset(8, 8)
-    statusDot.Parent = statusBadge
-    corner(statusDot, 4)
-
-    local statusText = text(statusBadge, "ONLINE", 9, Theme.Text, Enum.Font.GothamBold)
-    statusText.Position = UDim2.fromOffset(22, 0)
-    statusText.Size = UDim2.fromOffset(46, 24)
-    self.StatusBadge = statusBadge
-
-    local line = Instance.new("Frame")
-    line.BackgroundColor3 = Theme.Border
-    line.BackgroundTransparency = 0.70
-    line.BorderSizePixel = 0
-    line.Position = UDim2.new(0, 17, 0, 69)
-    line.Size = UDim2.new(1, -34, 0, 1)
-    line.Parent = root
-
-    -- Body
-    local body = Instance.new("Frame")
-    body.Name = "Body"
-    body.BackgroundTransparency = 1
-    body.Position = UDim2.fromOffset(13, 82)
-    body.Size = UDim2.new(1, -26, 1, -95)
-    body.Parent = root
-
-    -- Sidebar
-    local sidebar = Instance.new("Frame")
-    sidebar.Name = "Sidebar"
-    sidebar.BackgroundColor3 = Theme.Sidebar
-    sidebar.BackgroundTransparency = 0.28
-    sidebar.BorderSizePixel = 0
-    sidebar.Size = UDim2.new(0.24, 0, 1, 0)
-    sidebar.Parent = body
-    corner(sidebar, 12)
-    stroke(sidebar, Theme.Border, 0.62)
-
-    local search = Instance.new("TextBox")
-    search.Name = "Search"
-    search.BackgroundColor3 = Theme.Surface
-    search.BackgroundTransparency = 0.20
-    search.BorderSizePixel = 0
-    search.ClearTextOnFocus = false
-    search.PlaceholderText = "Search"
-    search.PlaceholderColor3 = Theme.Muted
-    search.Text = ""
-    search.TextColor3 = Theme.Text
-    search.TextSize = 13
-    search.Font = Enum.Font.Gotham
-    search.TextXAlignment = Enum.TextXAlignment.Left
-    search.Position = UDim2.fromOffset(9, 9)
-    search.Size = UDim2.new(1, -18, 0, 37)
-    search.Parent = sidebar
-    corner(search, 9)
-    stroke(search, Theme.Border, 0.72)
-    padding(search, 13, 0, 10, 0)
-    self.SearchBox = search
-
-    local nav = Instance.new("ScrollingFrame")
-    nav.Name = "Navigation"
-    nav.BackgroundTransparency = 1
-    nav.BorderSizePixel = 0
-    nav.Position = UDim2.fromOffset(8, 54)
-    nav.Size = UDim2.new(1, -16, 1, -61)
-    nav.ScrollBarThickness = 2
-    nav.ScrollBarImageColor3 = Theme.Border
-    nav.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    nav.CanvasSize = UDim2.new()
-    nav.Parent = sidebar
-    self.Navigation = nav
-
-    local navLayout = Instance.new("UIListLayout")
-    navLayout.Padding = UDim.new(0, 4)
-    navLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    navLayout.Parent = nav
-
-    -- Content
-    local content = Instance.new("Frame")
-    content.Name = "Content"
-    content.BackgroundTransparency = 1
-    content.Position = UDim2.new(0.24, 12, 0, 0)
-    content.Size = UDim2.new(0.76, -12, 1, 0)
-    content.Parent = body
-    self.Content = content
-
-    local pageTitle = text(
-        content,
-        config.ContentTitle or "Stats",
-        24,
-        Theme.Text,
-        Enum.Font.GothamBold
-    )
-    pageTitle.Position = UDim2.fromOffset(17, 2)
-    pageTitle.Size = UDim2.new(1, -34, 0, 31)
-    self.PageTitle = pageTitle
-
-    local pageSubtitle = text(
-        content,
-        config.ContentSubtitle or "Select a tab to begin building your interface.",
-        12,
-        Theme.SubText
-    )
-    pageSubtitle.Position = UDim2.fromOffset(17, 34)
-    pageSubtitle.Size = UDim2.new(1, -34, 0, 21)
-    pageSubtitle.TextTruncate = Enum.TextTruncate.AtEnd
-    self.PageSubtitle = pageSubtitle
-
-    local pages = Instance.new("Frame")
-    pages.Name = "Pages"
-    pages.BackgroundTransparency = 1
-    pages.Position = UDim2.fromOffset(0, 63)
-    pages.Size = UDim2.new(1, 0, 1, -63)
-    pages.Parent = content
-    self.Pages = pages
-
-    search:GetPropertyChangedSignal("Text"):Connect(function()
-        self:_filterTabs(search.Text)
-    end)
-
-    -- Quality-of-life: RightShift toggles the shell without destroying it.
-    self.ToggleKey = Enum.KeyCode.RightShift
-    self._inputConnection = UserInputService.InputBegan:Connect(function(input, processed)
-        if processed then
-            return
-        end
-
-        if input.KeyCode == self.ToggleKey then
-            if self.IsMinimized then
-                self:Restore()
-            else
-                self:Minimize()
-            end
-        elseif input.KeyCode == Enum.KeyCode.Escape and not self.IsMinimized then
-            search:ReleaseFocus()
-        end
-    end)
-
-    -- Close = destroy.
-    closeButton.MouseButton1Click:Connect(function()
-        self:Destroy()
-    end)
-
-    -- Minimize = compact "Open" pill like the supplied reference image.
-    minimizeButton.MouseButton1Click:Connect(function()
-        if self.IsMinimized then
-            self:Restore()
-        else
-            self:Minimize()
-        end
-    end)
-
-    -- Green = maximize / restore.
-    maximizeButton.MouseButton1Click:Connect(function()
-        self:ToggleMaximize()
-    end)
-
-    -- Small hover feedback while keeping the traffic lights symbol-free.
-    for _, b in ipairs({closeButton, minimizeButton, maximizeButton}) do
-        local normal = b.Size
-        b.MouseEnter:Connect(function()
-            tween(b, 0.10, {
-                Size = UDim2.fromOffset(16, 16),
-            })
-        end)
-        b.MouseLeave:Connect(function()
-            tween(b, 0.10, {
-                Size = normal,
-            })
-        end)
-    end
-
-    root.BackgroundTransparency = 1
-    tween(root, 0.18, {BackgroundTransparency = 0.18})
-
-    return self
-end
-
-function UI:Minimize()
-    if self.IsMinimized then return end
-
-    self.IsMinimized = true
-    self.SavedPosition = self.Root.Position
-    self.SavedSize = self.Root.Size
-
-    local root = self.Root
-    local gui = self.Gui
-    local rootScale = self.RootScale
-
-    -- The shell physically transforms into the top-center pill instead of simply disappearing.
-    root.Visible = true
-    root.ZIndex = 20
-    rootScale.Scale = 1
-
-    local shrink = TweenService:Create(
-        rootScale,
-        TweenInfo.new(0.34, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut),
-        {Scale = 0.085}
-    )
-    local move = TweenService:Create(
-        root,
-        TweenInfo.new(0.34, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut),
-        {Position = UDim2.fromScale(0.5, 0.045)}
-    )
-
-    shrink:Play()
-    move:Play()
-    move.Completed:Wait()
-
-    root.Visible = false
-
-    if self.MinimizedButton then
-        self.MinimizedButton:Destroy()
-    end
-
-    local open = Instance.new("TextButton")
-    open.Name = "Open"
-    open.AnchorPoint = Vector2.new(0.5, 0)
-    open.Position = UDim2.fromScale(0.5, 0.035)
-    open.Size = UDim2.fromOffset(238, 44)
-    open.BackgroundColor3 = Color3.fromRGB(3, 4, 6)
-    open.BackgroundTransparency = 0.28
-    open.BorderSizePixel = 0
-    open.AutoButtonColor = false
-    open.Text = ""
-    open.Parent = gui
-    corner(open, 18)
-    stroke(open, Color3.fromRGB(110, 255, 135), 0.18, 1)
-    addGradient(open, Color3.fromRGB(28, 32, 38), Color3.fromRGB(2, 4, 6), 90)
-    self.MinimizedButton = open
-    makeDraggable(open, open)
-
-    local indicator = Instance.new("Frame")
-    indicator.BackgroundColor3 = Theme.Green
-    indicator.BorderSizePixel = 0
-    indicator.Position = UDim2.fromOffset(14, 17)
-    indicator.Size = UDim2.fromOffset(10, 10)
-    indicator.Parent = open
-    corner(indicator, 5)
-
-    -- Compact pill uses the same vector building mark so the full Empire name
-    -- remains visible even on executors/fonts without emoji glyph support.
-    local function makePillBuilding(parentObject)
-        local holder = Instance.new("Frame")
-        holder.Name = "EmpireMark"
-        holder.BackgroundTransparency = 1
-        holder.Position = UDim2.fromOffset(34, 7)
-        holder.Size = UDim2.fromOffset(30, 30)
-        holder.Parent = parentObject
-
-        local bodyMark = Instance.new("Frame")
-        bodyMark.BackgroundColor3 = Color3.fromRGB(225, 231, 240)
-        bodyMark.BorderSizePixel = 0
-        bodyMark.Position = UDim2.fromOffset(5, 6)
-        bodyMark.Size = UDim2.fromOffset(20, 18)
-        bodyMark.Parent = holder
-        corner(bodyMark, 3)
-
-        local roof = Instance.new("Frame")
-        roof.BackgroundColor3 = Color3.fromRGB(160, 169, 184)
-        roof.BorderSizePixel = 0
-        roof.Position = UDim2.fromOffset(3, 3)
-        roof.Size = UDim2.fromOffset(24, 3)
-        roof.Parent = holder
-        corner(roof, 2)
-
-        for row = 0, 1 do
-            for col = 0, 2 do
-                local w = Instance.new("Frame")
-                w.BackgroundColor3 = Color3.fromRGB(22, 28, 36)
-                w.BorderSizePixel = 0
-                w.Position = UDim2.fromOffset(8 + col * 5, 9 + row * 6)
-                w.Size = UDim2.fromOffset(3, 3)
-                w.Parent = holder
-                corner(w, 1)
-            end
-        end
-        return holder
-    end
-
-    makePillBuilding(open)
-
-    local pillEmoji = text(open, "", 20, Theme.Text, Enum.Font.Gotham)
-    pillEmoji.Position = UDim2.fromOffset(32, 7)
-    pillEmoji.Size = UDim2.fromOffset(32, 30)
-    pillEmoji.TextXAlignment = Enum.TextXAlignment.Center
-    pillEmoji.TextYAlignment = Enum.TextYAlignment.Center
-    pillEmoji.ZIndex = 3
-
-    local rightPillEmoji = text(open, "", 20, Theme.Text, Enum.Font.Gotham)
-    rightPillEmoji.Position = UDim2.fromOffset(149, 7)
-    rightPillEmoji.Size = UDim2.fromOffset(30, 30)
-    rightPillEmoji.TextXAlignment = Enum.TextXAlignment.Center
-    rightPillEmoji.TextYAlignment = Enum.TextYAlignment.Center
-    rightPillEmoji.ZIndex = 3
-
-    local empireLabel = Instance.new("TextLabel")
-    empireLabel.BackgroundTransparency = 1
-    empireLabel.Text = "Empire"
-    empireLabel.TextColor3 = Theme.Text
-    empireLabel.TextSize = 15
-    empireLabel.Font = Enum.Font.GothamBold
-    empireLabel.TextXAlignment = Enum.TextXAlignment.Left
-    empireLabel.TextYAlignment = Enum.TextYAlignment.Center
-    empireLabel.Position = UDim2.fromOffset(68, 4)
-    empireLabel.Size = UDim2.fromOffset(82, 20)
-    empireLabel.Parent = open
-
-    local versionLabel = Instance.new("TextLabel")
-    versionLabel.BackgroundTransparency = 1
-    versionLabel.Text = "V3.2.2"
-    versionLabel.TextColor3 = Theme.SubText
-    versionLabel.TextSize = 10
-    versionLabel.Font = Enum.Font.GothamMedium
-    versionLabel.TextXAlignment = Enum.TextXAlignment.Left
-    versionLabel.TextYAlignment = Enum.TextYAlignment.Center
-    versionLabel.Position = UDim2.fromOffset(69, 23)
-    versionLabel.Size = UDim2.fromOffset(65, 15)
-    versionLabel.Parent = open
-
-    local openHint = Instance.new("TextLabel")
-    openHint.BackgroundTransparency = 1
-    openHint.Text = "RESTORE"
-    openHint.TextColor3 = Theme.Muted
-    openHint.TextSize = 10
-    openHint.Font = Enum.Font.Gotham
-    openHint.TextXAlignment = Enum.TextXAlignment.Right
-    openHint.TextYAlignment = Enum.TextYAlignment.Center
-    openHint.Position = UDim2.fromOffset(181, 0)
-    openHint.Size = UDim2.fromOffset(48, 44)
-    openHint.Parent = open
-
-    open.MouseButton1Click:Connect(function()
-        self:Restore()
-    end)
-end
-
-function UI:Restore()
-    if not self.IsMinimized then return end
-
-    self.IsMinimized = false
-
-    if self.MinimizedButton then
-        local pill = self.MinimizedButton
-        local pillScale = pill:FindFirstChildOfClass("UIScale") or Instance.new("UIScale")
-        pillScale.Scale = 1
-        pillScale.Parent = pill
-
-        local pillTween = TweenService:Create(
-            pillScale,
-            TweenInfo.new(0.16, Enum.EasingStyle.Quint, Enum.EasingDirection.In),
-            {Scale = 0.82}
-        )
-        pillTween:Play()
-        pillTween.Completed:Wait()
-        pill:Destroy()
-        self.MinimizedButton = nil
-    end
-
-    local root = self.Root
-    local rootScale = self.RootScale
-
-    root.Visible = true
-    root.ZIndex = 1
-    root.Position = UDim2.fromScale(0.5, 0.045)
-    rootScale.Scale = 0.085
-
-    local move = TweenService:Create(
-        root,
-        TweenInfo.new(0.38, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut),
-        {Position = self.SavedPosition or UDim2.fromScale(0.5, 0.5)}
-    )
-    local expand = TweenService:Create(
-        rootScale,
-        TweenInfo.new(0.38, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut),
-        {Scale = 1}
-    )
-
-    move:Play()
-    expand:Play()
-end
-
-function UI:ToggleMaximize()
-    if self.IsMinimized then
-        self:Restore()
-    end
-
-    if not self.IsMaximized then
-        self.SavedPosition = self.Root.Position
-        self.SavedSize = self.Root.Size
-
-        tween(self.Root, 0.20, {
-            Position = UDim2.fromScale(0.5, 0.5),
-            Size = UDim2.fromScale(0.90, 0.88),
-        })
-
-        self.IsMaximized = true
-    else
-        tween(self.Root, 0.20, {
-            Position = self.SavedPosition or UDim2.fromScale(0.5, 0.5),
-            Size = self.SavedSize or UDim2.fromScale(0.70, 0.76),
-        })
-
-        self.IsMaximized = false
-    end
-end
-
-function UI:_filterTabs(query)
-    query = string.lower(query or "")
-
-    for _, tab in ipairs(self.Tabs) do
-        local match = query == ""
-            or string.find(string.lower(tab.Title), query, 1, true) ~= nil
-
-        tab.Button.Visible = match
-    end
-end
-
-function UI:AddTab(config)
-    config = config or {}
-
-    local tab = {
-        Window = self,
-        Title = config.Title or ("Tab " .. tostring(#self.Tabs + 1)),
-        Emoji = config.Emoji or "-",
-        Description = config.Description or "",
-        Accent = config.Accent or Theme.Green,
-    }
-
-    local button = Instance.new("TextButton")
-    button.Name = tab.Title .. "_Tab"
-    button.BackgroundColor3 = Theme.SurfaceSelected
-    button.BackgroundTransparency = 1
-    button.BorderSizePixel = 0
-    button.AutoButtonColor = false
-    button.Text = ""
-    button.Size = UDim2.new(1, 0, 0, 43)
-    button.Parent = self.Navigation
-    corner(button, 9)
-    tab.Button = button
-
-    -- Colored square with the requested emoji.
-    local icon = Instance.new("TextLabel")
-    icon.Name = "EmojiIcon"
-    icon.BackgroundColor3 = tab.Accent
-    icon.BackgroundTransparency = 0.02
-    icon.BorderSizePixel = 0
-    icon.Text = tab.Emoji
-    icon.TextSize = 17
-    icon.TextColor3 = Color3.fromRGB(255, 255, 255)
-    icon.Font = Enum.Font.GothamSemibold
-    icon.TextXAlignment = Enum.TextXAlignment.Center
-    icon.TextYAlignment = Enum.TextYAlignment.Center
-    icon.Position = UDim2.fromOffset(9, 8)
-    icon.Size = UDim2.fromOffset(27, 27)
-    icon.Parent = button
-    corner(icon, 7)
-    addGradient(
-        icon,
-        tab.Accent:Lerp(Color3.fromRGB(255,255,255), 0.12),
-        tab.Accent:Lerp(Color3.fromRGB(0,0,0), 0.20),
-        135
-    )
-    tab.Icon = icon
-
-    local tabLabel = text(
-        button,
-        tab.Title,
-        13,
-        Theme.SubText,
-        Enum.Font.GothamMedium
-    )
-    tabLabel.Position = UDim2.fromOffset(48, 0)
-    tabLabel.Size = UDim2.new(1, -57, 1, 0)
-    tabLabel.TextTruncate = Enum.TextTruncate.AtEnd
-    tab.Label = tabLabel
-
-    local selected = Instance.new("Frame")
-    selected.Name = "SelectedBar"
-    selected.BackgroundColor3 = tab.Accent
-    selected.BorderSizePixel = 0
-    selected.Position = UDim2.new(0, 0, 0.5, -12)
-    selected.Size = UDim2.fromOffset(3, 24)
-    selected.Visible = false
-    selected.Parent = button
-    corner(selected, 2)
-    tab.SelectedBar = selected
-
-    -- Empty page by design.
-    local page = Instance.new("ScrollingFrame")
-    page.Name = tab.Title .. "_Page"
-    page.BackgroundTransparency = 1
-    page.BorderSizePixel = 0
-    page.Size = UDim2.new(1, 0, 1, 0)
-    page.CanvasSize = UDim2.new(0, 0, 0, 0)
-    page.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    page.ScrollingDirection = Enum.ScrollingDirection.Y
-    page.ScrollBarThickness = 3
-    page.ScrollBarImageColor3 = Theme.Border
-    page.Visible = false
-    page.Parent = self.Pages
-    tab.Page = page
-
-
-    -- Fluent-style foundation for future content.
-    function tab:AddSection(titleValue)
-        local section = {
-            Tab = tab,
-            Window = self,
-        }
-
-        local card = Instance.new("Frame")
-        card.Name = "Section"
-        card.BackgroundColor3 = Theme.Surface
-        card.BackgroundTransparency = 0.34
-        card.BorderSizePixel = 0
-        card.Size = UDim2.new(1, 0, 0, 70)
-        card.Parent = page
-        corner(card, 11)
-        stroke(card, Theme.Border, 0.70)
-
-        local heading = text(
-            card,
-            titleValue or "Section",
-            14,
-            Theme.Text,
-            Enum.Font.GothamSemibold
-        )
-        heading.Position = UDim2.fromOffset(14, 9)
-        heading.Size = UDim2.new(1, -28, 0, 23)
-
-        section.Frame = card
-        section.Title = heading
-
-        return section
-    end
-
-    -- Feature controls added to the existing Windows 11 shell; shell visuals are unchanged.
-    function tab:AddLabel(value)
-        local label = text(page, value or "", 13, Theme.SubText, Enum.Font.GothamMedium)
-        label.Size = UDim2.new(1, 0, 0, 30)
-        label.TextWrapped = true
-        return label
-    end
-    function tab:AddButton(labelText, callback)
-        local button = Instance.new("TextButton")
-        button.Name = tostring(labelText or "Button")
-        button.Size = UDim2.new(1, 0, 0, 42)
-        button.BackgroundColor3 = Theme.Surface
-        button.BackgroundTransparency = 0.18
-        button.BorderSizePixel = 0
-        button.AutoButtonColor = false
-        button.Text = tostring(labelText or "Button")
-        button.TextColor3 = Theme.Text
-        button.TextSize = 13
-        button.Font = Enum.Font.GothamSemibold
-        button.Parent = page
-        corner(button, 10); stroke(button, Theme.Border, 0.68)
-        button.MouseEnter:Connect(function() tween(button, 0.10, {BackgroundTransparency = 0.04}) end)
-        button.MouseLeave:Connect(function() tween(button, 0.10, {BackgroundTransparency = 0.18}) end)
-        button.MouseButton1Click:Connect(function()
-            local ok, err = pcall(function() if callback then callback() end end)
-            if not ok then warn("[Johnny] button error: " .. tostring(err)) end
-        end)
-        return button
-    end
-    function tab:AddSwitch(labelText, callback)
-        local row = Instance.new("Frame")
-        row.Name = tostring(labelText or "Switch"); row.Size = UDim2.new(1,0,0,44)
-        row.BackgroundColor3 = Theme.Surface; row.BackgroundTransparency = 0.18; row.BorderSizePixel = 0; row.Parent = page
-        corner(row,10); stroke(row,Theme.Border,0.68)
-        local label=text(row,tostring(labelText or "Switch"),13,Theme.Text,Enum.Font.GothamMedium)
-        label.Position=UDim2.fromOffset(13,0); label.Size=UDim2.new(1,-75,1,0)
-        local toggle=Instance.new("TextButton")
-        toggle.Size=UDim2.fromOffset(48,24); toggle.Position=UDim2.new(1,-60,0.5,-12)
-        toggle.BackgroundColor3=Theme.Muted; toggle.BorderSizePixel=0; toggle.AutoButtonColor=false; toggle.Text="OFF"
-        toggle.TextColor3=Theme.Text; toggle.TextSize=10; toggle.Font=Enum.Font.GothamBold; toggle.Parent=row; corner(toggle,12)
-        local state=false; local switch={}
-        local function apply(newState,fire)
-            state=newState and true or false; toggle.Text=state and "ON" or "OFF"; toggle.BackgroundColor3=state and Theme.Green or Theme.Muted
-            if fire and callback then pcall(callback,state) end
-        end
-        function switch:Set(newState) apply(newState,true) end
-        function switch:Get() return state end
-        switch.Button=toggle; switch.Frame=row
-        toggle.MouseButton1Click:Connect(function() apply(not state,true) end)
-        return switch
-    end
-    function tab:AddTextBox(labelText, callback, options)
-        options=options or {}
-        local row=Instance.new("Frame")
-        row.Name=tostring(labelText or "TextBox"); row.Size=UDim2.new(1,0,0,54); row.BackgroundColor3=Theme.Surface; row.BackgroundTransparency=0.18; row.BorderSizePixel=0; row.Parent=page
-        corner(row,10); stroke(row,Theme.Border,0.68)
-        local label=text(row,tostring(labelText or "Input"),12,Theme.Text,Enum.Font.GothamMedium)
-        label.Position=UDim2.fromOffset(13,4); label.Size=UDim2.new(1,-150,0,20)
-        local box=Instance.new("TextBox")
-        box.Size=UDim2.fromOffset(125,30); box.Position=UDim2.new(1,-138,0.5,-15); box.BackgroundColor3=Theme.Surface2; box.BackgroundTransparency=0.08
-        box.BorderSizePixel=0; box.ClearTextOnFocus=false; box.PlaceholderText=options.placeholder or ""; box.PlaceholderColor3=Theme.Muted; box.Text=""
-        box.TextColor3=Theme.Text; box.TextSize=12; box.Font=Enum.Font.Gotham; box.Parent=row; corner(box,8); stroke(box,Theme.Border,0.60)
-        box.FocusLost:Connect(function() pcall(function() if callback then callback(box.Text) end end) end)
-        return box
-    end
-
-
-    button.MouseEnter:Connect(function()
-        if self.ActiveTab ~= tab then
-            tween(button, 0.12, {
-                BackgroundTransparency = 0.72,
-            })
-        end
-    end)
-
-    button.MouseLeave:Connect(function()
-        if self.ActiveTab ~= tab then
-            tween(button, 0.12, {
-                BackgroundTransparency = 1,
-            })
-        end
-    end)
-
-    button.MouseButton1Click:Connect(function()
-        self:SelectTab(tab)
-    end)
-
-    table.insert(self.Tabs, tab)
-
-    if not self.ActiveTab then
-        self:SelectTab(tab)
-    end
-
-    return tab
-end
-
-function UI:SelectTab(tab)
-    if not tab then return end
-
-    self.ActiveTab = tab
-
-    for _, item in ipairs(self.Tabs) do
-        local active = item == tab
-
-        item.Page.Visible = active
-        item.SelectedBar.Visible = active
-
-        if active then
-            tween(item.Button, 0.14, {
-                BackgroundTransparency = 0.10,
-            })
-            tween(item.Label, 0.14, {
-                TextColor3 = Theme.Text,
-            })
-        else
-            tween(item.Button, 0.14, {
-                BackgroundTransparency = 1,
-            })
-            tween(item.Label, 0.14, {
-                TextColor3 = Theme.SubText,
-            })
-        end
-    end
-
-    self.PageTitle.Text = tab.Title
-    self.PageSubtitle.Text =
-        tab.Description ~= "" and tab.Description
-        or "Build this page using the Fluent-style API."
-end
-
-function UI:SetTitle(titleValue, subtitleValue)
-    if titleValue then
-        self.TitleLabel.Text = titleValue
-    end
-    if subtitleValue then
-        self.SubtitleLabel.Text = subtitleValue
-    end
-end
-
-function UI:Destroy()
-    self:StopGlobalExecutionFeed()
-    if self._inputConnection then
-        self._inputConnection:Disconnect()
-        self._inputConnection = nil
-    end
-
-    if self.Gui then
-        self.Gui:Destroy()
-    end
-end
-
--- ============================================================
--- DEFAULT LAYOUT
--- ============================================================
-
-local Window = UI:CreateWindow({
-    Title = "Empire",
-    Subtitle = "Logged in as : " .. ((Players.LocalPlayer and Players.LocalPlayer.Name) or "Unknown") .. " - V3.2.2",
-    Size = UDim2.fromScale(0.70, 0.76),
-    ContentTitle = "Stats",
-    ContentSubtitle = "Select a tab to begin building your interface.",
+)()
+
+local window = library:AddWindow("Johnny | Farming", {
+    main_color = Color3.fromRGB(138, 0, 0),
+    min_size = Vector2.new(900, 900),
+    can_resize = true
 })
 
-local createdTabs = {}
-
-for _, info in ipairs(Tabs) do
-    createdTabs[info.Title] = Window:AddTab({
-        Title = info.Title,
-        Emoji = info.Emoji,
-        Description = info.Description,
-        Accent = ({
-            Farming = Color3.fromRGB(78, 165, 255),
-            Rebirth = Color3.fromRGB(255, 174, 71),
-            Pets = Color3.fromRGB(194, 116, 255),
-            Player = Color3.fromRGB(71, 205, 150),
-            Killing = Color3.fromRGB(255, 82, 82),
-            Stats = Color3.fromRGB(86, 145, 255),
-            Admin = Color3.fromRGB(255, 196, 70),
-            Perf = Color3.fromRGB(115, 121, 132),
-            Misc = Color3.fromRGB(169, 176, 188),
-            Info = Color3.fromRGB(95, 177, 255),
-        })[info.Title],
-    })
-end
-
-Window:SelectTab(createdTabs.Stats)
-
--- ============================================================
--- INFO / CREDITS PAGE
--- ============================================================
-local InfoTab = createdTabs.Info
-if InfoTab then
-    local infoPage = InfoTab.Page
-
-    local credits = Instance.new("Frame")
-    credits.Name = "CreditsCard"
-    credits.BackgroundColor3 = Theme.Surface
-    credits.BackgroundTransparency = 0.24
-    credits.BorderSizePixel = 0
-    credits.Size = UDim2.new(1, 0, 0, 170)
-    credits.Parent = infoPage
-    corner(credits, 13)
-    stroke(credits, Theme.Border, 0.64)
-
-    local heading = text(credits, "Empire", 22, Theme.Text, Enum.Font.GothamBold)
-    heading.Position = UDim2.fromOffset(18, 14)
-    heading.Size = UDim2.new(1, -36, 0, 30)
-
-    local madeBy = text(credits, "Made by JohnnyFronny", 14, Theme.SubText, Enum.Font.GothamMedium)
-    madeBy.Position = UDim2.fromOffset(18, 45)
-    madeBy.Size = UDim2.new(1, -36, 0, 22)
-
-    local desc = text(credits, "Empire is a compact Windows 11-inspired script interface.", 12, Theme.Muted, Enum.Font.Gotham)
-    desc.Position = UDim2.fromOffset(18, 68)
-    desc.Size = UDim2.new(1, -36, 0, 20)
-
-    
-local function empireTabIcon(parent, token)
-    local holder = Instance.new("Frame")
-    holder.Name = "EmpireTabIcon"
-    holder.BackgroundTransparency = 1
-    holder.Size = UDim2.fromOffset(22, 22)
-    holder.Position = UDim2.new(0, 7, 0.5, -11)
-    holder.Parent = parent
-
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = Color3.fromRGB(155, 160, 170)
-    stroke.Thickness = 1.4
-    stroke.Transparency = 0.15
-
-    local box = Instance.new("Frame")
-    box.Name = "IconShape"
-    box.BackgroundColor3 = Color3.fromRGB(35, 38, 44)
-    box.BackgroundTransparency = 0.15
-    box.Size = UDim2.fromOffset(18, 18)
-    box.Position = UDim2.fromOffset(2, 2)
-    box.Parent = holder
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 5)
-    corner.Parent = box
-    stroke.Parent = box
-
-    local label = Instance.new("TextLabel")
-    label.BackgroundTransparency = 1
-    label.Size = UDim2.fromScale(1, 1)
-    label.Font = Enum.Font.GothamBold
-    label.TextSize = 10
-    label.TextColor3 = Color3.fromRGB(220, 224, 230)
-    label.Text = tostring(token or "")
-    label.Parent = box
-
-    return holder
-end
-
-local function socialButton(parentObject, x, labelText, handleText, accent, symbol)
-        local b = Instance.new("TextButton")
-        b.BackgroundColor3 = Theme.WindowTop
-        b.BackgroundTransparency = 0.10
-        b.BorderSizePixel = 0
-        b.AutoButtonColor = false
-        b.Text = ""
-        b.Position = UDim2.fromOffset(x, 101)
-        b.Size = UDim2.fromOffset(170, 54)
-        b.Parent = parentObject
-        corner(b, 11)
-        stroke(b, Theme.Border, 0.70)
-        addGradient(b, accent:Lerp(Color3.fromRGB(255,255,255), 0.06), Theme.Window, 90)
-
-        local icon = Instance.new("Frame")
-        icon.BackgroundColor3 = accent
-        icon.BackgroundTransparency = 0.05
-        icon.BorderSizePixel = 0
-        icon.Position = UDim2.fromOffset(10, 11)
-        icon.Size = UDim2.fromOffset(32, 32)
-        icon.Parent = b
-        corner(icon, 9)
-
-        if labelText == "YouTube" then
-            local play = Instance.new("Frame")
-            play.BackgroundColor3 = Color3.fromRGB(255,255,255)
-            play.BorderSizePixel = 0
-            play.Position = UDim2.fromOffset(11, 8)
-            play.Size = UDim2.fromOffset(12, 16)
-            play.Parent = icon
-            corner(play, 2)
-            local cut = Instance.new("Frame")
-            cut.BackgroundColor3 = accent
-            cut.BorderSizePixel = 0
-            cut.Position = UDim2.fromOffset(11, 11)
-            cut.Size = UDim2.fromOffset(7, 10)
-            cut.Rotation = 45
-            cut.Parent = icon
-        else
-            -- Simple Discord-like glyph built from reliable UI primitives.
-            local head = Instance.new("Frame")
-            head.BackgroundColor3 = Color3.fromRGB(255,255,255)
-            head.BorderSizePixel = 0
-            head.Position = UDim2.fromOffset(6, 9)
-            head.Size = UDim2.fromOffset(20, 15)
-            head.Parent = icon
-            corner(head, 7)
-
-            local eye1 = Instance.new("Frame")
-            eye1.BackgroundColor3 = accent
-            eye1.BorderSizePixel = 0
-            eye1.Position = UDim2.fromOffset(11, 14)
-            eye1.Size = UDim2.fromOffset(3, 3)
-            eye1.Parent = icon
-            corner(eye1, 2)
-
-            local eye2 = eye1:Clone()
-            eye2.Position = UDim2.fromOffset(18, 14)
-            eye2.Parent = icon
-        end
-
-        local name = text(b, labelText, 12, Theme.Text, Enum.Font.GothamSemibold)
-        name.Position = UDim2.fromOffset(51, 7)
-        name.Size = UDim2.fromOffset(105, 18)
-
-        local handle = text(b, handleText, 10, Theme.SubText, Enum.Font.Gotham)
-        handle.Position = UDim2.fromOffset(51, 26)
-        handle.Size = UDim2.fromOffset(105, 18)
-
-        b.MouseEnter:Connect(function()
-            tween(b, 0.12, {BackgroundTransparency = 0})
-        end)
-        b.MouseLeave:Connect(function()
-            tween(b, 0.12, {BackgroundTransparency = 0.10})
-        end)
-
-        return b
-    end
-
-    socialButton(credits, 18, "YouTube", "JohnnyFronnyYT", Color3.fromRGB(255, 70, 70), "")
-    socialButton(credits, 198, "Discord", "JohnnyFronny", Color3.fromRGB(88, 101, 242), "")
-end
-
-
--- ============================================================
--- ADMIN PAGE
--- ============================================================
--- Backend-ready admin dashboard. The UI accepts execution records from
--- a trusted server/backend through UI:SetAdminExecutions(entries).
--- It intentionally does not collect hardware IDs or precise location.
-local AdminTab = createdTabs.Admin
-if AdminTab then
-    local adminPage = AdminTab.Page
-    local ADMIN_PASSWORD = "yader45"
-    local adminUnlocked = false
-    local adminExecutions = {}
-    local filteredExecutions = {}
-
-    local gate = Instance.new("Frame")
-    gate.Name = "AdminGate"
-    gate.BackgroundColor3 = Theme.Surface
-    gate.BackgroundTransparency = 0.18
-    gate.BorderSizePixel = 0
-    gate.Size = UDim2.new(1, 0, 0, 190)
-    gate.Parent = adminPage
-    corner(gate, 13)
-    stroke(gate, Theme.Border, 0.64)
-
-    local gateTitle = text(gate, "Admin Access", 17, Theme.Text, Enum.Font.GothamBold)
-    gateTitle.Position = UDim2.fromOffset(18, 15)
-    gateTitle.Size = UDim2.new(1, -36, 0, 26)
-
-    local gateDesc = text(gate, "Enter the admin password to unlock the Empire execution dashboard.", 12, Theme.SubText, Enum.Font.Gotham)
-    gateDesc.Position = UDim2.fromOffset(18, 43)
-    gateDesc.Size = UDim2.new(1, -36, 0, 20)
-
-    local passwordBox = Instance.new("TextBox")
-    passwordBox.Name = "PasswordBox"
-    passwordBox.BackgroundColor3 = Theme.WindowTop
-    passwordBox.BackgroundTransparency = 0.10
-    passwordBox.BorderSizePixel = 0
-    passwordBox.ClearTextOnFocus = false
-    passwordBox.PlaceholderText = "Admin password"
-    passwordBox.PlaceholderColor3 = Theme.Muted
-    passwordBox.Text = ""
-    passwordBox.TextColor3 = Theme.Text
-    passwordBox.TextSize = 13
-    passwordBox.Font = Enum.Font.Gotham
-    passwordBox.TextXAlignment = Enum.TextXAlignment.Left
-    passwordBox.Position = UDim2.fromOffset(18, 76)
-    passwordBox.Size = UDim2.new(1, -140, 0, 40)
-    passwordBox.Parent = gate
-    corner(passwordBox, 9)
-    stroke(passwordBox, Theme.Border, 0.70)
-    padding(passwordBox, 12, 0, 12, 0)
-
-    local unlock = Instance.new("TextButton")
-    unlock.Name = "Unlock"
-    unlock.BackgroundColor3 = Color3.fromRGB(255, 196, 70)
-    unlock.BackgroundTransparency = 0.05
-    unlock.BorderSizePixel = 0
-    unlock.AutoButtonColor = false
-    unlock.Text = "Unlock"
-    unlock.TextColor3 = Color3.fromRGB(20, 17, 8)
-    unlock.TextSize = 12
-    unlock.Font = Enum.Font.GothamBold
-    unlock.Position = UDim2.new(1, -108, 0, 76)
-    unlock.Size = UDim2.fromOffset(90, 40)
-    unlock.Parent = gate
-    corner(unlock, 9)
-
-    local status = text(gate, "Locked", 11, Theme.Muted, Enum.Font.GothamMedium)
-    status.Position = UDim2.fromOffset(18, 127)
-    status.Size = UDim2.new(1, -36, 0, 20)
-
-    local dashboard = Instance.new("Frame")
-    dashboard.Name = "ExecutionDashboard"
-    dashboard.BackgroundColor3 = Theme.Surface
-    dashboard.BackgroundTransparency = 0.18
-    dashboard.BorderSizePixel = 0
-    dashboard.Size = UDim2.new(1, 0, 0, 470)
-    dashboard.Visible = false
-    dashboard.Parent = adminPage
-    corner(dashboard, 13)
-    stroke(dashboard, Theme.Border, 0.64)
-
-    local dashTitle = text(dashboard, "Global Current Executions", 17, Theme.Text, Enum.Font.GothamBold)
-    dashTitle.Position = UDim2.fromOffset(18, 14)
-    dashTitle.Size = UDim2.new(1, -160, 0, 25)
-
-    local dashNote = text(dashboard, "Backend-ready - username, UserId, game, server, version and public stats", 10, Theme.SubText, Enum.Font.Gotham)
-    dashNote.Position = UDim2.fromOffset(18, 39)
-    dashNote.Size = UDim2.new(1, -36, 0, 18)
-
-    local countBadge = text(dashboard, "0 RECORDS", 9, Theme.Green, Enum.Font.GothamBold)
-    countBadge.BackgroundColor3 = Theme.WindowTop
-    countBadge.BackgroundTransparency = 0.10
-    countBadge.TextXAlignment = Enum.TextXAlignment.Center
-    countBadge.Position = UDim2.new(1, -112, 0, 17)
-    countBadge.Size = UDim2.fromOffset(94, 24)
-    corner(countBadge, 8)
-
-    local searchBox = Instance.new("TextBox")
-    searchBox.Name = "ExecutionSearch"
-    searchBox.BackgroundColor3 = Theme.WindowTop
-    searchBox.BackgroundTransparency = 0.10
-    searchBox.BorderSizePixel = 0
-    searchBox.ClearTextOnFocus = false
-    searchBox.PlaceholderText = "Search username, UserId, game or server..."
-    searchBox.PlaceholderColor3 = Theme.Muted
-    searchBox.Text = ""
-    searchBox.TextColor3 = Theme.Text
-    searchBox.TextSize = 11
-    searchBox.Font = Enum.Font.Gotham
-    searchBox.TextXAlignment = Enum.TextXAlignment.Left
-    searchBox.Position = UDim2.fromOffset(18, 67)
-    searchBox.Size = UDim2.new(1, -124, 0, 34)
-    searchBox.Parent = dashboard
-    corner(searchBox, 8)
-    stroke(searchBox, Theme.Border, 0.75)
-    padding(searchBox, 11, 0, 11, 0)
-
-    local refresh = Instance.new("TextButton")
-    refresh.Name = "Refresh"
-    refresh.BackgroundColor3 = Theme.WindowTop
-    refresh.BackgroundTransparency = 0.05
-    refresh.BorderSizePixel = 0
-    refresh.AutoButtonColor = false
-    refresh.Text = "🔄"
-    refresh.TextColor3 = Theme.Text
-    refresh.TextSize = 17
-    refresh.Font = Enum.Font.GothamBold
-    refresh.Position = UDim2.new(1, -94, 0, 67)
-    refresh.Size = UDim2.fromOffset(76, 34)
-    refresh.Parent = dashboard
-    corner(refresh, 8)
-    stroke(refresh, Theme.Border, 0.72)
-
-    local list = Instance.new("ScrollingFrame")
-    list.Name = "ExecutionList"
-    list.BackgroundTransparency = 1
-    list.BorderSizePixel = 0
-    list.Position = UDim2.fromOffset(14, 112)
-    list.Size = UDim2.new(1, -28, 1, -126)
-    list.CanvasSize = UDim2.new()
-    list.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    list.ScrollBarThickness = 3
-    list.ScrollBarImageColor3 = Theme.Border
-    list.Parent = dashboard
-
-    local layout = Instance.new("UIListLayout")
-    layout.Padding = UDim.new(0, 7)
-    layout.SortOrder = Enum.SortOrder.LayoutOrder
-    layout.Parent = list
-
-    local function clearList()
-        for _, child in ipairs(list:GetChildren()) do
-            if child:IsA("Frame") then
-                child:Destroy()
-            end
-        end
-    end
-
-    local function abbreviateNumber(value)
-        local n = tonumber(value)
-        if not n then return tostring(value) end
-        local units = {"", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No"}
-        local index = 1
-        while math.abs(n) >= 1000 and index < #units do
-            n = n / 1000
-            index = index + 1
-        end
-        if index == 1 then
-            return tostring(math.floor(n + 0.5))
-        end
-        local formatted = string.format("%.2f", n):gsub("0+$", ""):gsub("\.$", "")
-        return formatted .. units[index]
-    end
-
-    local function stringifyStats(stats)
-        if type(stats) ~= "table" then
-            return "No public stats supplied"
-        end
-        local parts = {}
-        local preferred = {"Strength", "Durability", "Rebirths"}
-        local used = {}
-        for _, key in ipairs(preferred) do
-            if stats[key] ~= nil then
-                local value = stats[key]
-                if key == "Strength" or key == "Durability" then
-                    value = abbreviateNumber(value)
-                end
-                table.insert(parts, key .. ": " .. tostring(value))
-                used[key] = true
-            end
-        end
-        local extra = {}
-        for key, value in pairs(stats) do
-            if not used[key] then
-                table.insert(extra, tostring(key) .. ": " .. tostring(value))
-            end
-        end
-        table.sort(extra)
-        for _, line in ipairs(extra) do table.insert(parts, line) end
-        return #parts > 0 and table.concat(parts, "  -  ") or "No public stats supplied"
-    end
-
-    local function matches(record, query)
-        if query == "" then return true end
-        local haystack = table.concat({
-            tostring(record.Username or ""),
-            tostring(record.DisplayName or ""),
-            tostring(record.UserId or ""),
-            tostring(record.Game or ""),
-            tostring(record.PlaceId or ""),
-            tostring(record.Server or ""),
-            tostring(record.JobId or ""),
-            tostring(record.Version or ""),
-        }, " "):lower()
-        return string.find(haystack, query:lower(), 1, true) ~= nil
-    end
-
-    local function renderExecutions()
-        if not adminUnlocked then return end
-        clearList()
-        local query = searchBox.Text or ""
-        filteredExecutions = {}
-        for _, record in ipairs(adminExecutions) do
-            if matches(record, query) then
-                table.insert(filteredExecutions, record)
-            end
-        end
-
-        countBadge.Text = tostring(#filteredExecutions) .. " RECORDS"
-
-        if #filteredExecutions == 0 then
-            local empty = Instance.new("Frame")
-            empty.BackgroundColor3 = Theme.WindowTop
-            empty.BackgroundTransparency = 0.20
-            empty.BorderSizePixel = 0
-            empty.Size = UDim2.new(1, -2, 0, 92)
-            empty.Parent = list
-            corner(empty, 10)
-
-            local emptyTitle = text(empty, "No executions yet", 13, Theme.Text, Enum.Font.GothamSemibold)
-            emptyTitle.Position = UDim2.fromOffset(14, 18)
-            emptyTitle.Size = UDim2.new(1, -28, 0, 20)
-            emptyTitle.TextXAlignment = Enum.TextXAlignment.Center
-
-            local emptyMessage = UI.ExecutionLogger.LastError and ("Feed: " .. tostring(UI.ExecutionLogger.LastError)) or "No current global executions were returned by Pipedream."
-            local emptyNote = text(empty, emptyMessage, 10, Theme.Muted, Enum.Font.Gotham)
-            emptyNote.Position = UDim2.fromOffset(14, 44)
-            emptyNote.Size = UDim2.new(1, -28, 0, 18)
-            emptyNote.TextXAlignment = Enum.TextXAlignment.Center
-            return
-        end
-
-        for index, record in ipairs(filteredExecutions) do
-            local row = Instance.new("Frame")
-            row.Name = "Execution_" .. index
-            row.BackgroundColor3 = Theme.WindowTop
-            row.BackgroundTransparency = 0.14
-            row.BorderSizePixel = 0
-            row.Size = UDim2.new(1, -2, 0, 86)
-            row.Parent = list
-            corner(row, 9)
-
-            local user = text(row, tostring(record.Username or "Unknown"), 12, Theme.Text, Enum.Font.GothamSemibold)
-            user.Position = UDim2.fromOffset(12, 8)
-            user.Size = UDim2.new(0.42, 0, 0, 18)
-
-            local display = record.DisplayName and ("Display: " .. tostring(record.DisplayName)) or ""
-            local uid = record.UserId and ("UserId: " .. tostring(record.UserId)) or ""
-            local identity = text(row, display .. ((display ~= "" and uid ~= "") and "  -  " or "") .. uid, 9, Theme.SubText, Enum.Font.Gotham)
-            identity.Position = UDim2.fromOffset(12, 29)
-            identity.Size = UDim2.new(0.62, 0, 0, 15)
-            identity.TextTruncate = Enum.TextTruncate.AtEnd
-
-            local gameInfo = text(row, tostring(record.Game or "Unknown game") .. "  -  Place " .. tostring(record.PlaceId or "?"), 9, Theme.SubText, Enum.Font.Gotham)
-            gameInfo.Position = UDim2.new(0.44, 0, 8, 0)
-            gameInfo.Size = UDim2.new(0.54, -12, 0, 18)
-            gameInfo.TextXAlignment = Enum.TextXAlignment.Right
-            gameInfo.TextTruncate = Enum.TextTruncate.AtEnd
-
-            local server = text(row, "Server: " .. tostring(record.Server or record.JobId or "Unknown"), 9, Theme.Muted, Enum.Font.Gotham)
-            server.Position = UDim2.fromOffset(12, 48)
-            server.Size = UDim2.new(0.58, 0, 0, 15)
-            server.TextTruncate = Enum.TextTruncate.AtEnd
-
-            local version = text(row, "V" .. tostring(record.Version or "3.2.2") .. "  -  " .. tostring(record.Timestamp or ""), 9, Theme.Muted, Enum.Font.Gotham)
-            version.Position = UDim2.new(0.42, 0, 48, 0)
-            version.Size = UDim2.new(0.56, -12, 0, 15)
-            version.TextXAlignment = Enum.TextXAlignment.Right
-            version.TextTruncate = Enum.TextTruncate.AtEnd
-
-            local stats = text(row, stringifyStats(record.Stats), 9, Theme.Muted, Enum.Font.Gotham)
-            stats.Position = UDim2.fromOffset(12, 67)
-            stats.Size = UDim2.new(1, -24, 0, 14)
-            stats.TextTruncate = Enum.TextTruncate.AtEnd
-        end
-    end
-
-    function UI:SetAdminExecutions(entries)
-        if type(entries) ~= "table" then
-            entries = {}
-        end
-        adminExecutions = {}
-        for _, record in ipairs(entries) do
-            if type(record) == "table" then
-                table.insert(adminExecutions, record)
-            end
-        end
-        if adminUnlocked then
-            renderExecutions()
-        end
-    end
-
-    function UI:AddAdminExecution(record)
-        if type(record) ~= "table" then return end
-        table.insert(adminExecutions, 1, record)
-        if adminUnlocked then
-            renderExecutions()
-        end
-    end
-
-    local function unlockAdmin()
-        if passwordBox.Text == ADMIN_PASSWORD then
-            adminUnlocked = true
-            status.Text = "Unlocked - loading global executions..."
-            status.TextColor3 = Theme.Yellow
-            gate.Visible = false
-            dashboard.Visible = true
-            renderExecutions()
-
-            task.spawn(function()
-                local ok, result = UI:FetchGlobalExecutions()
-                if ok then
-                    status.Text = "Global feed connected - " .. tostring(#result) .. " current execution(s)"
-                    status.TextColor3 = Theme.Green
-                else
-                    status.Text = "Global feed error: " .. tostring(result)
-                    status.TextColor3 = Theme.Red
-                end
-                renderExecutions()
-            end)
-        else
-            status.Text = "Incorrect password"
-            status.TextColor3 = Theme.Red
-            task.delay(0.8, function()
-                if status.Parent then
-                    status.Text = "Locked"
-                    status.TextColor3 = Theme.Muted
-                end
-            end)
-        end
-    end
-
-    unlock.MouseButton1Click:Connect(unlockAdmin)
-    passwordBox.FocusLost:Connect(function(enterPressed)
-        if enterPressed then unlockAdmin() end
-    end)
-
-    searchBox:GetPropertyChangedSignal("Text"):Connect(function()
-        if adminUnlocked then renderExecutions() end
-    end)
-
-    refresh.MouseButton1Click:Connect(function()
-        if adminUnlocked then
-            refresh.Text = "⟳"
-            task.spawn(function()
-                local ok = false
-                if UI.ExecutionLogger.PollEndpoint ~= "" then
-                    ok = UI:FetchGlobalExecutions()
-                end
-                if not ok then
-                    renderExecutions()
-                end
-                refresh.Text = "🔄"
-            end)
-        end
-    end)
-end
-
--- ============================================================
--- DISCORD EXECUTION LOGGER + GLOBAL CURRENT FEED
--- ============================================================
--- Discord webhook = execution reporting.
--- Tiny Discord bridge = reads the same channel for the Admin tab.
--- No database is used.
---
--- IMPORTANT: replace the two placeholder URLs below with your own values.
--- The Discord webhook is used only to POST the execution embed.
--- The bridge URL is the public URL of the tiny Discord bot's /executions endpoint.
-
-UI.ExecutionLogger = {
-    Enabled = false,
-    Webhook = "",
-    PollEndpoint = "",
-    Timeout = 8,
-    PollInterval = 8,
-    LastError = nil,
-    LastResponse = nil,
-}
-
-local function findRequestFunction()
-    local candidates = {
-        rawget(getgenv and getgenv() or _G, "request"),
-        rawget(getgenv and getgenv() or _G, "http_request"),
-        rawget(getgenv and getgenv() or _G, "http") and rawget(getgenv and getgenv() or _G, "http").request,
-        rawget(getgenv and getgenv() or _G, "syn") and rawget(getgenv and getgenv() or _G, "syn").request,
-    }
-    for _, fn in ipairs(candidates) do
-        if type(fn) == "function" then
-            return fn
-        end
-    end
-    return nil
-end
-
-local function safeJson(value)
-    local ok, encoded = pcall(function()
-        return HttpService:JSONEncode(value)
-    end)
-    return ok and encoded or nil
-end
-
-local function isoTimestamp()
-    return os.date("!%Y-%m-%dT%H:%M:%SZ")
-end
-
-local function normaliseRecord(record)
-    record = type(record) == "table" and record or {}
-    local localPlayer = Players.LocalPlayer
-
-    return {
-        Username = record.Username or (localPlayer and localPlayer.Name) or "Unknown",
-        DisplayName = record.DisplayName or (localPlayer and localPlayer.DisplayName) or "Unknown",
-        UserId = tonumber(record.UserId) or (localPlayer and localPlayer.UserId) or 0,
-        Game = record.Game or "Unknown",
-        PlaceId = tonumber(record.PlaceId) or game.PlaceId,
-        Server = record.Server or record.JobId or game.JobId or "Unknown",
-        JobId = record.JobId or game.JobId or "Unknown",
-        Executor = record.Executor or "Unknown",
-        Version = record.Version or "3.2.2",
-        Timestamp = record.Timestamp or isoTimestamp(),
-        Stats = type(record.Stats) == "table" and record.Stats or {},
-    }
-end
-
-function UI:ConfigureExecutionLogger(config)
-    config = type(config) == "table" and config or {}
-    self.ExecutionLogger.Webhook = tostring(config.Webhook or self.ExecutionLogger.Webhook or "")
-    self.ExecutionLogger.PollEndpoint = tostring(config.PollEndpoint or self.ExecutionLogger.PollEndpoint or "")
-    self.ExecutionLogger.Enabled = config.Enabled == true
-    self.ExecutionLogger.Timeout = tonumber(config.Timeout) or 8
-    self.ExecutionLogger.PollInterval = tonumber(config.PollInterval) or 8
-    self.ExecutionLogger.LastError = nil
-    return self.ExecutionLogger
-end
-
-function UI:BuildDiscordEmbed(record)
-    record = normaliseRecord(record)
-
-    local statLines = {}
-    for key, value in pairs(record.Stats) do
-        table.insert(statLines, tostring(key) .. ": " .. tostring(value))
-    end
-    table.sort(statLines)
-
-    local fields = {
-        {
-            name = "Player",
-            value = string.format("%s (@%s)", tostring(record.DisplayName), tostring(record.Username)),
-            inline = true,
-        },
-        {
-            name = "UserId",
-            value = tostring(record.UserId),
-            inline = true,
-        },
-        {
-            name = "Game",
-            value = string.format("%s\nPlaceId: `%s`", tostring(record.Game), tostring(record.PlaceId)),
-            inline = true,
-        },
-        {
-            name = "Server / JobId",
-            value = "`" .. tostring(record.JobId or record.Server) .. "`",
-            inline = false,
-        },
-        {
-            name = "Executor",
-            value = tostring(record.Executor),
-            inline = true,
-        },
-    }
-
-    if #statLines > 0 then
-        table.insert(fields, {
-            name = "Public Stats",
-            value = table.concat(statLines, "\n"):sub(1, 1024),
-            inline = false,
-        })
-    end
-
-    return {
-        title = "EMPIRE | SCRIPT EXECUTED",
-        description = string.format("**%s** executed Empire.", tostring(record.Username)),
-        color = 16761930,
-        fields = fields,
-        footer = {text = "Empire V" .. tostring(record.Version)},
-        timestamp = record.Timestamp,
-    }
-end
-
-function UI:BuildDiscordWebhookPayload(record)
-    return {
-        username = "Empire Logger",
-        embeds = {self:BuildDiscordEmbed(record)},
-    }
-end
-
-function UI:SendExecutionLog(record)
-    local logger = self.ExecutionLogger
-    if not logger.Enabled then
-        return false, "Execution logger is disabled."
-    end
-
-    local requestFn = findRequestFunction()
-    if not requestFn then
-        return false, "No executor HTTP request function is available."
-    end
-
-    record = normaliseRecord(record)
-    local payload = {
-        Username = record.Username,
-        DisplayName = record.DisplayName,
-        UserId = record.UserId,
-        Game = record.Game,
-        PlaceId = record.PlaceId,
-        JobId = record.JobId,
-        Server = record.Server,
-        Executor = record.Executor,
-        Version = record.Version,
-        Timestamp = record.Timestamp,
-        Strength = record.Stats and record.Stats.Strength or nil,
-        Durability = record.Stats and record.Stats.Durability or nil,
-        Rebirths = record.Stats and record.Stats.Rebirths or nil,
-        Stats = record.Stats or {},
-    }
-
-    local body = safeJson(payload)
-    if not body then
-        return false, "Unable to JSON-encode execution payload."
-    end
-
-    local sentAny = false
-    local lastError = nil
-
-    -- Send the execution to Pipedream for the global Admin feed.
-    if logger.PollEndpoint ~= "" then
-        local ok, response = pcall(function()
-            return requestFn({
-                Url = logger.PollEndpoint,
-                Method = "POST",
-                Headers = {
-                    ["Content-Type"] = "application/json",
-                    ["Accept"] = "application/json",
-                },
-                Body = body,
-            })
-        end)
-        if ok then
-            logger.LastResponse = response
-            local statusCode = type(response) == "table" and (response.StatusCode or response.status_code or response.Code or response.code) or nil
-            if statusCode and tonumber(statusCode) and tonumber(statusCode) >= 400 then
-                lastError = "Pipedream POST returned HTTP " .. tostring(statusCode)
-            else
-                sentAny = true
-            end
-        else
-            lastError = "Pipedream POST failed: " .. tostring(response)
-        end
-    end
-
-    -- Keep the Discord notification as well.
-    if logger.Webhook ~= "" then
-        local discordBody = safeJson(self:BuildDiscordWebhookPayload(record))
-        if discordBody then
-            local ok, response = pcall(function()
-                return requestFn({
-                    Url = logger.Webhook,
-                    Method = "POST",
-                    Headers = {
-                        ["Content-Type"] = "application/json",
-                    },
-                    Body = discordBody,
-                })
-            end)
-            if ok then
-                sentAny = true
-            else
-                lastError = tostring(response)
-            end
-        end
-    end
-
-    if sentAny then
-        logger.LastError = nil
-        return true, "Execution sent."
-    end
-
-    logger.LastError = lastError or "No execution endpoint is configured."
-    return false, logger.LastError
-end
-
-function UI:FetchGlobalExecutions()
-    local logger = self.ExecutionLogger
-    if not logger.Enabled or logger.PollEndpoint == "" then
-        return false, "Global current feed is disabled or has no bridge endpoint."
-    end
-
-    local requestFn = findRequestFunction()
-    if not requestFn then
-        return false, "No executor HTTP request function is available."
-    end
-
-    local ok, response = pcall(function()
-        return requestFn({
-            Url = logger.PollEndpoint,
-            Method = "GET",
-            Headers = { ["Accept"] = "application/json" },
-        })
-    end)
-
-    if not ok then
-        logger.LastError = tostring(response)
-        return false, logger.LastError
-    end
-
-    local statusCode = type(response) == "table" and (response.StatusCode or response.status_code or response.Code or response.code) or nil
-    if statusCode and tonumber(statusCode) and tonumber(statusCode) >= 400 then
-        logger.LastError = "Global feed returned HTTP " .. tostring(statusCode)
-        return false, logger.LastError
-    end
-
-    local body = type(response) == "table" and (response.Body or response.body or response.ResponseBody or response.responseBody) or response
-    if type(body) ~= "string" then
-        return false, "Global current feed returned no response body."
-    end
-
-    local decodedOk, data = pcall(function()
-        return HttpService:JSONDecode(body)
-    end)
-    if not decodedOk or type(data) ~= "table" then
-        logger.LastError = "Global current feed returned invalid JSON: " .. tostring(body):sub(1, 120)
-        return false, logger.LastError
-    end
-
-    -- Accept Pipedream's direct object response, an array, or common wrappers.
-    local entries = data.executions or data.entries or data.records or data.data
-    if type(entries) == "string" then
-        local nestedOk, nested = pcall(function()
-            return HttpService:JSONDecode(entries)
-        end)
-        if nestedOk then entries = nested end
-    end
-
-    if type(entries) ~= "table" or (type(entries) == "table" and next(entries) == nil) then
-        entries = data
-    end
-
-    local flattened = {}
-    if type(entries) == "table" then
-        for key, value in pairs(entries) do
-            if type(value) == "table" then
-                local record = {}
-                for field, fieldValue in pairs(value) do
-                    record[field] = fieldValue
-                end
-                if record.JobId == nil and record.Server == nil and type(key) ~= "number" then
-                    record.JobId = tostring(key)
-                    record.Server = tostring(key)
-                end
-                table.insert(flattened, record)
-            end
-        end
-    end
-
-    -- If the endpoint returned a normal JSON array, pairs() above preserves its records.
-    entries = flattened
-
-    if type(entries) == "table" then
-        self:SetAdminExecutions(entries)
-        logger.LastError = nil
-        return true, entries
-    end
-
-    return false, "Global current feed returned no execution records."
-end
-
-function UI:StartGlobalExecutionFeed()
-    if self._globalFeedRunning then return end
-    self._globalFeedRunning = true
-    task.spawn(function()
-        while self._globalFeedRunning and self.Gui and self.Gui.Parent do
-            pcall(function() self:FetchGlobalExecutions() end)
-            task.wait(self.ExecutionLogger.PollInterval or 8)
-        end
-    end)
-end
-
-function UI:StopGlobalExecutionFeed()
-    self._globalFeedRunning = false
-end
-
-function UI:LogExecution(record)
-    record = normaliseRecord(record)
-    if self.ExecutionLogger.Enabled then
-        task.spawn(function()
-            self:SendExecutionLog(record)
-        end)
-    end
-    return record
-end
-
-UI.AdminRecordSchema = {
-    "Username", "DisplayName", "UserId", "Game", "PlaceId",
-    "Server", "JobId", "Executor", "Version", "Timestamp", "Stats"
-}
-
--- ============================================================
--- AUTO GLOBAL CURRENT TELEMETRY
--- ============================================================
--- Discord webhook: paste your webhook URL here.
-local EMPIRE_DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1552367569300889601/MMBAd0HKUQgqzc-cn2kl7VdbueIn7k02gwb0n_vXP7_YRdQULNGaYyLgCdUxEtZ1wjEJ"
-
--- Public URL of the tiny Discord bridge, ending in /executions.
-local EMPIRE_POLL_ENDPOINT = "https://eoqj0chxad43q4c.m.pipedream.net"
-
-UI:ConfigureExecutionLogger({
-    Enabled = EMPIRE_DISCORD_WEBHOOK ~= "" and EMPIRE_DISCORD_WEBHOOK ~= "YOUR_DISCORD_WEBHOOK_URL",
-    Webhook = EMPIRE_DISCORD_WEBHOOK,
-    PollEndpoint = EMPIRE_POLL_ENDPOINT,
-    PollInterval = 8,
-})
-
-local function collectPublicStats()
-    local result = {}
-    local player = Players.LocalPlayer
-    local leaderstats = player and player:FindFirstChild("leaderstats")
-    if leaderstats then
-        for _, value in ipairs(leaderstats:GetChildren()) do
-            if value:IsA("ValueBase") then
-                result[value.Name] = value.Value
-            end
-        end
-    end
-
-    -- Explicitly include Durability if the game exposes it outside leaderstats.
-    if result.Durability == nil and player then
-        local aliases = {"Durability", "durability", "Defense", "defense"}
-        for _, alias in ipairs(aliases) do
-            local attr = player:GetAttribute(alias)
-            if attr ~= nil then
-                result.Durability = attr
-                break
-            end
-        end
-    end
-
-    if result.Durability == nil and player then
-        local containers = {"Stats", "Data", "PlayerData"}
-        for _, containerName in ipairs(containers) do
-            local container = player:FindFirstChild(containerName)
-            if container then
-                for _, alias in ipairs(aliases) do
-                    local value = container:FindFirstChild(alias)
-                    if value and value:IsA("ValueBase") then
-                        result.Durability = value.Value
-                        break
-                    end
-                end
-            end
-            if result.Durability ~= nil then break end
-        end
-    end
-
-    return result
-end
-
-if UI.ExecutionLogger.Enabled then
-    local player = Players.LocalPlayer
-    local gameName = "Roblox"
-    pcall(function()
-        local info = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
-        if info and info.Name then
-            gameName = info.Name
-        end
-    end)
-
-    local executor = "Unknown"
-    pcall(function()
-        if type(identifyexecutor) == "function" then
-            executor = identifyexecutor()
-        end
-    end)
-
-    UI:LogExecution({
-        Username = player and player.Name or "Unknown",
-        DisplayName = player and player.DisplayName or "Unknown",
-        UserId = player and player.UserId or 0,
-        Game = gameName,
-        PlaceId = game.PlaceId,
-        JobId = game.JobId,
-        Executor = tostring(executor),
-        Stats = collectPublicStats(),
-    })
-
-    if EMPIRE_POLL_ENDPOINT ~= "" and not string.find(EMPIRE_POLL_ENDPOINT, "YOUR%-PUBLIC%-BRIDGE%-DOMAIN", 1, false) then
-        UI:StartGlobalExecutionFeed()
-    end
-end
-
-
-
--- ==========================================================
--- JOHNNY V13 FEATURE PACK — Windows 11 API COMPATIBILITY
--- ==========================================================
--- The v13 feature pack was written for Elerium-style tab objects.
--- The Windows 11 shell uses Page-based tab objects, so provide the
--- small API bridge here instead of replacing the shell.
-
-local function _JohnnyGetFeatureContent(tab)
-    if tab.FeatureContent and tab.FeatureContent.Parent then
-        return tab.FeatureContent
-    end
-
-    local page = tab.Page
-    if not page then return nil end
-
-    -- IMPORTANT: use the ScrollingFrame itself as the layout container.
-    -- The previous version nested an AutomaticSize Frame inside the
-    -- ScrollingFrame, which could resolve to a zero-height canvas at runtime
-    -- in some Roblox/executor UI environments.
-    page.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    page.ScrollingDirection = Enum.ScrollingDirection.Y
-    page.CanvasSize = UDim2.new(0, 0, 0, 0)
-
-    local pad = page:FindFirstChild("JohnnyFeaturePadding")
-    if not pad then
-        pad = Instance.new("UIPadding")
-        pad.Name = "JohnnyFeaturePadding"
-        pad.PaddingTop = UDim.new(0, 10)
-        pad.PaddingLeft = UDim.new(0, 16)
-        pad.PaddingRight = UDim.new(0, 16)
-        pad.PaddingBottom = UDim.new(0, 18)
-        pad.Parent = page
-    end
-
-    local layout = page:FindFirstChild("JohnnyFeatureLayout")
-    if not layout then
-        layout = Instance.new("UIListLayout")
-        layout.Name = "JohnnyFeatureLayout"
-        layout.SortOrder = Enum.SortOrder.LayoutOrder
-        layout.Padding = UDim.new(0, 8)
-        layout.Parent = page
-    end
-
-    -- The page itself is now the reliable content container.
-    tab.FeatureContent = page
-    return page
-end
-
-local function _JohnnySectionParent(tab)
-    local section = tab._JohnnyCurrentSection
-    if section and section.Body and section.Body.Parent and section.Body.Visible then
-        return section.Body
-    end
-    return _JohnnyGetFeatureContent(tab)
-end
-
-local function _JohnnyMakeSection(tab, titleValue)
-    local parent = _JohnnyGetFeatureContent(tab)
-    if not parent then return nil end
-
-    local section = Instance.new("Frame")
-    section.Name = "Section_" .. tostring(titleValue or "Section"):gsub("%W", "_")
-    section.Size = UDim2.new(1, 0, 0, 44)
-    section.BackgroundColor3 = Theme.Surface
-    section.BackgroundTransparency = 0.14
-    section.BorderSizePixel = 0
-    section.Parent = parent
-    corner(section, 11)
-    stroke(section, Theme.Border, 0.58)
-
-    local header = Instance.new("TextButton")
-    header.Name = "Header"
-    header.BackgroundTransparency = 1
-    header.BorderSizePixel = 0
-    header.AutoButtonColor = false
-    header.Text = ""
-    header.Size = UDim2.new(1, 0, 0, 44)
-    header.Parent = section
-
-    local title = text(header, tostring(titleValue or "Section"), 14, Theme.Text, Enum.Font.GothamSemibold)
-    title.Position = UDim2.fromOffset(14, 0)
-    title.Size = UDim2.new(1, -54, 1, 0)
-
-    local arrow = text(header, "⌃", 18, Theme.SubText, Enum.Font.GothamBold)
-    arrow.TextXAlignment = Enum.TextXAlignment.Center
-    arrow.Position = UDim2.new(1, -42, 0, 0)
-    arrow.Size = UDim2.fromOffset(30, 44)
-
-    local body = Instance.new("Frame")
-    body.Name = "Body"
-    body.BackgroundTransparency = 1
-    body.BorderSizePixel = 0
-    body.Position = UDim2.fromOffset(0, 44)
-    body.Size = UDim2.new(1, 0, 0, 0)
-    body.Parent = section
-
-    local bodyPad = Instance.new("UIPadding")
-    bodyPad.PaddingTop = UDim.new(0, 7)
-    bodyPad.PaddingLeft = UDim.new(0, 9)
-    bodyPad.PaddingRight = UDim.new(0, 9)
-    bodyPad.PaddingBottom = UDim.new(0, 9)
-    bodyPad.Parent = body
-
-    local bodyLayout = Instance.new("UIListLayout")
-    bodyLayout.Name = "ElementLayout"
-    bodyLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    bodyLayout.Padding = UDim.new(0, 6)
-    bodyLayout.Parent = body
-
-    local expanded = true
-    local function syncSection()
-        if expanded then
-            local h = bodyLayout.AbsoluteContentSize.Y + 16
-            body.Size = UDim2.new(1, 0, 0, h)
-            section.Size = UDim2.new(1, 0, 0, 44 + h)
-            arrow.Text = "⌃"
-        else
-            body.Size = UDim2.new(1, 0, 0, 0)
-            section.Size = UDim2.new(1, 0, 0, 44)
-            arrow.Text = "⌄"
-        end
-    end
-    bodyLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(syncSection)
-    header.MouseButton1Click:Connect(function()
-        expanded = not expanded
-        body.Visible = expanded
-        syncSection()
-    end)
-
-    local result = {
-        Tab = tab,
-        Window = tab.Window,
-        Frame = section,
-        Title = title,
-        Header = header,
-        Body = body,
-    }
-    tab._JohnnyCurrentSection = result
-    task.defer(syncSection)
-    return result
-end
-
-local function _JohnnyLooksLikeSection(value)
-    if type(value) ~= "string" or value == "" then return false end
-    local known = {
-        ["Settings"] = true,
-        ["Essenttals:"] = true,
-        ["Rebirth Options"] = true,
-        ["Auto Exercises"] = true,
-        ["Fast Tools"] = true,
-        ["Gym Teleports"] = true,
-        ["Rebirthing:"] = true,
-        ["Stats:"] = true,
-        ["Misc:"] = true,
-        ["Time:"] = true,
-    }
-    if known[value] then return true end
-    if value:sub(-1) == ":" then return true end
-    if value:match("^Fast Farm %(") then return true end
-    return false
-end
-
-local function _JohnnyAddLabel(tab, value)
-    local valueText = tostring(value or "")
-    if _JohnnyLooksLikeSection(valueText) then
-        local section = _JohnnyMakeSection(tab, valueText:gsub(":$", ""))
-        if section then
-            section.Title.TextSize = 14
-        end
-        return section and section.Title or nil
-    end
-
-    local parent = _JohnnySectionParent(tab)
-    if not parent then return nil end
-
-    if valueText == "" then
-        local spacer = Instance.new("Frame")
-        spacer.Name = "Spacer"
-        spacer.BackgroundTransparency = 1
-        spacer.BorderSizePixel = 0
-        spacer.Size = UDim2.new(1, 0, 0, 6)
-        spacer.Parent = parent
-        return spacer
-    end
-
-    local label = text(parent, valueText, 13, Theme.SubText, Enum.Font.Gotham)
-    label.Size = UDim2.new(1, 0, 0, 28)
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.TextWrapped = true
-    return label
-end
-
-local function _JohnnyAddButton(tab, labelText, callback)
-    local parent = _JohnnySectionParent(tab)
-    if not parent then return nil end
-
-    local button = Instance.new("TextButton")
-    button.Name = "JohnnyButton"
-    button.Size = UDim2.new(1, 0, 0, 40)
-    button.BackgroundColor3 = Theme.Surface2
-    button.BackgroundTransparency = 0.05
-    button.BorderSizePixel = 0
-    button.AutoButtonColor = false
-    button.Text = tostring(labelText or "Button")
-    button.TextColor3 = Theme.Text
-    button.TextSize = 12
-    button.Font = Enum.Font.GothamSemibold
-    button.Parent = parent
-    corner(button, 9)
-    stroke(button, Theme.Border, 0.58)
-
-    button.MouseEnter:Connect(function()
-        tween(button, 0.10, {BackgroundColor3 = Theme.SurfaceHover})
-    end)
-    button.MouseLeave:Connect(function()
-        tween(button, 0.10, {BackgroundColor3 = Theme.Surface2})
-    end)
-    button.MouseButton1Click:Connect(function()
-        if type(callback) == "function" then
-            local ok, err = pcall(callback)
-            if not ok then warn("[Johnny] button error: " .. tostring(err)) end
-        end
-    end)
-    return button
-end
-
-local function _JohnnyAddSwitch(tab, labelText, callback)
-    local parent = _JohnnySectionParent(tab)
-    if not parent then return nil end
-
-    local row = Instance.new("Frame")
-    row.Name = "JohnnyToggle"
-    row.Size = UDim2.new(1, 0, 0, 44)
-    row.BackgroundColor3 = Theme.Surface2
-    row.BackgroundTransparency = 0.05
-    row.BorderSizePixel = 0
-    row.Parent = parent
-    corner(row, 9)
-    stroke(row, Theme.Border, 0.58)
-
-    local label = text(row, tostring(labelText or "Switch"), 12, Theme.Text, Enum.Font.GothamMedium)
-    label.Position = UDim2.fromOffset(13, 0)
-    label.Size = UDim2.new(1, -84, 1, 0)
-    label.TextXAlignment = Enum.TextXAlignment.Left
-
-    local toggle = Instance.new("TextButton")
-    toggle.Size = UDim2.fromOffset(50, 24)
-    toggle.Position = UDim2.new(1, -62, 0.5, -12)
-    toggle.BackgroundColor3 = Theme.Muted
-    toggle.BorderSizePixel = 0
-    toggle.AutoButtonColor = false
-    toggle.Text = "OFF"
-    toggle.TextColor3 = Theme.Text
-    toggle.TextSize = 9
-    toggle.Font = Enum.Font.GothamBold
-    toggle.Parent = row
-    corner(toggle, 12)
-
-    local state = false
-    local switch = {}
-    local function apply(newState, fire)
-        state = newState and true or false
-        toggle.Text = state and "ON" or "OFF"
-        toggle.BackgroundColor3 = state and Theme.Green or Theme.Muted
-        if fire and type(callback) == "function" then
-            local ok, err = pcall(callback, state)
-            if not ok then warn("[Johnny] toggle error: " .. tostring(err)) end
-        end
-    end
-    function switch:Set(newState) apply(newState, true) end
-    function switch:Get() return state end
-    switch.Button = toggle
-    switch.Frame = row
-    toggle.MouseButton1Click:Connect(function() apply(not state, true) end)
-    return switch
-end
-
-local function _JohnnyAddTextBox(tab, labelText, callback, options)
-    local parent = _JohnnySectionParent(tab)
-    if not parent then return nil end
-    options = options or {}
-
-    local holder = Instance.new("Frame")
-    holder.Name = "JohnnyInput"
-    holder.Size = UDim2.new(1, 0, 0, 54)
-    holder.BackgroundColor3 = Theme.Surface2
-    holder.BackgroundTransparency = 0.05
-    holder.BorderSizePixel = 0
-    holder.Parent = parent
-    corner(holder, 9)
-    stroke(holder, Theme.Border, 0.58)
-
-    local label = text(holder, tostring(labelText or ""), 11, Theme.SubText, Enum.Font.GothamSemibold)
-    label.Position = UDim2.fromOffset(13, 4)
-    label.Size = UDim2.new(0.42, 0, 1, -8)
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.TextWrapped = true
-
-    local box = Instance.new("TextBox")
-    box.Size = UDim2.new(0.55, 0, 0, 34)
-    box.Position = UDim2.new(0.45, 0, 0.5, -17)
-    box.BackgroundColor3 = Theme.WindowTop
-    box.BackgroundTransparency = 0.08
-    box.BorderSizePixel = 0
-    box.ClearTextOnFocus = false
-    box.Text = ""
-    box.PlaceholderText = options.placeholder or ""
-    box.TextColor3 = Theme.Text
-    box.PlaceholderColor3 = Theme.Muted
-    box.TextSize = 12
-    box.Font = Enum.Font.Gotham
-    box.Parent = holder
-    corner(box, 8)
-    stroke(box, Theme.Border, 0.60)
-    box.FocusLost:Connect(function()
-        if type(callback) == "function" then
-            local ok, err = pcall(callback, box.Text)
-            if not ok then warn("[Johnny] input error: " .. tostring(err)) end
-        end
-    end)
-    return box
-end
-
-function _JohnnyInstallTabCompat(tab)
-    if not tab or not tab.Page then return end
-    tab.AddSection = function(self, titleValue) return _JohnnyMakeSection(self, titleValue) end
-    tab.AddLabel = function(self, value) return _JohnnyAddLabel(self, value) end
-    tab.AddButton = function(self, labelText, callback) return _JohnnyAddButton(self, labelText, callback) end
-    tab.AddSwitch = function(self, labelText, callback) return _JohnnyAddSwitch(self, labelText, callback) end
-    tab.AddTextBox = function(self, labelText, callback, options) return _JohnnyAddTextBox(self, labelText, callback, options) end
-end
-
-for _, _tab in pairs(createdTabs) do
-    _JohnnyInstallTabCompat(_tab)
-    if _tab.Page then
-        _tab.Page.Visible = (_tab == Window.ActiveTab)
-        _tab.Page.ClipsDescendants = true
-    end
-end
-
-
--- ============================================================
--- JOHNNY V13 FEATURE PACK — existing Windows 11 shell preserved
--- ============================================================
-
+--========================================================--
 -- COMMON REFERENCES
 --========================================================--
--- Never block the Windows 11 shell on a game object that may not exist.
--- The old v13 pack used indefinite WaitForChild calls here, which could
--- leave only the shell/Admin page visible forever.
 
-local muscleEvent = Player:FindFirstChild("muscleEvent")
-local leaderstats = Player:FindFirstChild("leaderstats")
-local function _JohnnyFallbackNumberValue(name)
-    local v = Instance.new("NumberValue")
-    v.Name = name
-    v.Value = 0
-    return v
-end
+local muscleEvent = Player:WaitForChild("muscleEvent")
+local leaderstats = Player:WaitForChild("leaderstats")
+local rebirthsStat = leaderstats:WaitForChild("Rebirths")
+local strengthStat = leaderstats:WaitForChild("Strength")
+local durabilityStat = Player:WaitForChild("Durability")
 
-local rebirthsStat = (leaderstats and leaderstats:FindFirstChild("Rebirths")) or _JohnnyFallbackNumberValue("Rebirths")
-local strengthStat = (leaderstats and leaderstats:FindFirstChild("Strength")) or _JohnnyFallbackNumberValue("Strength")
-local durabilityStat = Player:FindFirstChild("Durability") or _JohnnyFallbackNumberValue("Durability")
-
-local rEvents = ReplicatedStorage:FindFirstChild("rEvents")
-local equipPetEvent = rEvents and rEvents:FindFirstChild("equipPetEvent")
-local rebirthRemote = rEvents and rEvents:FindFirstChild("rebirthRemote")
-local changeSpeedSizeRemote = rEvents and rEvents:FindFirstChild("changeSpeedSizeRemote")
+local rEvents = ReplicatedStorage:WaitForChild("rEvents")
+local equipPetEvent = rEvents:WaitForChild("equipPetEvent")
+local rebirthRemote = rEvents:WaitForChild("rebirthRemote")
+local changeSpeedSizeRemote = rEvents:WaitForChild("changeSpeedSizeRemote")
 
 --========================================================--
 -- GLOBAL STATE
@@ -2597,37 +183,35 @@ ReplicatedStorage.ChildAdded:Connect(function(child)
 end)
 
 --========================================================--
--- WINDOWS 11 SECTION MAPPINGS
+-- MAIN TAB
 --========================================================--
 
-local window = Window
-local MainTab = createdTabs.Player
-local FarmingTab = createdTabs.Farming
-local FastRebTab = createdTabs.Rebirth
-local RebirthTab = createdTabs.Rebirth
-local ToolsTab = createdTabs.Misc
-local StatsTab = createdTabs.Stats
-local PetsTab = createdTabs.Pets
-local PerfTab = createdTabs.Perf
-local KillingTab = createdTabs.Killing
+local MainTab = window:AddTab("Player")
+
+-- Additional feature pages use the same Elerium window/library.
+local PetsTab = window:AddTab("Pets")
+local KillingTab = window:AddTab("Killing")
+local StatsTab = window:AddTab("Stats")
+local TicketsTab = window:AddTab("Tickets")
+local PerfTab = window:AddTab("Perf")
+
 local openCompactMode
 
--- Keep utility pages populated instead of leaving them blank.
-KillingTab:AddLabel("Combat:").TextSize = 14
-KillingTab:AddLabel("No separate combat automation was included in the V13 feature pack.")
+--========================================================--
+-- FAST FARM TAB
+--========================================================--
 
---========================================================--
--- FAST FARM TAB / FARMING SECTION
---========================================================--
+local FarmingTab =
+    window:AddTab("Farming")
 
 --========================================================--
 -- FARMING UI
 --========================================================--
 
-StatsTab:AddLabel("Time:").TextSize = 20
+FarmingTab:AddLabel("Time:").TextSize = 20
 
 local stopwatchLabel =
-    StatsTab:AddLabel(
+    FarmingTab:AddLabel(
         "0d 0h 0m 0s - Fast Rep Inactive"
     )
 
@@ -2641,22 +225,22 @@ stopwatchLabel.TextColor3 =
     )
 
 local projectedStrengthLabel =
-    StatsTab:AddLabel(
+    FarmingTab:AddLabel(
         "Strength Pace: 0 /Hour | 0 /Day | 0 /Week"
     )
 
 local projectedDurabilityLabel =
-    StatsTab:AddLabel(
+    FarmingTab:AddLabel(
         "Durability Pace: 0 /Hour | 0 /Day | 0 /Week"
     )
 
 local averageStrengthLabel =
-    StatsTab:AddLabel(
+    FarmingTab:AddLabel(
         "Average Strength Pace: 0 /Hour | 0 /Day | 0 /Week"
     )
 
 local averageDurabilityLabel =
-    StatsTab:AddLabel(
+    FarmingTab:AddLabel(
         "Average Durability Pace: 0 /Hour | 0 /Day | 0 /Week"
     )
 
@@ -2665,22 +249,35 @@ projectedDurabilityLabel.TextSize = 17
 averageStrengthLabel.TextSize = 17
 averageDurabilityLabel.TextSize = 17
 
-StatsTab:AddLabel("").TextSize = 10
+FarmingTab:AddLabel("").TextSize = 10
 
-StatsTab:AddLabel("Stats:").TextSize = 20
+FarmingTab:AddLabel("Stats:").TextSize = 20
 
 local strengthLabel =
-    StatsTab:AddLabel(
+    FarmingTab:AddLabel(
         "Strength: 0 | Gained: 0"
     )
 
 local durabilityLabel =
-    StatsTab:AddLabel(
+    FarmingTab:AddLabel(
         "Durability: 0 | Gained: 0"
     )
 
 strengthLabel.TextSize = 17
 durabilityLabel.TextSize = 17
+
+--========================================================--
+-- STATS TAB
+--========================================================--
+
+StatsTab:AddLabel("Farming Statistics:").TextSize = 20
+local statsStrengthLabel = StatsTab:AddLabel("Strength: 0 | Gained: 0")
+local statsDurabilityLabel = StatsTab:AddLabel("Durability: 0 | Gained: 0")
+local statsFastFarmLabel = StatsTab:AddLabel("Fast Farm: OFF")
+local statsStrengthPaceLabel = StatsTab:AddLabel("Strength Pace: 0 /Hour | 0 /Day | 0 /Week")
+local statsDurabilityPaceLabel = StatsTab:AddLabel("Durability Pace: 0 /Hour | 0 /Day | 0 /Week")
+local statsAverageStrengthLabel = StatsTab:AddLabel("Average Strength Pace: 0 /Hour | 0 /Day | 0 /Week")
+local statsAverageDurabilityLabel = StatsTab:AddLabel("Average Durability Pace: 0 /Hour | 0 /Day | 0 /Week")
 
 --========================================================--
 -- FAST FARM TRACKING
@@ -3041,6 +638,21 @@ task.spawn(function()
     end
 end)
 
+task.spawn(function()
+    while not _G.JohnnyScriptDestroyed do
+        pcall(function()
+            statsStrengthLabel.Text = strengthLabel.Text
+            statsDurabilityLabel.Text = durabilityLabel.Text
+            statsFastFarmLabel.Text = fastRepRunning and "Fast Farm: ON" or "Fast Farm: OFF"
+            statsStrengthPaceLabel.Text = projectedStrengthLabel.Text
+            statsDurabilityPaceLabel.Text = projectedDurabilityLabel.Text
+            statsAverageStrengthLabel.Text = averageStrengthLabel.Text
+            statsAverageDurabilityLabel.Text = averageDurabilityLabel.Text
+        end)
+        task.wait(0.25)
+    end
+end)
+
 --========================================================--
 -- FAST FARM
 --========================================================--
@@ -3083,8 +695,6 @@ local pauseDuration = 1
 
 local pingPaused = false
 local lastKnownPing = 0
-
-FarmingTab:AddLabel("Ping Adjuster:").TextSize = 14
 
 local pingStatusLabel =
     FarmingTab:AddLabel(
@@ -3749,6 +1359,15 @@ FarmingTab:AddButton(
 )
 
 --========================================================--
+-- FARMING ANTI LAG
+--========================================================--
+
+FarmingTab:AddButton(
+    "Anti Lag",
+    activateAntiLag
+)
+
+--========================================================--
 -- INDUSTRIAL GYM SQUAT
 --========================================================--
 
@@ -3801,6 +1420,22 @@ FarmingTab:AddButton(
         task.wait(0.2)
 
         pressE()
+    end
+)
+
+
+--========================================================--
+-- EQUIP SWIFT SAMURAI
+--========================================================--
+
+FarmingTab:AddButton(
+    "Equip Swift Samurai",
+    function()
+
+        equipPetsByName(
+            "Swift Samurai"
+        )
+
     end
 )
 
@@ -4214,7 +1849,8 @@ end)
 -- FAST REBIRTH TAB
 --========================================================--
 
--- Fast Rebirth uses the existing Windows 11 Rebirth section.
+local FastRebTab =
+    window:AddTab("Rebirth")
 
 -- Forward declarations: these are referenced by the mode button callback
 -- before the main Fast Rebirth state/loop is declared below.
@@ -4267,6 +1903,22 @@ local rebirthStatsLabel =
     )
 
 rebirthStatsLabel.TextSize = 17
+
+-- Rebirth statistics are surfaced on the dedicated Stats page as well.
+local statsRebirthLabel = StatsTab:AddLabel("Rebirths: 0 | Gained: 0")
+local statsRebirthPaceLabel = StatsTab:AddLabel("Rebirth Pace: 0 / Hour | 0 / Day | 0 / Week")
+local statsRebirthAverageLabel = StatsTab:AddLabel("Rebirth Average Pace: 0 / Hour | 0 / Day | 0 / Week")
+
+task.spawn(function()
+    while not _G.JohnnyScriptDestroyed do
+        pcall(function()
+            statsRebirthLabel.Text = rebirthStatsLabel.Text
+            statsRebirthPaceLabel.Text = rebirthPaceLabel.Text
+            statsRebirthAverageLabel.Text = rebirthAverageLabel.Text
+        end)
+        task.wait(0.25)
+    end
+end)
 
 --========================================================--
 -- FAST REBIRTH PACE
@@ -4513,61 +2165,67 @@ local function managePets(petName)
 
 end
 
-local function unequipAllPets()
+--========================================================--
+-- PETS TAB
+--========================================================--
+
+PetsTab:AddLabel("Pet Management:").TextSize = 20
+PetsTab:AddLabel("Manual pet controls. These do not start Fast Farm or Fast Rebirth.")
+
+local function getUniquePetsFolderManual()
+    local petsFolder = Player:FindFirstChild("petsFolder")
+    return petsFolder and petsFolder:FindFirstChild("Unique")
+end
+
+local function unequipAllPetsManual()
     local petsFolder = Player:FindFirstChild("petsFolder")
     if not petsFolder or not equipPetEvent then
-        sendNotification("Pets", "Pet event or pets folder is unavailable.")
         return
     end
 
-    local count = 0
     for _, folder in ipairs(petsFolder:GetChildren()) do
         if folder:IsA("Folder") then
             for _, pet in ipairs(folder:GetChildren()) do
                 pcall(function()
                     equipPetEvent:FireServer("unequipPet", pet)
-                    count += 1
                 end)
             end
         end
     end
-    sendNotification("Pets", "Unequip request sent for " .. tostring(count) .. " pet(s).")
 end
 
-local function equipAllNamedPets(petName)
-    local uniquePets = getUniquePetsFolder()
-    if not uniquePets or not equipPetEvent then
-        sendNotification("Pets", "Pet event or Unique pets folder is unavailable.")
+local function equipAllNamedPetsManual(petName)
+    local uniquePets = getUniquePetsFolderManual()
+    if not uniquePets then
         return
     end
 
-    -- Manual pet selection is independent of the Fast Rebirth protected-pet rule.
-    -- Clear the current equipped set first so the selected pet can fill the slots.
-    unequipAllPets()
+    unequipAllPetsManual()
     task.wait(0.10)
 
-    local count = 0
     for _, pet in ipairs(uniquePets:GetChildren()) do
         if pet.Name == petName then
             pcall(function()
                 equipPetEvent:FireServer("equipPet", pet)
-                count += 1
             end)
             task.wait(0.025)
         end
     end
-    sendNotification("Pets", "Equip request sent for " .. tostring(count) .. " " .. petName .. ".")
 end
 
--- Dedicated Pets page: one clear section, no duplicate farming pet controls.
-PetsTab:AddLabel("Pet Management:").TextSize = 14
-PetsTab:AddLabel("Select one pet type to clear the current set and equip every matching copy.")
-PetsTab:AddButton("Equip All Swift Samurai", function() equipAllNamedPets("Swift Samurai") end)
-PetsTab:AddButton("Equip All Mighty Monster", function() equipAllNamedPets("Mighty Monster") end)
-PetsTab:AddButton("Equip All Wild Wizard", function() equipAllNamedPets("Wild Wizard") end)
-PetsTab:AddButton("Equip All Tribal Overlord", function() equipAllNamedPets("Tribal Overlord") end)
-PetsTab:AddButton("Unequip All Pets", unequipAllPets)
-PetsTab:AddLabel("These controls target every matching pet instance in petsFolder.Unique.")
+PetsTab:AddButton("Equip All Swift Samurai", function()
+    equipAllNamedPetsManual("Swift Samurai")
+end)
+PetsTab:AddButton("Equip All Mighty Monster", function()
+    equipAllNamedPetsManual("Mighty Monster")
+end)
+PetsTab:AddButton("Equip All Wild Wizard", function()
+    equipAllNamedPetsManual("Wild Wizard")
+end)
+PetsTab:AddButton("Equip All Tribal Overlord", function()
+    equipAllNamedPetsManual("Tribal Overlord")
+end)
+PetsTab:AddButton("Unequip All Pets", unequipAllPetsManual)
 
 --========================================================--
 -- FAST REBIRTH LOGIC
@@ -4871,9 +2529,11 @@ local function activateAntiLag()
     end
 end
 
-PerfTab:AddLabel("Performance:").TextSize = 14
+
+-- Dedicated performance page. Fast Rebirth keeps its own button as well.
+PerfTab:AddLabel("Performance:").TextSize = 20
 PerfTab:AddButton("Anti Lag", activateAntiLag)
-PerfTab:AddLabel("Performance controls are kept in this tab so Anti Lag is not duplicated elsewhere.")
+PerfTab:AddLabel("Anti Lag uses the same performance routine as the original Fast Farm script.")
 
 FastRebTab:AddButton(
     "Anti Lag",
@@ -5262,7 +2922,7 @@ FastRebTab:AddButton(
 -- REBIRTH TAB
 --========================================================--
 
--- Rebirth uses the existing Windows 11 Rebirth section.
+local RebirthTab = FastRebTab
 
 --========================================================--
 -- REBIRTH OPTIONS
@@ -5414,7 +3074,7 @@ infiniteToggle =
 --========================================================--
 
 
--- Tools uses the existing Windows 11 Misc section.
+local ToolsTab = window:AddTab("Misc")
 
 --========================================================--
 -- AUTO EXERCISES
@@ -6141,7 +3801,13 @@ openCompactMode = function(modeName)
     destroyMainUiForCompactMode()
 end
 
--- Compact mode buttons are registered after the custom UI function exists.
+-- The Elerium main UI buttons are registered only after the custom UI
+-- function exists. This removes the old forward-reference/timing problem.
+
+
+
+-- The Elerium main UI buttons are registered only after the custom UI
+-- function exists. This removes the old forward-reference/timing problem.
 FarmingTab:AddButton("Fast Farm Mode", function()
     openCompactMode("Fast Farm")
 end)
@@ -6151,14 +3817,31 @@ FastRebTab:AddButton("Fast Reb Mode", function()
 end)
 
 --========================================================--
+--========================================================--
+-- KILLING TAB
+--========================================================--
+
+KillingTab:AddLabel("Combat:").TextSize = 20
+KillingTab:AddLabel("No combat automation was included in the supplied Fast Farm feature set.")
+
+--========================================================--
+-- TICKETS TAB
+--========================================================--
+
+TicketsTab:AddLabel("Tickets:").TextSize = 20
+TicketsTab:AddLabel("No ticket automation was included in the supplied Fast Farm feature set.")
+
+--========================================================--
 -- INFO TAB
+--========================================================--
 
 --========================================================--
 
 
-local infoTab = createdTabs.Info
+local infoTab =
+    window:AddTab("Info")
 
--- Windows 11 tabs are selected through Window:SelectTab; no :Show() call is needed.
+infoTab:Show()
 
 infoTab:AddButton(
     "Destroy Script + Anti AFK",
@@ -6336,6 +4019,10 @@ versionLabel.Font =
 --========================================================--
 
 task.wait(0.5)
+
+pcall(function()
+    FarmingTab:Show()
+end)
 
 local antiAfkGui =
     Instance.new("ScreenGui")
@@ -6606,5 +4293,3 @@ end)
 --========================================================--
 -- END
 --========================================================--
-
-return UI
