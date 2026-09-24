@@ -26,6 +26,153 @@ local MacOSKit = {}
 MacOSKit.__index = MacOSKit
 MacOSKit.Version = "2.0.0"
 
+MacOSKit.Diagnostics = {
+    StartedAt = os.clock(),
+    Entries = {},
+    RunOk = nil,
+    RunError = nil,
+}
+
+function MacOSKit:AddDiagnostic(name, ok, detail)
+    local entry = {
+        Name = tostring(name),
+        Ok = ok == true,
+        Detail = tostring(detail or (ok and "OK" or "FAILED")),
+        Time = os.clock(),
+    }
+    table.insert(self.Diagnostics.Entries, entry)
+    return entry.Ok
+end
+
+function MacOSKit:ShowDiagnostics()
+    local d = self.Diagnostics
+    local player = Players.LocalPlayer
+    if not player then return end
+
+    local pg = player:FindFirstChildOfClass("PlayerGui")
+        or player:WaitForChild("PlayerGui", 10)
+    if not pg then return end
+
+    local old = pg:FindFirstChild("JohnnyDiagnostics")
+    if old then old:Destroy() end
+
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "JohnnyDiagnostics"
+    gui.ResetOnSpawn = false
+    gui.IgnoreGuiInset = true
+    gui.DisplayOrder = 2147483647
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    gui.Parent = pg
+
+    local frame = Instance.new("Frame")
+    frame.AnchorPoint = Vector2.new(0.5, 0.5)
+    frame.Position = UDim2.fromScale(0.5, 0.5)
+    frame.Size = UDim2.fromOffset(920, 620)
+    frame.BackgroundColor3 = Color3.fromRGB(7, 8, 11)
+    frame.BorderSizePixel = 0
+    frame.Parent = gui
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = d.RunOk == false and Color3.fromRGB(255, 75, 75) or Color3.fromRGB(75, 145, 255)
+    stroke.Thickness = 2
+    stroke.Parent = frame
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 14)
+    corner.Parent = frame
+
+    local title = Instance.new("TextLabel")
+    title.BackgroundTransparency = 1
+    title.Position = UDim2.fromOffset(18, 12)
+    title.Size = UDim2.new(1, -70, 0, 30)
+    title.Font = Enum.Font.GothamBold
+    title.Text = "JOHNNY — FULL DIAGNOSTICS"
+    title.TextColor3 = Color3.fromRGB(245, 245, 248)
+    title.TextSize = 18
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = frame
+
+    local close = Instance.new("TextButton")
+    close.Size = UDim2.fromOffset(30, 28)
+    close.Position = UDim2.new(1, -44, 0, 11)
+    close.BackgroundColor3 = Color3.fromRGB(42, 44, 52)
+    close.BorderSizePixel = 0
+    close.Text = "X"
+    close.TextColor3 = Color3.fromRGB(240, 240, 245)
+    close.TextSize = 12
+    close.Font = Enum.Font.GothamBold
+    close.Parent = frame
+    corner(close, 7)
+    close.MouseButton1Click:Connect(function()
+        gui:Destroy()
+    end)
+
+    local summary = Instance.new("TextLabel")
+    summary.BackgroundTransparency = 1
+    summary.Position = UDim2.fromOffset(18, 44)
+    summary.Size = UDim2.new(1, -36, 0, 42)
+    summary.Font = Enum.Font.Gotham
+    summary.TextSize = 12
+    summary.TextColor3 = Color3.fromRGB(165, 170, 180)
+    summary.TextXAlignment = Enum.TextXAlignment.Left
+    summary.TextYAlignment = Enum.TextYAlignment.Top
+    summary.TextWrapped = true
+    summary.Parent = frame
+
+    local list = Instance.new("ScrollingFrame")
+    list.Name = "ErrorList"
+    list.Position = UDim2.fromOffset(18, 92)
+    list.Size = UDim2.new(1, -36, 1, -110)
+    list.BackgroundColor3 = Color3.fromRGB(12, 14, 19)
+    list.BackgroundTransparency = 0.1
+    list.BorderSizePixel = 0
+    list.ScrollBarThickness = 6
+    list.ScrollBarImageTransparency = 0.2
+    list.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    list.CanvasSize = UDim2.fromOffset(0, 0)
+    list.Parent = frame
+    corner(list, 9)
+    local pad = Instance.new("UIPadding")
+    pad.PaddingLeft = UDim.new(0, 10)
+    pad.PaddingRight = UDim.new(0, 10)
+    pad.PaddingTop = UDim.new(0, 8)
+    pad.PaddingBottom = UDim.new(0, 8)
+    pad.Parent = list
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 5)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = list
+
+    local failed = 0
+    for _, e in ipairs(d.Entries) do
+        if not e.Ok then failed += 1 end
+        local row = Instance.new("TextLabel")
+        row.BackgroundColor3 = e.Ok and Color3.fromRGB(17, 42, 29) or Color3.fromRGB(52, 20, 24)
+        row.BackgroundTransparency = 0.08
+        row.BorderSizePixel = 0
+        row.Size = UDim2.new(1, -4, 0, e.Ok and 28 or 58)
+        row.Font = Enum.Font.Code
+        row.TextSize = 12
+        row.TextColor3 = e.Ok and Color3.fromRGB(150, 255, 175) or Color3.fromRGB(255, 150, 155)
+        row.TextXAlignment = Enum.TextXAlignment.Left
+        row.TextYAlignment = Enum.TextYAlignment.Center
+        row.TextWrapped = true
+        row.Text = (e.Ok and "[PASS] " or "[FAIL] ") .. e.Name .. "  |  " .. e.Detail
+        row.Parent = list
+        corner(row, 6)
+        addPadding(row, 8, 8, 2, 2)
+    end
+
+    summary.Text =
+        string.format(
+            "Entries: %d   |   Failures: %d   |   Runtime: %s\n%s",
+            #d.Entries,
+            failed,
+            d.RunOk == true and "COMPLETED" or "STOPPED ON ERROR",
+            d.RunError and tostring(d.RunError) or "No top-level runtime error captured."
+        )
+end
+
 local Themes = {
     Violet = {accent = Color3.fromRGB(122, 90, 230), accent2 = Color3.fromRGB(58, 143, 255)},
     Midnight = {accent = Color3.fromRGB(47, 95, 224), accent2 = Color3.fromRGB(31, 176, 224)},
@@ -36,9 +183,13 @@ local Themes = {
 
 local function safeCall(fn, ...)
     local args = table.pack(...)
-    return pcall(function()
+    local ok, result = pcall(function()
         return fn(table.unpack(args, 1, args.n))
     end)
+    if not ok then
+        MacOSKit:AddDiagnostic("Callback/runtime", false, tostring(result))
+    end
+    return ok, result
 end
 
 local function tween(instance, duration, properties, style, direction)
@@ -1168,9 +1319,17 @@ end
 
 local window = windowResult
 if not window then
+    MacOSKit:AddDiagnostic("MacOSKit:AddWindow", false, "returned nil")
     showStartupError("MacOSKit:AddWindow returned nil")
     return
 end
+
+MacOSKit:AddDiagnostic("MacOSKit:AddWindow", true, "Window object created")
+MacOSKit:AddDiagnostic("PlayerGui", window.Gui and window.Gui.Parent ~= nil, window.Gui and tostring(window.Gui.Parent) or "Gui missing")
+MacOSKit:AddDiagnostic("Glass root", window.Main ~= nil, window.Main and ("size=" .. tostring(window.Main.AbsoluteSize)) or "Missing Window frame")
+MacOSKit:AddDiagnostic("Glass gradient", window.Main and window.Main:FindFirstChildOfClass("UIGradient") ~= nil, window.Main and "UIGradient attached to root" or "Root missing")
+MacOSKit:AddDiagnostic("Sidebar", window.Sidebar ~= nil, window.Sidebar and "Sidebar created" or "Sidebar missing")
+MacOSKit:AddDiagnostic("Pages", window.Pages ~= nil, window.Pages and "Pages container created" or "Pages missing")
 
 --========================================================--
 -- COMMON REFERENCES
@@ -5560,7 +5719,65 @@ end
 -- Latest compiler-compatible build
 end
 
-runJohnny()
+MacOSKit.Diagnostics.RunOk, MacOSKit.Diagnostics.RunError = xpcall(runJohnny, debug.traceback)
+
+MacOSKit:AddDiagnostic(
+    "Johnny feature startup",
+    MacOSKit.Diagnostics.RunOk == true,
+    MacOSKit.Diagnostics.RunOk and "Completed" or tostring(MacOSKit.Diagnostics.RunError)
+)
+
+if MacOSKit.Window then
+    local w = MacOSKit.Window
+    local expectedTabs = {
+        Farming = true,
+        Rebirth = true,
+        Pets = true,
+        Player = true,
+        Killing = true,
+        Stats = true,
+        Admin = true,
+        Perf = true,
+        Themes = true,
+        Misc = true,
+        Tools = true,
+        Info = true,
+    }
+
+    local found = 0
+    for name in pairs(expectedTabs) do
+        local tab = w.Tabs[name]
+        local ok = tab ~= nil
+        if ok then found += 1 end
+        MacOSKit:AddDiagnostic(
+            "Tab: " .. name,
+            ok,
+            ok and ("page=" .. tostring(tab.Page ~= nil) .. ", icon=" .. tostring(tab.Nav and tab.Nav:FindFirstChild("Icon") ~= nil))
+                or "MISSING"
+        )
+    end
+
+    MacOSKit:AddDiagnostic(
+        "Tab completeness",
+        found == 12,
+        tostring(found) .. "/12 expected tabs found"
+    )
+
+    local root = w.Main
+    MacOSKit:AddDiagnostic(
+        "Black glass base",
+        root and root.BackgroundColor3 == Color3.fromRGB(3, 4, 7),
+        root and ("RGB=" .. tostring(root.BackgroundColor3)) or "Missing root"
+    )
+
+    MacOSKit:AddDiagnostic(
+        "Root visible",
+        root and root.Visible == true,
+        root and tostring(root.Visible) or "Missing root"
+    )
+end
+
+MacOSKit:ShowDiagnostics()
 
 --========================================================--
 -- END
