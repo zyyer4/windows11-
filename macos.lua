@@ -1,75 +1,71 @@
 --[[
     MacOSKit
-    macOS-inspired Roblox UI library for the Empire project.
-    API-compatible with the existing Elerium-style calls used by windows:
-      local Window = MacOSKit:AddWindow("Title", config)
-      local Tab = Window:AddTab("Player")
-      Tab:AddLabel("Hello")
-      Tab:AddButton("Run", callback)
-      Tab:AddTextBox("Name", callback)
-      Tab:Show()
-      Window:Notify("Title", "Message")
-
-    Built from the supplied macos-ui-kit.html visual language:
-    glass window, traffic-light controls, sidebar navigation, cards,
-    collapsible sections, accent themes, compact mode and motion.
+    Stable native Roblox UI library for the Empire script.
+    Keeps the existing Elerium-style API used by "windows":
+        Window = Library:AddWindow(title, config)
+        Tab = Window:AddTab(name)
+        Tab:AddLabel(text)
+        Tab:AddButton(text, callback)
+        Tab:AddTextBox(label, callback)
+        Tab:AddSwitch(text, callback)
+        Tab:AddToggle(text, default, callback)
+        Tab:AddSection(text)
+        Tab:Show()
+        Switch:Set(value)
+        Switch:Get()
+        Window:Notify(title, message, duration)
 ]]
 
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
-local CoreGui = game:GetService("CoreGui")
 
 local LocalPlayer = Players.LocalPlayer
 
 local MacOSKit = {}
 MacOSKit.__index = MacOSKit
-MacOSKit.Version = "1.0.0"
+MacOSKit.Version = "2.0.0"
 
 local Themes = {
-    Violet = {
-        accent = Color3.fromRGB(122, 90, 230),
-        accent2 = Color3.fromRGB(58, 143, 255),
-        blob = Color3.fromRGB(106, 79, 216),
-    },
-    Midnight = {
-        accent = Color3.fromRGB(47, 95, 224),
-        accent2 = Color3.fromRGB(31, 176, 224),
-        blob = Color3.fromRGB(47, 95, 224),
-    },
-    Emerald = {
-        accent = Color3.fromRGB(34, 197, 138),
-        accent2 = Color3.fromRGB(31, 174, 106),
-        blob = Color3.fromRGB(34, 197, 138),
-    },
-    Crimson = {
-        accent = Color3.fromRGB(255, 95, 87),
-        accent2 = Color3.fromRGB(224, 57, 47),
-        blob = Color3.fromRGB(255, 95, 87),
-    },
-    Mono = {
-        accent = Color3.fromRGB(154, 154, 160),
-        accent2 = Color3.fromRGB(95, 95, 102),
-        blob = Color3.fromRGB(95, 95, 102),
-    },
+    Violet = {accent = Color3.fromRGB(122, 90, 230), accent2 = Color3.fromRGB(58, 143, 255)},
+    Midnight = {accent = Color3.fromRGB(47, 95, 224), accent2 = Color3.fromRGB(31, 176, 224)},
+    Emerald = {accent = Color3.fromRGB(34, 197, 138), accent2 = Color3.fromRGB(31, 174, 106)},
+    Crimson = {accent = Color3.fromRGB(255, 95, 87), accent2 = Color3.fromRGB(224, 57, 47)},
+    Mono = {accent = Color3.fromRGB(154, 154, 160), accent2 = Color3.fromRGB(95, 95, 102)},
 }
 
-local function tween(instance, info, props)
-    local t = TweenService:Create(instance, info, props)
-    t:Play()
-    return t
+local function safeCall(fn, ...)
+    local args = table.pack(...)
+    return pcall(function()
+        return fn(table.unpack(args, 1, args.n))
+    end)
+end
+
+local function tween(instance, duration, properties, style, direction)
+    if not instance or not instance.Parent then return end
+    local ok, result = pcall(function()
+        local info = TweenInfo.new(
+            duration or 0.2,
+            style or Enum.EasingStyle.Quad,
+            direction or Enum.EasingDirection.Out
+        )
+        local t = TweenService:Create(instance, info, properties)
+        t:Play()
+        return t
+    end)
+    return ok and result or nil
 end
 
 local function corner(parent, radius)
     local c = Instance.new("UICorner")
-    c.CornerRadius = UDim.new(0, radius)
+    c.CornerRadius = UDim.new(0, radius or 8)
     c.Parent = parent
     return c
 end
 
-local function stroke(parent, color, transparency, thickness)
+local function addStroke(parent, color, transparency, thickness)
     local s = Instance.new("UIStroke")
-    s.Color = color
+    s.Color = color or Color3.new(1, 1, 1)
     s.Transparency = transparency or 0
     s.Thickness = thickness or 1
     s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
@@ -77,85 +73,117 @@ local function stroke(parent, color, transparency, thickness)
     return s
 end
 
-local function padding(parent, l, r, t, b)
+local function addPadding(parent, left, right, top, bottom)
     local p = Instance.new("UIPadding")
-    p.PaddingLeft = UDim.new(0, l or 0)
-    p.PaddingRight = UDim.new(0, r or l or 0)
-    p.PaddingTop = UDim.new(0, t or l or 0)
-    p.PaddingBottom = UDim.new(0, b or t or l or 0)
+    p.PaddingLeft = UDim.new(0, left or 0)
+    p.PaddingRight = UDim.new(0, right == nil and (left or 0) or right)
+    p.PaddingTop = UDim.new(0, top == nil and (left or 0) or top)
+    p.PaddingBottom = UDim.new(0, bottom == nil and (top == nil and (left or 0) or top) or bottom)
     p.Parent = parent
     return p
 end
 
-local function makeText(parent, text, size, color, font)
-    local label = Instance.new("TextLabel")
-    label.BackgroundTransparency = 1
-    label.Text = tostring(text or "")
-    label.TextColor3 = color or Color3.fromRGB(242, 242, 244)
-    label.TextSize = size or 13
-    label.Font = font or Enum.Font.Gotham
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.TextYAlignment = Enum.TextYAlignment.Center
-    label.Parent = parent
-    return label
+local function label(parent, text, size, color, font)
+    local l = Instance.new("TextLabel")
+    l.BackgroundTransparency = 1
+    l.Text = tostring(text or "")
+    l.TextColor3 = color or Color3.fromRGB(242, 242, 244)
+    l.TextSize = size or 13
+    l.Font = font or Enum.Font.Gotham
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.TextYAlignment = Enum.TextYAlignment.Center
+    l.Parent = parent
+    return l
+end
+
+-- Executors differ in what GUI parents they allow. Never force CoreGui.
+local function getGuiParent()
+    local gethuiFn = rawget(getfenv and getfenv() or _G, "gethui")
+    if typeof(gethuiFn) == "function" then
+        local ok, hui = pcall(gethuiFn)
+        if ok and hui then
+            return hui
+        end
+    end
+
+    local playerGui = LocalPlayer and LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    if playerGui then
+        return playerGui
+    end
+
+    if LocalPlayer then
+        local ok, result = pcall(function()
+            return LocalPlayer:WaitForChild("PlayerGui", 10)
+        end)
+        if ok and result then
+            return result
+        end
+    end
+
+    return nil
 end
 
 local function protectGui(gui)
-    pcall(function()
-        if gethui then
-            gui.Parent = gethui()
-            return
-        end
+    local parent = getGuiParent()
+    if not parent then
+        error("MacOSKit: PlayerGui is not available yet")
+    end
+
+    local ok, err = pcall(function()
+        gui.Parent = parent
     end)
 
-    pcall(function()
-        if syn and syn.protect_gui then
-            syn.protect_gui(gui)
-        end
-    end)
+    if not ok then
+        error("MacOSKit: unable to parent ScreenGui: " .. tostring(err))
+    end
 
-    gui.Parent = CoreGui
+    local synGlobal = rawget(getfenv and getfenv() or _G, "syn")
+    if type(synGlobal) == "table" and type(synGlobal.protect_gui) == "function" then
+        pcall(synGlobal.protect_gui, gui)
+    end
+
+    return gui
 end
 
 local function makeDraggable(handle, target)
     local dragging = false
     local dragStart
-    local startPos
-    local connection
+    local startPosition
+    local dragInput
 
     handle.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1
-            or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = target.Position
-
-            if connection then connection:Disconnect() end
-            connection = input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                    if connection then
-                        connection:Disconnect()
-                        connection = nil
-                    end
-                end
-            end)
-        end
-    end)
-
-    UserInputService.InputChanged:Connect(function(input)
-        if not dragging then return end
-        if input.UserInputType ~= Enum.UserInputType.MouseMovement
+        if input.UserInputType ~= Enum.UserInputType.MouseButton1
             and input.UserInputType ~= Enum.UserInputType.Touch then
             return
         end
 
+        dragging = true
+        dragStart = input.Position
+        startPosition = target.Position
+
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end)
+
+    handle.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if not dragging or input ~= dragInput then return end
+
         local delta = input.Position - dragStart
         target.Position = UDim2.new(
-            startPos.X.Scale,
-            startPos.X.Offset + delta.X,
-            startPos.Y.Scale,
-            startPos.Y.Offset + delta.Y
+            startPosition.X.Scale,
+            startPosition.X.Offset + delta.X,
+            startPosition.Y.Scale,
+            startPosition.Y.Offset + delta.Y
         )
     end)
 end
@@ -163,89 +191,88 @@ end
 local Window = {}
 Window.__index = Window
 
-function Window:_setVisible(value)
-    self.Gui.Enabled = value
-end
-
 function Window:SetTheme(name)
     local theme = Themes[name] or Themes.Violet
-    self.ThemeName = name
+    self.ThemeName = Themes[name] and name or "Violet"
     self.Theme = theme
 
-    self.AccentGradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, theme.accent),
-        ColorSequenceKeypoint.new(1, theme.accent2),
-    })
-
-    for _, tab in pairs(self.Tabs) do
-        tab:_refresh()
+    if self.AccentGradient then
+        self.AccentGradient.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, theme.accent),
+            ColorSequenceKeypoint.new(1, theme.accent2),
+        })
     end
 
-    for _, button in ipairs(self.ThemeButtons) do
-        button.BackgroundColor3 = theme.accent
+    for _, tab in pairs(self.Tabs) do
+        if tab and tab._refresh then
+            tab:_refresh()
+        end
     end
 end
 
 function Window:Notify(title, message, duration)
+    if not self.Gui or not self.Gui.Parent then return end
+
     local toast = Instance.new("Frame")
-    toast.Name = "Toast"
-    toast.Size = UDim2.fromOffset(290, 70)
-    toast.Position = UDim2.new(1, 20, 1, -90)
+    toast.Name = "Notification"
     toast.AnchorPoint = Vector2.new(1, 1)
-    toast.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
-    toast.BackgroundTransparency = 0.08
+    toast.Position = UDim2.new(1, 340, 1, -18)
+    toast.Size = UDim2.fromOffset(310, 72)
+    toast.BackgroundColor3 = Color3.fromRGB(25, 25, 29)
+    toast.BackgroundTransparency = 0.04
+    toast.BorderSizePixel = 0
     toast.ZIndex = 100
     toast.Parent = self.Gui
-    corner(toast, 10)
-    stroke(toast, Color3.fromRGB(255,255,255), 0.82, 1)
+    corner(toast, 11)
+    addStroke(toast, Color3.fromRGB(255, 255, 255), 0.82, 1)
 
-    local accent = Instance.new("Frame")
-    accent.Size = UDim2.new(0, 3, 1, -16)
-    accent.Position = UDim2.fromOffset(8, 8)
-    accent.BackgroundColor3 = self.Theme.accent
-    accent.ZIndex = 101
-    accent.Parent = toast
-    corner(accent, 2)
+    local bar = Instance.new("Frame")
+    bar.Size = UDim2.new(0, 3, 1, -16)
+    bar.Position = UDim2.fromOffset(8, 8)
+    bar.BackgroundColor3 = self.Theme.accent
+    bar.BorderSizePixel = 0
+    bar.ZIndex = 101
+    bar.Parent = toast
+    corner(bar, 2)
 
-    local titleLabel = makeText(toast, title or "Notification", 13, Color3.fromRGB(245,245,247), Enum.Font.GothamBold)
-    titleLabel.Position = UDim2.fromOffset(20, 9)
-    titleLabel.Size = UDim2.new(1, -28, 0, 20)
-    titleLabel.ZIndex = 101
+    local titleText = label(toast, title or "Notification", 13, Color3.fromRGB(245,245,247), Enum.Font.GothamBold)
+    titleText.Position = UDim2.fromOffset(20, 8)
+    titleText.Size = UDim2.new(1, -28, 0, 21)
+    titleText.ZIndex = 101
 
-    local messageLabel = makeText(toast, message or "", 11, Color3.fromRGB(152,152,158), Enum.Font.Gotham)
-    messageLabel.Position = UDim2.fromOffset(20, 31)
-    messageLabel.Size = UDim2.new(1, -28, 0, 28)
-    messageLabel.TextWrapped = true
-    messageLabel.ZIndex = 101
+    local messageText = label(toast, message or "", 11, Color3.fromRGB(175,175,181), Enum.Font.Gotham)
+    messageText.Position = UDim2.fromOffset(20, 31)
+    messageText.Size = UDim2.new(1, -28, 0, 32)
+    messageText.TextWrapped = true
+    messageText.ZIndex = 101
 
-    tween(toast, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-        Position = UDim2.new(1, -18, 1, -90)
-    })
+    tween(toast, 0.3, {Position = UDim2.new(1, -18, 1, -18)}, Enum.EasingStyle.Back)
 
     task.delay(duration or 3, function()
         if not toast.Parent then return end
-        tween(toast, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-            Position = UDim2.new(1, 20, 1, -90),
+        tween(toast, 0.2, {
+            Position = UDim2.new(1, 340, 1, -18),
             BackgroundTransparency = 1
         })
-        task.wait(0.28)
-        toast:Destroy()
+        task.wait(0.22)
+        if toast.Parent then toast:Destroy() end
     end)
 end
 
 function Window:Minimize()
-    if self.Minimized then return end
+    if self.Minimized then
+        return self:Restore()
+    end
+
     self.Minimized = true
     self.Body.Visible = false
-    tween(self.Main, TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-        Size = UDim2.fromOffset(self.Config.min_size.X, 46)
-    })
+    tween(self.Main, 0.2, {Size = UDim2.fromOffset(self.CurrentSize.X, 46)})
 end
 
 function Window:Restore()
     self.Minimized = false
     self.Body.Visible = true
-    tween(self.Main, TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+    tween(self.Main, 0.2, {
         Size = UDim2.fromOffset(self.CurrentSize.X, self.CurrentSize.Y)
     })
 end
@@ -253,23 +280,29 @@ end
 function Window:Maximize()
     if self.Maximized then
         self.Maximized = false
-        tween(self.Main, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+        tween(self.Main, 0.2, {
             Position = self.RestorePosition,
             Size = UDim2.fromOffset(self.CurrentSize.X, self.CurrentSize.Y)
         })
-    else
-        self.Maximized = true
-        self.RestorePosition = self.Main.Position
-        tween(self.Main, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-            Position = UDim2.fromScale(0.5, 0.5),
-            Size = UDim2.new(0.94, 0, 0.90, 0)
-        })
+        return
     end
+
+    self.Maximized = true
+    self.RestorePosition = self.Main.Position
+    tween(self.Main, 0.2, {
+        Position = UDim2.fromScale(0.5, 0.5),
+        Size = UDim2.new(0.94, 0, 0.90, 0)
+    })
 end
 
 function Window:Destroy()
     if self.Gui then
-        self.Gui:Destroy()
+        pcall(function()
+            self.Gui:Destroy()
+        end)
+    end
+    if MacOSKit.Window == self then
+        MacOSKit.Window = nil
     end
 end
 
@@ -277,14 +310,16 @@ local Tab = {}
 Tab.__index = Tab
 
 function Tab:_refresh()
-    local selected = self == self.Window.ActiveTab
+    if not self.Nav or not self.Page or not self.Window then return end
+
+    local selected = self.Window.ActiveTab == self
     local theme = self.Window.Theme
 
-    self.Nav.BackgroundTransparency = selected and 0.70 or 1
     self.Nav.BackgroundColor3 = theme.accent
+    self.Nav.BackgroundTransparency = selected and 0.72 or 1
     self.Nav.TextColor3 = selected
-        and Color3.fromRGB(245,245,247)
-        or Color3.fromRGB(152,152,158)
+        and Color3.fromRGB(248,248,250)
+        or Color3.fromRGB(155,155,163)
 
     self.Page.Visible = selected
 end
@@ -303,17 +338,16 @@ function Tab:AddLabel(text)
     row.BackgroundTransparency = 1
     row.Parent = self.Content
 
-    local label = makeText(row, text, 13, Color3.fromRGB(152,152,158), Enum.Font.Gotham)
-    label.Size = UDim2.new(1, 0, 1, 0)
-    label.TextWrapped = true
-
-    return label
+    local l = label(row, text, 13, Color3.fromRGB(164,164,172), Enum.Font.Gotham)
+    l.Size = UDim2.new(1, 0, 1, 0)
+    l.TextWrapped = true
+    return l
 end
 
 function Tab:AddButton(text, callback)
     local button = Instance.new("TextButton")
     button.Name = "Button"
-    button.Size = UDim2.new(1, 0, 0, 34)
+    button.Size = UDim2.new(1, 0, 0, 36)
     button.BackgroundColor3 = Color3.fromRGB(255,255,255)
     button.BackgroundTransparency = 0.93
     button.BorderSizePixel = 0
@@ -325,36 +359,28 @@ function Tab:AddButton(text, callback)
     button.TextXAlignment = Enum.TextXAlignment.Left
     button.Parent = self.Content
     corner(button, 8)
-    local s = stroke(button, Color3.fromRGB(255,255,255), 0.90, 1)
-    padding(button, 12, 12)
+    addPadding(button, 12, 12)
+
+    local outline = addStroke(button, Color3.fromRGB(255,255,255), 0.90, 1)
 
     button.MouseEnter:Connect(function()
-        tween(button, TweenInfo.new(0.15), {
-            BackgroundTransparency = 0.87
-        })
-        tween(s, TweenInfo.new(0.15), {
-            Transparency = 0.78
-        })
+        tween(button, 0.12, {BackgroundTransparency = 0.87})
+        tween(outline, 0.12, {Transparency = 0.76})
     end)
 
     button.MouseLeave:Connect(function()
-        tween(button, TweenInfo.new(0.15), {
-            BackgroundTransparency = 0.93
-        })
-        tween(s, TweenInfo.new(0.15), {
-            Transparency = 0.90
-        })
+        tween(button, 0.12, {BackgroundTransparency = 0.93})
+        tween(outline, 0.12, {Transparency = 0.90})
     end)
 
     button.MouseButton1Click:Connect(function()
-        if callback then
-            task.spawn(function()
-                local ok, err = pcall(callback)
-                if not ok then
-                    self.Window:Notify("Callback error", tostring(err))
-                end
-            end)
-        end
+        if type(callback) ~= "function" then return end
+        task.spawn(function()
+            local ok, err = safeCall(callback)
+            if not ok then
+                self.Window:Notify("Callback error", tostring(err))
+            end
+        end)
     end)
 
     return button
@@ -363,16 +389,16 @@ end
 function Tab:AddTextBox(labelText, callback)
     local holder = Instance.new("Frame")
     holder.Name = "TextBox"
-    holder.Size = UDim2.new(1, 0, 0, 58)
+    holder.Size = UDim2.new(1, 0, 0, 60)
     holder.BackgroundTransparency = 1
     holder.Parent = self.Content
 
-    local label = makeText(holder, labelText, 11, Color3.fromRGB(152,152,158), Enum.Font.GothamSemibold)
-    label.Size = UDim2.new(1, 0, 0, 18)
+    local l = label(holder, labelText, 11, Color3.fromRGB(155,155,163), Enum.Font.GothamSemibold)
+    l.Size = UDim2.new(1, 0, 0, 18)
 
     local box = Instance.new("TextBox")
-    box.Size = UDim2.new(1, 0, 0, 32)
-    box.Position = UDim2.fromOffset(0, 22)
+    box.Size = UDim2.new(1, 0, 0, 34)
+    box.Position = UDim2.fromOffset(0, 23)
     box.BackgroundColor3 = Color3.fromRGB(255,255,255)
     box.BackgroundTransparency = 0.94
     box.BorderSizePixel = 0
@@ -385,18 +411,17 @@ function Tab:AddTextBox(labelText, callback)
     box.ClearTextOnFocus = false
     box.Parent = holder
     corner(box, 7)
-    stroke(box, Color3.fromRGB(255,255,255), 0.88, 1)
-    padding(box, 10, 10)
+    addStroke(box, Color3.fromRGB(255,255,255), 0.88, 1)
+    addPadding(box, 10, 10)
 
     box.FocusLost:Connect(function()
-        if callback then
-            task.spawn(function()
-                local ok, err = pcall(callback, box.Text)
-                if not ok then
-                    self.Window:Notify("Input error", tostring(err))
-                end
-            end)
-        end
+        if type(callback) ~= "function" then return end
+        task.spawn(function()
+            local ok, err = safeCall(callback, box.Text)
+            if not ok then
+                self.Window:Notify("Input error", tostring(err))
+            end
+        end)
     end)
 
     return box
@@ -409,34 +434,41 @@ function Tab:AddToggle(text, default, callback)
     row.BackgroundTransparency = 1
     row.Parent = self.Content
 
-    local label = makeText(row, text, 12, Color3.fromRGB(218,218,222), Enum.Font.Gotham)
-    label.Size = UDim2.new(1, -54, 1, 0)
+    local l = label(row, text, 12, Color3.fromRGB(218,218,222), Enum.Font.Gotham)
+    l.Size = UDim2.new(1, -54, 1, 0)
 
     local switch = Instance.new("TextButton")
-    switch.Size = UDim2.fromOffset(34, 20)
-    switch.Position = UDim2.new(1, -34, 0.5, -10)
-    switch.BackgroundColor3 = Color3.fromRGB(75,75,82)
+    switch.Size = UDim2.fromOffset(36, 21)
+    switch.Position = UDim2.new(1, -36, 0.5, -10.5)
+    switch.BackgroundColor3 = Color3.fromRGB(70,70,78)
+    switch.BorderSizePixel = 0
     switch.Text = ""
     switch.AutoButtonColor = false
     switch.Parent = row
-    corner(switch, 10)
+    corner(switch, 11)
 
     local knob = Instance.new("Frame")
-    knob.Size = UDim2.fromOffset(16, 16)
+    knob.Size = UDim2.fromOffset(17, 17)
     knob.Position = UDim2.fromOffset(2, 2)
     knob.BackgroundColor3 = Color3.fromRGB(255,255,255)
+    knob.BorderSizePixel = 0
     knob.Parent = switch
-    corner(knob, 8)
+    corner(knob, 9)
 
     local state = default == true
 
     local function setState(value, fire)
         state = value == true
-        switch.BackgroundColor3 = state and self.Window.Theme.accent or Color3.fromRGB(75,75,82)
-        tween(knob, TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-            Position = state and UDim2.fromOffset(16,2) or UDim2.fromOffset(2,2)
-        })
-        if fire and callback then callback(state) end
+        switch.BackgroundColor3 = state and self.Window.Theme.accent or Color3.fromRGB(70,70,78)
+        tween(knob, 0.16, {
+            Position = state and UDim2.fromOffset(17, 2) or UDim2.fromOffset(2, 2)
+        }, Enum.EasingStyle.Back)
+        if fire and type(callback) == "function" then
+            local ok, err = safeCall(callback, state)
+            if not ok then
+                self.Window:Notify("Toggle error", tostring(err))
+            end
+        end
     end
 
     switch.MouseButton1Click:Connect(function()
@@ -476,47 +508,48 @@ function Tab:AddSection(text)
     line.Size = UDim2.new(1, 0, 0, 1)
     line.Position = UDim2.new(0, 0, 1, -1)
     line.BackgroundColor3 = Color3.fromRGB(255,255,255)
-    line.BackgroundTransparency = 0.92
+    line.BackgroundTransparency = 0.91
+    line.BorderSizePixel = 0
     line.Parent = section
 
-    local label = makeText(section, text, 11, self.Window.Theme.accent, Enum.Font.GothamBold)
-    label.Size = UDim2.new(1, 0, 1, 0)
-
-    return label
+    local l = label(section, text, 11, self.Window.Theme.accent, Enum.Font.GothamBold)
+    l.Size = UDim2.new(1, 0, 1, 0)
+    return l
 end
 
 function Window:AddTab(name)
-    local tab = setmetatable({
-        Window = self,
-        Name = name,
-    }, Tab)
+    local tabName = tostring(name or "Tab")
+    local tab = setmetatable({Window = self, Name = tabName}, Tab)
 
     local nav = Instance.new("TextButton")
-    nav.Name = name
+    nav.Name = tabName
     nav.Size = UDim2.new(1, 0, 0, 34)
+    nav.BackgroundColor3 = self.Theme.accent
     nav.BackgroundTransparency = 1
-    nav.Text = tostring(name)
-    nav.TextColor3 = Color3.fromRGB(152,152,158)
+    nav.BorderSizePixel = 0
+    nav.Text = tabName
+    nav.TextColor3 = Color3.fromRGB(155,155,163)
     nav.TextSize = 12
     nav.Font = Enum.Font.GothamMedium
     nav.TextXAlignment = Enum.TextXAlignment.Left
     nav.AutoButtonColor = false
     nav.Parent = self.Sidebar
     corner(nav, 7)
-    padding(nav, 12, 8)
+    addPadding(nav, 12, 8)
 
     local page = Instance.new("ScrollingFrame")
-    page.Name = name .. "Page"
+    page.Name = tabName .. "Page"
     page.Size = UDim2.new(1, 0, 1, 0)
     page.BackgroundTransparency = 1
     page.BorderSizePixel = 0
-    page.ScrollBarThickness = 5
-    page.ScrollBarImageColor3 = Color3.fromRGB(90,90,98)
-    page.CanvasSize = UDim2.fromOffset(0,0)
+    page.ScrollBarThickness = 4
+    page.ScrollBarImageColor3 = Color3.fromRGB(95,95,105)
+    page.CanvasSize = UDim2.fromOffset(0, 0)
     page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    page.ScrollingDirection = Enum.ScrollingDirection.Y
     page.Visible = false
     page.Parent = self.Pages
-    padding(page, 2, 12, 2, 18)
+    addPadding(page, 2, 4, 2, 18)
 
     local layout = Instance.new("UIListLayout")
     layout.Padding = UDim.new(0, 6)
@@ -531,7 +564,7 @@ function Window:AddTab(name)
         tab:Show()
     end)
 
-    self.Tabs[name] = tab
+    self.Tabs[tabName] = tab
 
     if not self.ActiveTab then
         tab:Show()
@@ -545,61 +578,65 @@ end
 function MacOSKit:AddWindow(title, config)
     config = config or {}
 
-    local existing = self.Window
-    if existing and existing.Gui then
-        existing:Destroy()
+    if self.Window and self.Window.Gui then
+        self.Window:Destroy()
     end
 
     local gui = Instance.new("ScreenGui")
     gui.Name = "MacOSKit"
+    gui.Enabled = true
     gui.ResetOnSpawn = false
     gui.IgnoreGuiInset = true
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    gui.DisplayOrder = 999
+    gui.ScreenInsets = Enum.ScreenInsets.None
+
     protectGui(gui)
+
+    local width = math.max(
+        tonumber(config.min_size and config.min_size.X) or 900,
+        720
+    )
+    local height = math.max(
+        tonumber(config.min_size and config.min_size.Y) or 640,
+        500
+    )
 
     local root = Instance.new("Frame")
     root.Name = "Window"
     root.AnchorPoint = Vector2.new(0.5, 0.5)
     root.Position = UDim2.fromScale(0.5, 0.5)
-    root.Size = UDim2.fromOffset(
-        math.max((config.min_size and config.min_size.X) or 900, 720),
-        math.max((config.min_size and config.min_size.Y) or 640, 500)
-    )
-    root.BackgroundColor3 = Color3.fromRGB(18,18,20)
-    root.BackgroundTransparency = 0.20
+    root.Size = UDim2.fromOffset(width, height)
+    root.BackgroundColor3 = Color3.fromRGB(18,18,22)
+    root.BackgroundTransparency = 0.08
     root.BorderSizePixel = 0
-    root.ClipsDescendants = true
+    root.Visible = true
+    root.ZIndex = 1
     root.Parent = gui
     corner(root, 14)
-    stroke(root, Color3.fromRGB(255,255,255), 0.86, 1)
+    addStroke(root, Color3.fromRGB(255,255,255), 0.84, 1)
 
     local gradient = Instance.new("UIGradient")
     gradient.Rotation = 145
     gradient.Color = ColorSequence.new({
         ColorSequenceKeypoint.new(0, Themes.Violet.accent),
-        ColorSequenceKeypoint.new(0.55, Themes.Violet.accent2),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(18,18,20)),
+        ColorSequenceKeypoint.new(0.52, Themes.Violet.accent2),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(18,18,22)),
     })
     gradient.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 0.80),
-        NumberSequenceKeypoint.new(0.55, 0.91),
-        NumberSequenceKeypoint.new(1, 0.98),
+        NumberSequenceKeypoint.new(0, 0.78),
+        NumberSequenceKeypoint.new(0.55, 0.90),
+        NumberSequenceKeypoint.new(1, 0.96),
     })
     gradient.Parent = root
-
-    local topHighlight = Instance.new("Frame")
-    topHighlight.Size = UDim2.new(1, 0, 0, 46)
-    topHighlight.BackgroundColor3 = Color3.fromRGB(255,255,255)
-    topHighlight.BackgroundTransparency = 0.96
-    topHighlight.BorderSizePixel = 0
-    topHighlight.Parent = root
 
     local titleBar = Instance.new("Frame")
     titleBar.Name = "TitleBar"
     titleBar.Size = UDim2.new(1,0,0,46)
     titleBar.BackgroundTransparency = 1
+    titleBar.BorderSizePixel = 0
+    titleBar.ZIndex = 5
     titleBar.Parent = root
-
     makeDraggable(titleBar, root)
 
     local dots = {
@@ -609,43 +646,52 @@ function MacOSKit:AddWindow(title, config)
     }
 
     local controls = {}
-    for i, item in ipairs(dots) do
+    for i, info in ipairs(dots) do
         local dot = Instance.new("TextButton")
-        dot.Size = UDim2.fromOffset(12,12)
-        dot.Position = UDim2.fromOffset(14 + (i-1)*20, 17)
-        dot.BackgroundColor3 = item[1]
+        dot.Name = info[2]
+        dot.Size = UDim2.fromOffset(13,13)
+        dot.Position = UDim2.fromOffset(14 + (i - 1) * 20, 17)
+        dot.BackgroundColor3 = info[1]
+        dot.BorderSizePixel = 0
         dot.Text = ""
         dot.AutoButtonColor = false
+        dot.ZIndex = 7
         dot.Parent = titleBar
-        corner(dot, 6)
-        controls[i] = dot
+        corner(dot, 7)
 
         dot.MouseEnter:Connect(function()
-            tween(dot, TweenInfo.new(0.12), {Size = UDim2.fromOffset(14,14)})
+            tween(dot, 0.1, {Size = UDim2.fromOffset(15,15)})
         end)
         dot.MouseLeave:Connect(function()
-            tween(dot, TweenInfo.new(0.12), {Size = UDim2.fromOffset(12,12)})
+            tween(dot, 0.1, {Size = UDim2.fromOffset(13,13)})
         end)
+
+        controls[i] = dot
     end
 
-    local titleLabel = makeText(titleBar, title or "MacOSKit", 13, Color3.fromRGB(242,242,244), Enum.Font.GothamBold)
-    titleLabel.Position = UDim2.fromOffset(88, 5)
-    titleLabel.Size = UDim2.new(0.5, -88, 0, 19)
+    local titleLabel = label(titleBar, title or "MacOSKit", 13, Color3.fromRGB(242,242,244), Enum.Font.GothamBold)
+    titleLabel.Position = UDim2.fromOffset(88, 4)
+    titleLabel.Size = UDim2.new(0.55, -88, 0, 20)
+    titleLabel.ZIndex = 6
 
-    local subLabel = makeText(titleBar, "macOS-style UI", 10, Color3.fromRGB(99,99,104), Enum.Font.Gotham)
+    local subLabel = label(titleBar, "macOS-style UI", 10, Color3.fromRGB(112,112,120), Enum.Font.Gotham)
     subLabel.Position = UDim2.fromOffset(88, 23)
-    subLabel.Size = UDim2.new(0.5, -88, 0, 15)
+    subLabel.Size = UDim2.new(0.55, -88, 0, 15)
+    subLabel.ZIndex = 6
 
     local settings = Instance.new("TextButton")
-    settings.Size = UDim2.fromOffset(27,27)
+    settings.Name = "Settings"
+    settings.Size = UDim2.fromOffset(28,28)
     settings.Position = UDim2.new(1,-40,0,9)
     settings.BackgroundColor3 = Color3.fromRGB(255,255,255)
-    settings.BackgroundTransparency = 0.95
-    settings.Text = "⚙"
-    settings.TextColor3 = Color3.fromRGB(170,170,176)
-    settings.TextSize = 15
-    settings.Font = Enum.Font.Gotham
+    settings.BackgroundTransparency = 0.94
+    settings.BorderSizePixel = 0
+    settings.Text = "•"
+    settings.TextColor3 = Color3.fromRGB(175,175,182)
+    settings.TextSize = 18
+    settings.Font = Enum.Font.GothamBold
     settings.AutoButtonColor = false
+    settings.ZIndex = 7
     settings.Parent = titleBar
     corner(settings, 7)
 
@@ -654,38 +700,49 @@ function MacOSKit:AddWindow(title, config)
     body.Size = UDim2.new(1,0,1,-46)
     body.Position = UDim2.fromOffset(0,46)
     body.BackgroundTransparency = 1
+    body.BorderSizePixel = 0
+    body.ZIndex = 2
     body.Parent = root
 
     local sidebar = Instance.new("Frame")
     sidebar.Name = "Sidebar"
     sidebar.Size = UDim2.fromOffset(210,1)
-    sidebar.Position = UDim2.fromOffset(0,0)
-    sidebar.BackgroundColor3 = Color3.fromRGB(10,10,12)
-    sidebar.BackgroundTransparency = 0.38
+    sidebar.BackgroundColor3 = Color3.fromRGB(9,9,12)
+    sidebar.BackgroundTransparency = 0.24
     sidebar.BorderSizePixel = 0
+    sidebar.ZIndex = 3
     sidebar.Parent = body
-    padding(sidebar, 8, 8, 12, 12)
 
     local search = Instance.new("TextBox")
-    search.Size = UDim2.new(1,0,0,30)
+    search.Name = "Search"
+    search.Position = UDim2.fromOffset(9,11)
+    search.Size = UDim2.new(1,-18,0,31)
     search.BackgroundColor3 = Color3.fromRGB(255,255,255)
-    search.BackgroundTransparency = 0.95
-    search.PlaceholderText = "Search"
-    search.PlaceholderColor3 = Color3.fromRGB(99,99,104)
+    search.BackgroundTransparency = 0.94
+    search.BorderSizePixel = 0
+    search.Text = ""
+    search.PlaceholderText = "Search tabs..."
+    search.PlaceholderColor3 = Color3.fromRGB(100,100,108)
     search.TextColor3 = Color3.fromRGB(235,235,239)
     search.TextSize = 11
     search.Font = Enum.Font.Gotham
     search.ClearTextOnFocus = false
-    search.Text = ""
+    search.ZIndex = 5
     search.Parent = sidebar
     corner(search, 7)
-    padding(search, 10, 8)
-    stroke(search, Color3.fromRGB(255,255,255), 0.91, 1)
+    addStroke(search, Color3.fromRGB(255,255,255), 0.90, 1)
+    addPadding(search, 10, 8)
 
-    local sidebarList = Instance.new("Frame")
-    sidebarList.Size = UDim2.new(1,0,1,-38)
-    sidebarList.Position = UDim2.fromOffset(0,38)
+    local sidebarList = Instance.new("ScrollingFrame")
+    sidebarList.Name = "TabList"
+    sidebarList.Position = UDim2.fromOffset(9,49)
+    sidebarList.Size = UDim2.new(1,-18,1,-58)
     sidebarList.BackgroundTransparency = 1
+    sidebarList.BorderSizePixel = 0
+    sidebarList.ScrollBarThickness = 0
+    sidebarList.CanvasSize = UDim2.fromOffset(0,0)
+    sidebarList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    sidebarList.ZIndex = 4
     sidebarList.Parent = sidebar
 
     local sideLayout = Instance.new("UIListLayout")
@@ -697,17 +754,20 @@ function MacOSKit:AddWindow(title, config)
     divider.Size = UDim2.new(0,1,1,0)
     divider.Position = UDim2.fromOffset(210,0)
     divider.BackgroundColor3 = Color3.fromRGB(255,255,255)
-    divider.BackgroundTransparency = 0.93
+    divider.BackgroundTransparency = 0.91
+    divider.BorderSizePixel = 0
+    divider.ZIndex = 4
     divider.Parent = body
 
     local pages = Instance.new("Frame")
     pages.Name = "Pages"
-    pages.Size = UDim2.new(1,-235,1,0)
-    pages.Position = UDim2.fromOffset(225,0)
+    pages.Position = UDim2.fromOffset(211,0)
+    pages.Size = UDim2.new(1,-211,1,0)
     pages.BackgroundTransparency = 1
+    pages.BorderSizePixel = 0
+    pages.ZIndex = 3
     pages.Parent = body
-
-    padding(pages, 18, 18, 18, 18)
+    addPadding(pages, 18, 18, 18, 18)
 
     local self = setmetatable({
         Gui = gui,
@@ -718,7 +778,7 @@ function MacOSKit:AddWindow(title, config)
         Tabs = {},
         ActiveTab = nil,
         Config = config,
-        CurrentSize = Vector2.new(root.Size.X.Offset, root.Size.Y.Offset),
+        CurrentSize = Vector2.new(width, height),
         RestorePosition = root.Position,
         Minimized = false,
         Maximized = false,
@@ -731,17 +791,16 @@ function MacOSKit:AddWindow(title, config)
     self.Window = self
 
     controls[1].MouseButton1Click:Connect(function()
-        tween(root, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-            Size = UDim2.fromOffset(self.CurrentSize.X * 0.92, self.CurrentSize.Y * 0.92),
-            BackgroundTransparency = 1,
-        })
-        task.delay(0.23, function()
+        if not root.Parent then return end
+        tween(root, 0.18, {BackgroundTransparency = 1, Size = UDim2.fromOffset(width * 0.96, height * 0.96)})
+        task.delay(0.2, function()
             if gui.Parent then gui:Destroy() end
+            if MacOSKit.Window == self then MacOSKit.Window = nil end
         end)
     end)
 
     controls[2].MouseButton1Click:Connect(function()
-        if self.Minimized then self:Restore() else self:Minimize() end
+        self:Minimize()
     end)
 
     controls[3].MouseButton1Click:Connect(function()
@@ -749,23 +808,29 @@ function MacOSKit:AddWindow(title, config)
     end)
 
     settings.MouseButton1Click:Connect(function()
-        self:Notify("MacOSKit", "Theme and UI controls are available through the library API.")
+        self:Notify("MacOSKit", "Use SetTheme(name) to change the accent theme.")
     end)
 
     search:GetPropertyChangedSignal("Text"):Connect(function()
-        local q = search.Text:lower()
+        local query = search.Text:lower()
         for _, tab in pairs(self.Tabs) do
-            tab.Nav.Visible = q == "" or tab.Name:lower():find(q, 1, true) ~= nil
+            local matches = query == "" or tab.Name:lower():find(query, 1, true) ~= nil
+            tab.Nav.Visible = matches
         end
     end)
 
-    self.Gui.Destroying:Connect(function()
-        self.Window = nil
+    gui.Destroying:Connect(function()
+        if MacOSKit.Window == self then
+            MacOSKit.Window = nil
+        end
     end)
 
     self:SetTheme(config.theme or "Violet")
-    self.Window = self
     MacOSKit.Window = self
+
+    -- No startup fade-to-transparent. The window is rendered immediately.
+    gui.Enabled = true
+    root.Visible = true
 
     return self
 end
