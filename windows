@@ -368,6 +368,20 @@ function Tab:AddButton(text, callback)
     button.Font = Enum.Font.GothamSemibold
     button.TextXAlignment = Enum.TextXAlignment.Left
     button.Parent = self.Content
+
+    -- Compatibility child used by the original MacOS button implementation.
+    -- Keeping it as a real child avoids invalid-member errors from older
+    -- AddButton paths while remaining invisible until styled.
+    local macGradient = Instance.new("UIGradient")
+    macGradient.Name = "_MacOSGradient"
+    macGradient.Rotation = 90
+    macGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(42, 48, 58)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(27, 31, 38)),
+    })
+    macGradient.Transparency = NumberSequence.new(0.92)
+    macGradient.Parent = button
+
     corner(button, 8)
     addPadding(button, 12, 12)
 
