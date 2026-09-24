@@ -4962,13 +4962,25 @@ ThemeTab:AddLabel("").TextSize = 10
 ThemeTab:AddLabel("Theme").TextSize = 20
 ThemeTab:AddLabel("Dark glass interface themes with gradient accents.")
 
-local themeNames = {"Violet", "Midnight", "Emerald", "Crimson", "Mono"}
+ThemeTab:AddButton("Violet", function()
+    window:SetTheme("Violet")
+end)
 
-for _, themeName in ipairs(themeNames) do
-    ThemeTab:AddButton(themeName, function()
-        window:SetTheme(themeName)
-    end)
-end
+ThemeTab:AddButton("Midnight", function()
+    window:SetTheme("Midnight")
+end)
+
+ThemeTab:AddButton("Emerald", function()
+    window:SetTheme("Emerald")
+end)
+
+ThemeTab:AddButton("Crimson", function()
+    window:SetTheme("Crimson")
+end)
+
+ThemeTab:AddButton("Mono", function()
+    window:SetTheme("Mono")
+end)
 
 --========================================================--
 -- INFO TAB
