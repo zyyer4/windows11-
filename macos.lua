@@ -348,7 +348,7 @@ function Tab:AddButton(text, callback)
     local button = Instance.new("TextButton")
     button.Name = "Button"
     button.Size = UDim2.new(1, 0, 0, 36)
-    button.BackgroundColor3 = Color3.fromRGB(30, 30, 36)
+    button.BackgroundColor3 = Color3.fromRGB(32, 38, 46)
     button.BackgroundTransparency = 0.12
     button.BorderSizePixel = 0
     button.AutoButtonColor = false
@@ -399,7 +399,7 @@ function Tab:AddTextBox(labelText, callback)
     local box = Instance.new("TextBox")
     box.Size = UDim2.new(1, 0, 0, 34)
     box.Position = UDim2.fromOffset(0, 23)
-    box.BackgroundColor3 = Color3.fromRGB(24, 24, 29)
+    box.BackgroundColor3 = Color3.fromRGB(17, 21, 26)
     box.BackgroundTransparency = 0.08
     box.BorderSizePixel = 0
     box.Text = ""
@@ -523,7 +523,7 @@ function Window:AddTab(name)
 
     local nav = Instance.new("TextButton")
     nav.Name = tabName
-    nav.Size = UDim2.new(1, 0, 0, 34)
+    nav.Size = UDim2.new(1, 0, 0, 35)
     nav.BackgroundColor3 = self.Theme.accent
     nav.BackgroundTransparency = 1
     nav.BorderSizePixel = 0
@@ -658,7 +658,7 @@ function MacOSKit:AddWindow(title, config)
 
     local titleBar = Instance.new("Frame")
     titleBar.Name = "TitleBar"
-    titleBar.Size = UDim2.new(1,0,0,46)
+    titleBar.Size = UDim2.new(1,0,0,48)
     titleBar.BackgroundTransparency = 1
     titleBar.BorderSizePixel = 0
     titleBar.ZIndex = 5
@@ -723,8 +723,8 @@ function MacOSKit:AddWindow(title, config)
 
     local body = Instance.new("Frame")
     body.Name = "Body"
-    body.Size = UDim2.new(1,0,1,-46)
-    body.Position = UDim2.fromOffset(0,46)
+    body.Size = UDim2.new(1,0,1,-48)
+    body.Position = UDim2.fromOffset(0,48)
     body.BackgroundTransparency = 1
     body.BorderSizePixel = 0
     body.ZIndex = 2
@@ -732,7 +732,7 @@ function MacOSKit:AddWindow(title, config)
 
     local sidebar = Instance.new("Frame")
     sidebar.Name = "Sidebar"
-    sidebar.Size = UDim2.new(0, 210, 1, 0)
+    sidebar.Size = UDim2.new(0, 224, 1, 0)
     sidebar.BackgroundColor3 = Color3.fromRGB(8, 8, 10)
     sidebar.BackgroundTransparency = 0.03
     sidebar.BorderSizePixel = 0
@@ -743,7 +743,7 @@ function MacOSKit:AddWindow(title, config)
     search.Name = "Search"
     search.Position = UDim2.fromOffset(9,11)
     search.Size = UDim2.new(1,-18,0,31)
-    search.BackgroundColor3 = Color3.fromRGB(24, 24, 29)
+    search.BackgroundColor3 = Color3.fromRGB(21, 26, 32)
     search.BackgroundTransparency = 0.08
     search.BorderSizePixel = 0
     search.Text = ""
@@ -780,7 +780,7 @@ function MacOSKit:AddWindow(title, config)
 
     local divider = Instance.new("Frame")
     divider.Size = UDim2.new(0,1,1,0)
-    divider.Position = UDim2.fromOffset(210,0)
+    divider.Position = UDim2.fromOffset(224,0)
     divider.BackgroundColor3 = Color3.fromRGB(255,255,255)
     divider.BackgroundTransparency = 0.91
     divider.BorderSizePixel = 0
@@ -789,14 +789,14 @@ function MacOSKit:AddWindow(title, config)
 
     local pages = Instance.new("Frame")
     pages.Name = "Pages"
-    pages.Position = UDim2.fromOffset(211,0)
-    pages.Size = UDim2.new(1,-211,1,0)
+    pages.Position = UDim2.fromOffset(225,0)
+    pages.Size = UDim2.new(1,-225,1,0)
     pages.BackgroundColor3 = Color3.fromRGB(12, 12, 15)
     pages.BackgroundTransparency = 0.04
     pages.BorderSizePixel = 0
     pages.ZIndex = 3
     pages.Parent = body
-    addPadding(pages, 18, 18, 18, 18)
+    addPadding(pages, 24, 28, 24, 32)
 
     local self = setmetatable({
         Gui = gui,
@@ -854,7 +854,7 @@ function MacOSKit:AddWindow(title, config)
         end
     end)
 
-    self:SetTheme(config.theme or "Violet")
+    self:SetTheme(self.ThemeName)
     MacOSKit.Window = self
 
     -- No startup fade-to-transparent. The window is rendered immediately.
