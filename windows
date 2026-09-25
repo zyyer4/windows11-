@@ -2703,8 +2703,10 @@ _G.EmpireBuildKillingControls=function()
         Interval=0.12,
         ClearDelay=0.08,
         EquipDelay=0.02,
+        YieldEvery=1,
         SpeedName="Normal",
     }
+    _G.EmpireKillingState.YieldEvery=_G.EmpireKillingState.YieldEvery or 1
     local state=_G.EmpireKillingState
 
     local function updateCanvas()
@@ -2722,10 +2724,13 @@ _G.EmpireBuildKillingControls=function()
     cardArea:GetPropertyChangedSignal("AbsoluteWindowSize"):Connect(updateCanvas)
 
     local speedPresets={
-        {name="Normal",interval=0.12,clear=0.08,equip=0.02},
-        {name="Fast",interval=0.06,clear=0.04,equip=0.01},
-        {name="Faster",interval=0.025,clear=0.015,equip=0.003},
-        {name="Max",interval=0,clear=0,equip=0},
+        {name="Normal",interval=0.12,clear=0.08,equip=0.02,yieldEvery=1},
+        {name="Fast",interval=0.07,clear=0.04,equip=0.01,yieldEvery=2},
+        {name="Faster",interval=0.05,clear=0.02,equip=0.005,yieldEvery=3},
+        -- Max is the fastest client-friendly preset: only the currently
+        -- equipped collection is cleared, requests are sent in small batches,
+        -- and the loop yields often enough to keep movement/rendering alive.
+        {name="Max",interval=0.06,clear=0,equip=0.002,yieldEvery=3},
     }
 
     local speedCard=create("Frame",{
@@ -2811,6 +2816,7 @@ _G.EmpireBuildKillingControls=function()
             state.Interval=preset.interval
             state.ClearDelay=preset.clear
             state.EquipDelay=preset.equip
+            state.YieldEvery=preset.yieldEvery or 1
             state.SpeedName=preset.name
             for j,other in ipairs(speedButtons) do
                 local active=(other==b)
@@ -2905,13 +2911,35 @@ _G.EmpireBuildKillingControls=function()
             return false,"Status: Pet storage/event unavailable"
         end
 
-        -- Fully clear the equipped set before applying the next loadout.
-        for _,folder in ipairs(petsFolder:GetChildren()) do
-            if folder:IsA("Folder") then
-                for _,pet in ipairs(folder:GetChildren()) do
-                    pcall(function()
-                        equipPetEvent:FireServer("unequipPet",pet)
-                    end)
+        -- Only unequip the currently equipped collection. The previous version
+        -- walked the entire inventory and sent an unequip request for every
+        -- stored pet, which could freeze the client when Max was selected.
+        local equippedFolder=petsFolder:FindFirstChild("Equipped")
+            or petsFolder:FindFirstChild("equipped")
+        local foldersToClear={}
+        if equippedFolder and equippedFolder:IsA("Folder") then
+            foldersToClear={equippedFolder}
+        else
+            -- Fallback for games without a dedicated Equipped folder: clear
+            -- non-Unique folders only, never the inventory itself.
+            for _,folder in ipairs(petsFolder:GetChildren()) do
+                if folder:IsA("Folder") and folder~=uniquePets then
+                    foldersToClear[#foldersToClear+1]=folder
+                end
+            end
+        end
+
+        local remoteCount=0
+        for _,folder in ipairs(foldersToClear) do
+            for _,pet in ipairs(folder:GetChildren()) do
+                pcall(function()
+                    equipPetEvent:FireServer("unequipPet",pet)
+                end)
+                remoteCount+=1
+                if state.SpeedName=="Max" and remoteCount%state.YieldEvery==0 then
+                    task.wait()
+                elseif state.SpeedName~="Max" and state.EquipDelay>0 then
+                    task.wait(state.EquipDelay)
                 end
             end
         end
@@ -2922,13 +2950,17 @@ _G.EmpireBuildKillingControls=function()
 
         local wanted=string.lower(petName)
         local found=0
+        local equipCount=0
         for _,pet in ipairs(uniquePets:GetChildren()) do
             if string.lower(pet.Name)==wanted then
                 local ok=pcall(function()
                     equipPetEvent:FireServer("equipPet",pet)
                 end)
                 if ok then found+=1 end
-                if state.EquipDelay>0 then
+                equipCount+=1
+                if state.SpeedName=="Max" and equipCount%state.YieldEvery==0 then
+                    task.wait()
+                elseif state.EquipDelay>0 then
                     task.wait(state.EquipDelay)
                 end
             end
@@ -2969,12 +3001,13 @@ _G.EmpireBuildKillingControls=function()
                     status.Text=tostring(resultMsg or (resultOk and "Status: Loadout equipped" or "Status: Pack swap failed"))
                     status.TextColor3=resultOk and COLORS.green or Color3.fromRGB(255,130,130)
                 end
-                if not (state.PackSpamEnabled and state.LoopToken==token) then break end
+                            if not (state.PackSpamEnabled and state.LoopToken==token) then break end
                 petName=(petName=="Mighty Monster") and "Wild Wizard" or "Mighty Monster"
+                -- Keep the cycle extremely fast, but always yield between full
+                -- loadouts so movement/rendering is not starved by the loop.
                 if state.Interval>0 then
                     task.wait(state.Interval)
                 else
-                    -- MAX mode: yield once per cycle so the client stays responsive.
                     task.wait()
                 end
             end
@@ -5288,11 +5321,11 @@ fastRebFortuneWheelSwitch =
     )
 
 --========================================================--
--- JUNGLE LIFT
+-- INDUSTRIAL GYM SUPER SQUAT
 --========================================================--
 
 FastRebTab:AddButton(
-    "Jungle Lift",
+    "Industrial Gym Super Squat",
     function()
 
         local root =
@@ -5304,9 +5337,9 @@ FastRebTab:AddButton(
 
         root.CFrame =
             CFrame.new(
-                -8642.396484375,
-                6.7980651855,
-                2086.1030273
+                -5488,
+                61,
+                4641
             )
 
         task.wait(0.2)
