@@ -705,6 +705,12 @@ local rebirthArea=create("ScrollingFrame",{Position=UDim2.new(0,0,0,69),Size=UDi
 local rebirthLayout=create("UIListLayout",{Padding=UDim.new(0,10),SortOrder=Enum.SortOrder.LayoutOrder},rebirthArea)
 create("UIPadding",{PaddingBottom=UDim.new(0,18)},rebirthArea)
 
+-- Dedicated Pets page.  Kept separate from the feature-source code below so
+-- the page is available as soon as the Empire shell is built.
+local petsArea=create("ScrollingFrame",{Position=UDim2.new(0,0,0,69),Size=UDim2.new(1,0,1,-69),BackgroundTransparency=1,BorderSizePixel=0,ScrollBarThickness=5,ScrollingDirection=Enum.ScrollingDirection.Y,CanvasSize=UDim2.new(),AutomaticCanvasSize=Enum.AutomaticSize.Y,Visible=false,ScrollBarImageColor3=Color3.fromRGB(82,99,133)},content)
+local petsLayout=create("UIListLayout",{Padding=UDim.new(0,10),SortOrder=Enum.SortOrder.LayoutOrder},petsArea)
+create("UIPadding",{PaddingBottom=UDim.new(0,18)},petsArea)
+
 local playerArea=create("ScrollingFrame",{Position=UDim2.new(0,0,0,69),Size=UDim2.new(1,0,1,-69),BackgroundTransparency=1,BorderSizePixel=0,ScrollBarThickness=5,ScrollingDirection=Enum.ScrollingDirection.Y,CanvasSize=UDim2.new(),AutomaticCanvasSize=Enum.AutomaticSize.Y,Visible=false,ScrollBarImageColor3=Color3.fromRGB(82,99,133)},content)
 create("UIListLayout",{Padding=UDim.new(0,10),SortOrder=Enum.SortOrder.LayoutOrder},playerArea)
 create("UIPadding",{PaddingBottom=UDim.new(0,18)},playerArea)
@@ -2284,12 +2290,135 @@ do
     end)
 end
 
+local function buildPetsControls()
+    local function equipAllPetMatches(petName)
+        local petsFolder=Player:FindFirstChild("petsFolder")
+        local uniquePets=petsFolder and petsFolder:FindFirstChild("Unique")
+        if not petsFolder or not uniquePets or not equipPetEvent then return end
+
+        -- Manual loadout selection: clear the equipped set, then equip every
+        -- matching copy that exists in petsFolder.Unique.
+        for _,folder in ipairs(petsFolder:GetChildren()) do
+            if folder:IsA("Folder") then
+                for _,pet in ipairs(folder:GetChildren()) do
+                    pcall(function()
+                        equipPetEvent:FireServer("unequipPet",pet)
+                    end)
+                end
+            end
+        end
+        task.wait(0.10)
+
+        local wanted=string.lower(petName)
+        for _,pet in ipairs(uniquePets:GetChildren()) do
+            if string.lower(pet.Name)==wanted then
+                pcall(function()
+                    equipPetEvent:FireServer("equipPet",pet)
+                end)
+                task.wait(0.025)
+            end
+        end
+    end
+
+    local function group(title,subtitle,accent,order,petNames)
+        local count=#petNames
+        local height=58+(count*36)+((count-1)*7)+18
+        local card=create("Frame",{
+            LayoutOrder=order,
+            Size=UDim2.new(1,-4,0,height),
+            BackgroundColor3=COLORS.panel,
+            BackgroundTransparency=.12,
+            BorderSizePixel=0,
+        },petsArea)
+        card:SetAttribute("EmpireThemeRole","panel")
+        corner(card,12); stroke(card,accent,.58,1)
+
+        create("TextLabel",{
+            Position=UDim2.new(0,16,0,10),
+            Size=UDim2.new(1,-32,0,20),
+            BackgroundTransparency=1,
+            Text=title,
+            TextColor3=COLORS.text,
+            TextSize=14,
+            Font=Enum.Font.GothamSemibold,
+            TextXAlignment=Enum.TextXAlignment.Left,
+        },card)
+        create("TextLabel",{
+            Position=UDim2.new(0,16,0,31),
+            Size=UDim2.new(1,-32,0,17),
+            BackgroundTransparency=1,
+            Text=subtitle,
+            TextColor3=COLORS.muted,
+            TextSize=9,
+            Font=Enum.Font.Gotham,
+            TextXAlignment=Enum.TextXAlignment.Left,
+        },card)
+
+        local buttonsFrame=create("Frame",{
+            Position=UDim2.new(0,14,0,55),
+            Size=UDim2.new(1,-28,0,count*36+(count-1)*7),
+            BackgroundTransparency=1,
+        },card)
+        local list=create("UIListLayout",{
+            Padding=UDim.new(0,7),
+            SortOrder=Enum.SortOrder.LayoutOrder,
+        },buttonsFrame)
+
+        for i,name in ipairs(petNames) do
+            local b=create("TextButton",{
+                LayoutOrder=i,
+                Size=UDim2.new(1,0,0,36),
+                BackgroundColor3=Color3.fromRGB(28,42,68),
+                BackgroundTransparency=.08,
+                Text="Equip All "..name,
+                TextColor3=COLORS.text,
+                TextSize=11,
+                Font=Enum.Font.GothamSemibold,
+                AutoButtonColor=false,
+            },buttonsFrame)
+            b:SetAttribute("EmpireThemeRole","button")
+            corner(b,8); stroke(b,accent,.60,1); hoverScale(b,1.012)
+            b.Activated:Connect(function()
+                local original=b.Text
+                b.Text="Equipping..."
+                task.spawn(function()
+                    pcall(function() equipAllPetMatches(name) end)
+                    if b.Parent then
+                        b.Text="Equipped "..name
+                        task.delay(1.1,function()
+                            if b.Parent then b.Text=original end
+                        end)
+                    end
+                end)
+            end)
+        end
+    end
+
+    group(
+        "P2W · Premium Loadouts",
+        "Equip every matching premium pet copy from your Unique collection.",
+        Color3.fromRGB(255,176,84),
+        1,
+        {"Swift Samurai","Mighty Monster","Wild Wizard","Tribal Overlord"}
+    )
+
+    group(
+        "F2P · Boss Pet Loadouts",
+        "Equip every matching boss pet copy from your Unique collection.",
+        Color3.fromRGB(103,170,255),
+        2,
+        {"Common Boss Pet","Rare Boss Pet","Epic Boss Pet","Legendary Boss Pet","Mythic Boss Pet","Rainbow Boss Pet"}
+    )
+end
+
+buildPetsControls()
+
 local function showPage(cat)
     breadcrumb.Text="Empire / "..cat.name
     pageTitle.Text=cat.emoji.."  "..cat.name
     pageSubtitle.Text=cat.name.." panel · modernized workspace"
     clearCards()
-    farmArea.Visible=false; miscArea.Visible=false; _G.EmpireInfoArea.Visible=false; rebirthArea.Visible=false; playerArea.Visible=false; _G.EmpireAdminArea.Visible=false; cardArea.Visible=true
+    farmArea.Visible=false; miscArea.Visible=false; _G.EmpireInfoArea.Visible=false; rebirthArea.Visible=false; petsArea.Visible=false; playerArea.Visible=false; _G.EmpireAdminArea.Visible=false; cardArea.Visible=true
     grid.CellSize=UDim2.new(.5,-7,0,150)
     content.Position=UDim2.new(0,27,0,75)
     tween(content,TweenInfo.new(.24,Enum.EasingStyle.Quint,Enum.EasingDirection.Out),{Position=UDim2.new(0,22,0,75)})
@@ -2299,7 +2428,7 @@ local function showPage(cat)
     elseif cat.name=="Info" then cardArea.Visible=false; _G.EmpireInfoArea.Visible=true
     elseif cat.name=="Admin" then cardArea.Visible=false; _G.EmpireAdminArea.Visible=true
     elseif cat.name=="Rebirth" then cardArea.Visible=false; rebirthArea.Visible=true
-    elseif cat.name=="Pets" then makeCard("🐾  Pet collection","Clean collection and management layout.","View pets",1,cat.color); makeCard("✨  Equip settings","Configure the visual pet loadout.","Configure",2,cat.color)
+    elseif cat.name=="Pets" then cardArea.Visible=false; petsArea.Visible=true
     elseif cat.name=="Player" then cardArea.Visible=false; playerArea.Visible=true
     elseif cat.name=="Killing" then makeCard("⚔  Category panel","Visual placeholder only. No combat or targeting functionality.","Preview",1,cat.color)
     elseif cat.name=="Stats" then makeCard("▥  Session stats","Compact statistic presentation.","View",1,cat.color); makeCard("▥  Overview","Clean overview card for connected data.","View",2,cat.color)
