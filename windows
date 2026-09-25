@@ -2907,52 +2907,69 @@ _G.EmpireBuildKillingControls=function()
     local function getPackPetsFolder()
         local petsFolder=Player:FindFirstChild("petsFolder")
         local uniquePets=petsFolder and petsFolder:FindFirstChild("Unique")
-        local equippedFolder=petsFolder and (
-            petsFolder:FindFirstChild("Equipped")
-            or petsFolder:FindFirstChild("equipped")
-        )
-        return petsFolder,uniquePets,equippedFolder
+        return petsFolder,uniquePets
     end
 
-    local function unequipCurrentPets(petsFolder,equippedFolder)
-        if equippedFolder and equippedFolder:IsA("Folder") then
-            for _,pet in ipairs(equippedFolder:GetChildren()) do
-                pcall(function()
-                    equipPetEvent:FireServer("unequipPet",pet)
-                end)
-            end
-            return
+    -- Resolve the pet remote again when Pack Spam runs. This keeps the
+    -- feature working even when rEvents/equipPetEvent is created after
+    -- the UI script starts.
+    local function getPackEquipPetEvent()
+        local events=Player:FindFirstChild("rEvents") or ReplicatedStorage:FindFirstChild("rEvents")
+        local event=events and events:FindFirstChild("equipPetEvent")
+        if event then
+            equipPetEvent=event
+        end
+        return event or equipPetEvent
+    end
+
+    local function unequipCurrentPets(petsFolder,event)
+        if not petsFolder or not event then
+            return false,0
         end
 
-        if not petsFolder then return end
+        local sent=0
+        -- Match the known-working Pets page behavior: walk every pet folder
+        -- and send the normal unequip request before loading the target set.
         for _,folder in ipairs(petsFolder:GetChildren()) do
-            if folder:IsA("Folder") and folder.Name~="Unique" then
+            if folder:IsA("Folder") then
                 for _,pet in ipairs(folder:GetChildren()) do
-                    pcall(function()
-                        equipPetEvent:FireServer("unequipPet",pet)
+                    local ok=pcall(function()
+                        event:FireServer("unequipPet",pet)
                     end)
+                    if ok then
+                        sent+=1
+                    end
                 end
             end
         end
+        return true,sent
     end
 
     local function equipWholeLoadout(petName)
-        local petsFolder,uniquePets,equippedFolder=getPackPetsFolder()
-        if not petsFolder or not uniquePets or not equipPetEvent then
+        local petsFolder,uniquePets=getPackPetsFolder()
+        local event=getPackEquipPetEvent()
+        if not petsFolder or not uniquePets or not event then
             return false,"Pet storage/event unavailable"
         end
 
-        unequipCurrentPets(petsFolder,equippedFolder)
-        task.wait(.10)
+        local okUnequip=unequipCurrentPets(petsFolder,event)
+        if not okUnequip then
+            return false,"Unable to send pet unequip requests"
+        end
 
-        local wanted=string.lower(petName)
+        -- Give the game a small amount of time to process the clear before
+        -- sending the new loadout, just like the working Pets controls.
+        task.wait(.05)
+
         local found=0
         for _,pet in ipairs(uniquePets:GetChildren()) do
-            if string.lower(pet.Name)==wanted then
+            if pet.Name==petName then
                 local ok=pcall(function()
-                    equipPetEvent:FireServer("equipPet",pet)
+                    event:FireServer("equipPet",pet)
                 end)
-                if ok then found+=1 end
+                if ok then
+                    found+=1
+                end
                 task.wait(.025)
             end
         end
@@ -2960,6 +2977,7 @@ _G.EmpireBuildKillingControls=function()
         if found==0 then
             return false,"No "..petName.." copies found"
         end
+
         return true,"Equipped "..tostring(found).." "..petName
     end
 
