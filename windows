@@ -2723,9 +2723,9 @@ _G.EmpireBuildKillingControls=function()
 
     local speedPresets={
         {name="Normal",interval=0.12,clear=0.08,equip=0.02},
-        {name="Fast",interval=0.08,clear=0.06,equip=0.015},
-        {name="Faster",interval=0.05,clear=0.04,equip=0.01},
-        {name="Max",interval=0.03,clear=0.025,equip=0.008},
+        {name="Fast",interval=0.06,clear=0.04,equip=0.01},
+        {name="Faster",interval=0.025,clear=0.015,equip=0.003},
+        {name="Max",interval=0,clear=0,equip=0},
     }
 
     local speedCard=create("Frame",{
@@ -2916,7 +2916,9 @@ _G.EmpireBuildKillingControls=function()
             end
         end
 
-        task.wait(state.ClearDelay)
+        if state.ClearDelay>0 then
+            task.wait(state.ClearDelay)
+        end
 
         local wanted=string.lower(petName)
         local found=0
@@ -2926,7 +2928,9 @@ _G.EmpireBuildKillingControls=function()
                     equipPetEvent:FireServer("equipPet",pet)
                 end)
                 if ok then found+=1 end
-                task.wait(state.EquipDelay)
+                if state.EquipDelay>0 then
+                    task.wait(state.EquipDelay)
+                end
             end
         end
 
@@ -2967,7 +2971,12 @@ _G.EmpireBuildKillingControls=function()
                 end
                 if not (state.PackSpamEnabled and state.LoopToken==token) then break end
                 petName=(petName=="Mighty Monster") and "Wild Wizard" or "Mighty Monster"
-                task.wait(state.Interval)
+                if state.Interval>0 then
+                    task.wait(state.Interval)
+                else
+                    -- MAX mode: yield once per cycle so the client stays responsive.
+                    task.wait()
+                end
             end
         end)
     end
