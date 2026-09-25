@@ -2686,6 +2686,12 @@ end
 
 _G.EmpireBuildKillingControls=function()
     grid.Parent=nil
+    cardArea.Active=true
+    cardArea.ScrollingEnabled=true
+    cardArea.ScrollingDirection=Enum.ScrollingDirection.Y
+    cardArea.AutomaticCanvasSize=Enum.AutomaticSize.None
+    cardArea.CanvasSize=UDim2.new(0,0,0,0)
+
     local listLayout=create("UIListLayout",{
         Padding=UDim.new(0,10),
         SortOrder=Enum.SortOrder.LayoutOrder,
@@ -2701,9 +2707,123 @@ _G.EmpireBuildKillingControls=function()
     }
     local state=_G.EmpireKillingState
 
-    local card=create("Frame",{
+    local function updateCanvas()
+        local height=listLayout.AbsoluteContentSize.Y
+        cardArea.CanvasSize=UDim2.fromOffset(0,math.max(height+10,cardArea.AbsoluteWindowSize.Y+1))
+        cardArea.CanvasPosition=Vector2.new(
+            0,
+            math.min(
+                cardArea.CanvasPosition.Y,
+                math.max(0,height+10-cardArea.AbsoluteWindowSize.Y)
+            )
+        )
+    end
+    listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas)
+    cardArea:GetPropertyChangedSignal("AbsoluteWindowSize"):Connect(updateCanvas)
+
+    local speedPresets={
+        {name="Normal",interval=0.12,clear=0.08,equip=0.02},
+        {name="Fast",interval=0.08,clear=0.06,equip=0.015},
+        {name="Faster",interval=0.05,clear=0.04,equip=0.01},
+        {name="Max",interval=0.03,clear=0.025,equip=0.008},
+    }
+
+    local speedCard=create("Frame",{
         LayoutOrder=1,
-        Size=UDim2.new(1,-4,0,330),
+        Size=UDim2.new(1,-4,0,132),
+        BackgroundColor3=COLORS.panel,
+        BackgroundTransparency=.12,
+        BorderSizePixel=0,
+    },cardArea)
+    speedCard:SetAttribute("EmpireThemeRole","panel")
+    corner(speedCard,12); stroke(speedCard,Color3.fromRGB(255,98,108),.58,1)
+
+    create("TextLabel",{
+        Position=UDim2.new(0,16,0,12),
+        Size=UDim2.new(1,-32,0,20),
+        BackgroundTransparency=1,
+        Text="⚡  Pack Spam Speed",
+        TextColor3=COLORS.text,
+        TextSize=14,
+        Font=Enum.Font.GothamSemibold,
+        TextXAlignment=Enum.TextXAlignment.Left,
+    },speedCard)
+
+    create("TextLabel",{
+        Position=UDim2.new(0,16,0,36),
+        Size=UDim2.new(1,-32,0,32),
+        BackgroundTransparency=1,
+        Text="Choose how quickly the Mighty Monster ↔ Wild Wizard loadout swap repeats.",
+        TextColor3=COLORS.muted,
+        TextSize=9,
+        TextWrapped=true,
+        Font=Enum.Font.Gotham,
+        TextXAlignment=Enum.TextXAlignment.Left,
+        TextYAlignment=Enum.TextYAlignment.Top,
+    },speedCard)
+
+    local speedFrame=create("Frame",{
+        Position=UDim2.new(0,16,0,78),
+        Size=UDim2.new(1,-32,0,36),
+        BackgroundTransparency=1,
+    },speedCard)
+    local speedList=create("UIListLayout",{
+        FillDirection=Enum.FillDirection.Horizontal,
+        Padding=UDim.new(0,6),
+        SortOrder=Enum.SortOrder.LayoutOrder,
+    },speedFrame)
+
+    local speedButtons={}
+    local toggle
+    local status
+    local detail
+
+    local function refreshButton(message)
+        if toggle and toggle.Parent then
+            toggle.Text=state.PackSpamEnabled and "Disable Pack Spam" or "Enable Pack Spam"
+            toggle.BackgroundColor3=state.PackSpamEnabled and Color3.fromRGB(45,120,83) or Color3.fromRGB(28,42,68)
+        end
+        if status and status.Parent then
+            status.Text=message or ("Status: "..(state.PackSpamEnabled and "Enabled" or "Disabled"))
+            status.TextColor3=state.PackSpamEnabled and COLORS.green or COLORS.muted
+        end
+        if detail and detail.Parent then
+            detail.Text="Mighty Monster → Wild Wizard → repeat   •   Speed: "..state.SpeedName.."   •   Swap interval: "..string.format("%.2fs",state.Interval)
+        end
+    end
+
+    for i,preset in ipairs(speedPresets) do
+        local b=create("TextButton",{
+            LayoutOrder=i,
+            Size=UDim2.new(0.25,-5,0,34),
+            BackgroundColor3=(preset.name==state.SpeedName) and Color3.fromRGB(47,65,99) or Color3.fromRGB(28,42,68),
+            BackgroundTransparency=.06,
+            Text=preset.name,
+            TextColor3=(preset.name==state.SpeedName) and COLORS.text or COLORS.muted,
+            TextSize=10,
+            Font=Enum.Font.GothamSemibold,
+            AutoButtonColor=false,
+        },speedFrame)
+        b:SetAttribute("EmpireThemeRole","button")
+        corner(b,7); stroke(b,Color3.fromRGB(255,98,108),.64,1); hoverScale(b,1.01)
+        speedButtons[#speedButtons+1]=b
+        b.Activated:Connect(function()
+            state.Interval=preset.interval
+            state.ClearDelay=preset.clear
+            state.EquipDelay=preset.equip
+            state.SpeedName=preset.name
+            for j,other in ipairs(speedButtons) do
+                local active=(other==b)
+                other.TextColor3=active and COLORS.text or COLORS.muted
+                other.BackgroundColor3=active and Color3.fromRGB(47,65,99) or Color3.fromRGB(28,42,68)
+            end
+            refreshButton()
+        end)
+    end
+
+    local card=create("Frame",{
+        LayoutOrder=2,
+        Size=UDim2.new(1,-4,0,224),
         BackgroundColor3=COLORS.panel,
         BackgroundTransparency=.12,
         BorderSizePixel=0,
@@ -2735,7 +2855,7 @@ _G.EmpireBuildKillingControls=function()
         TextYAlignment=Enum.TextYAlignment.Top,
     },card)
 
-    local status=create("TextLabel",{
+    status=create("TextLabel",{
         Position=UDim2.new(0,16,0,84),
         Size=UDim2.new(1,-32,0,20),
         BackgroundTransparency=1,
@@ -2746,7 +2866,7 @@ _G.EmpireBuildKillingControls=function()
         TextXAlignment=Enum.TextXAlignment.Left,
     },card)
 
-    local toggle=create("TextButton",{
+    toggle=create("TextButton",{
         Position=UDim2.new(0,16,0,112),
         Size=UDim2.new(1,-32,0,36),
         BackgroundColor3=state.PackSpamEnabled and Color3.fromRGB(45,120,83) or Color3.fromRGB(28,42,68),
@@ -2760,9 +2880,9 @@ _G.EmpireBuildKillingControls=function()
     toggle:SetAttribute("EmpireThemeRole","button")
     corner(toggle,8); stroke(toggle,Color3.fromRGB(255,98,108),.55,1); hoverScale(toggle,1.012)
 
-    local detail=create("TextLabel",{
+    detail=create("TextLabel",{
         Position=UDim2.new(0,16,0,154),
-        Size=UDim2.new(1,-32,0,34),
+        Size=UDim2.new(1,-32,0,48),
         BackgroundTransparency=1,
         Text="Mighty Monster → Wild Wizard → repeat   •   Speed: "..state.SpeedName.."   •   Swap interval: "..string.format("%.2fs",state.Interval),
         TextColor3=COLORS.muted,
@@ -2770,16 +2890,8 @@ _G.EmpireBuildKillingControls=function()
         Font=Enum.Font.Gotham,
         TextWrapped=true,
         TextXAlignment=Enum.TextXAlignment.Left,
+        TextYAlignment=Enum.TextYAlignment.Top,
     },card)
-
-    local function refreshButton(message)
-        if not toggle.Parent then return end
-        toggle.Text=state.PackSpamEnabled and "Disable Pack Spam" or "Enable Pack Spam"
-        toggle.BackgroundColor3=state.PackSpamEnabled and Color3.fromRGB(45,120,83) or Color3.fromRGB(28,42,68)
-        status.Text=message or ("Status: "..(state.PackSpamEnabled and "Enabled" or "Disabled"))
-        status.TextColor3=state.PackSpamEnabled and COLORS.green or COLORS.muted
-        detail.Text="Mighty Monster → Wild Wizard → repeat   •   Speed: "..state.SpeedName.."   •   Swap interval: "..string.format("%.2fs",state.Interval)
-    end
 
     local function getPackPetsFolder()
         local petsFolder=Player:FindFirstChild("petsFolder")
@@ -2793,8 +2905,7 @@ _G.EmpireBuildKillingControls=function()
             return false,"Status: Pet storage/event unavailable"
         end
 
-        -- Fully clear the current equipped set so each pass replaces the
-        -- previous pack instead of stacking both packs together.
+        -- Fully clear the equipped set before applying the next loadout.
         for _,folder in ipairs(petsFolder:GetChildren()) do
             if folder:IsA("Folder") then
                 for _,pet in ipairs(folder:GetChildren()) do
@@ -2811,10 +2922,10 @@ _G.EmpireBuildKillingControls=function()
         local found=0
         for _,pet in ipairs(uniquePets:GetChildren()) do
             if string.lower(pet.Name)==wanted then
-                pcall(function()
+                local ok=pcall(function()
                     equipPetEvent:FireServer("equipPet",pet)
-                    found+=1
                 end)
+                if ok then found+=1 end
                 task.wait(state.EquipDelay)
             end
         end
@@ -2822,92 +2933,14 @@ _G.EmpireBuildKillingControls=function()
         if found==0 then
             return false,"Status: No "..petName.." copies found"
         end
-
         return true,"Status: Equipped "..tostring(found).." "..petName
     end
 
-    -- Speed presets keep the feature configurable without changing the rest of the Killing page.
-    local speedLabel=create("TextLabel",{
-        Position=UDim2.new(0,16,0,197),
-        Size=UDim2.new(1,-32,0,18),
-        BackgroundTransparency=1,
-        Text="Speed Preset",
-        TextColor3=COLORS.text,
-        TextSize=10,
-        Font=Enum.Font.GothamSemibold,
-        TextXAlignment=Enum.TextXAlignment.Left,
-    },card)
-
-    local speedFrame=create("Frame",{
-        Position=UDim2.new(0,16,0,218),
-        Size=UDim2.new(1,-32,0,42),
-        BackgroundTransparency=1,
-    },card)
-
-    local speedList=create("UIListLayout",{
-        FillDirection=Enum.FillDirection.Horizontal,
-        Padding=UDim.new(0,6),
-        SortOrder=Enum.SortOrder.LayoutOrder,
-    },speedFrame)
-
-    local speedPresets={
-        {name="Normal",interval=0.12,clear=0.08,equip=0.02},
-        {name="Fast",interval=0.08,clear=0.06,equip=0.015},
-        {name="Faster",interval=0.05,clear=0.05,equip=0.01},
-        {name="Max",interval=0.03,clear=0.04,equip=0.008},
-    }
-
-    for i,preset in ipairs(speedPresets) do
-        local b=create("TextButton",{
-            LayoutOrder=i,
-            Size=UDim2.new(0.25,-5,0,34),
-            BackgroundColor3=Color3.fromRGB(28,42,68),
-            BackgroundTransparency=.06,
-            Text=preset.name,
-            TextColor3=COLORS.muted,
-            TextSize=10,
-            Font=Enum.Font.GothamSemibold,
-            AutoButtonColor=false,
-        },speedFrame)
-        b:SetAttribute("EmpireThemeRole","button")
-        corner(b,7); stroke(b,Color3.fromRGB(255,98,108),.64,1); hoverScale(b,1.01)
-        b.Activated:Connect(function()
-            state.Interval=preset.interval
-            state.ClearDelay=preset.clear
-            state.EquipDelay=preset.equip
-            state.SpeedName=preset.name
-            for _,child in ipairs(speedFrame:GetChildren()) do
-                if child:IsA("TextButton") then
-                    child.TextColor3=(child==b) and COLORS.text or COLORS.muted
-                    child.BackgroundColor3=(child==b) and Color3.fromRGB(47,65,99) or Color3.fromRGB(28,42,68)
-                end
-            end
-            refreshButton()
-        end)
+    local function stopPackSpam()
+        state.PackSpamEnabled=false
+        state.LoopToken+=1
+        refreshButton()
     end
-
-    create("TextLabel",{
-        Position=UDim2.new(0,16,0,268),
-        Size=UDim2.new(1,-32,0,40),
-        BackgroundTransparency=1,
-        Text="Lower presets perform the swap cycle sooner. Server response time can still limit the actual speed.",
-        TextColor3=COLORS.muted,
-        TextSize=9,
-        TextWrapped=true,
-        Font=Enum.Font.Gotham,
-        TextXAlignment=Enum.TextXAlignment.Left,
-        TextYAlignment=Enum.TextYAlignment.Top,
-    },card)
-
-    -- Highlight the saved preset when the Killing page is rebuilt.
-    task.defer(function()
-        for _,child in ipairs(speedFrame:GetChildren()) do
-            if child:IsA("TextButton") then
-                child.TextColor3=(child.Text==state.SpeedName) and COLORS.text or COLORS.muted
-                child.BackgroundColor3=(child.Text==state.SpeedName) and Color3.fromRGB(47,65,99) or Color3.fromRGB(28,42,68)
-            end
-        end
-    end)
 
     local function startPackSpam()
         if state.PackSpamEnabled then return end
@@ -2921,36 +2954,22 @@ _G.EmpireBuildKillingControls=function()
             while state.PackSpamEnabled
                 and state.LoopToken==token
                 and not _G.JohnnyScriptDestroyed do
-
-                local callOk,resultOk,resultMsg=pcall(function()
+                local ok,resultOk,resultMsg=pcall(function()
                     return equipWholeLoadout(petName)
                 end)
-                if not callOk then
+                if not ok then
                     resultOk=false
                     resultMsg="Status: Pack swap error"
                 end
-
-                if not state.PackSpamEnabled or state.LoopToken~=token then
-                    break
-                end
-
                 if toggle.Parent then
                     status.Text=tostring(resultMsg or (resultOk and "Status: Loadout equipped" or "Status: Pack swap failed"))
                     status.TextColor3=resultOk and COLORS.green or Color3.fromRGB(255,130,130)
                 end
-
-                task.wait(state.Interval)
-
+                if not (state.PackSpamEnabled and state.LoopToken==token) then break end
                 petName=(petName=="Mighty Monster") and "Wild Wizard" or "Mighty Monster"
+                task.wait(state.Interval)
             end
         end)
-    end
-
-    local function stopPackSpam()
-        if not state.PackSpamEnabled then return end
-        state.PackSpamEnabled=false
-        state.LoopToken+=1
-        refreshButton()
     end
 
     toggle.Activated:Connect(function()
@@ -2961,10 +2980,9 @@ _G.EmpireBuildKillingControls=function()
         end
     end)
 
-    if state.PackSpamEnabled then
-        task.defer(refreshButton)
-    end
+    task.defer(updateCanvas)
 end
+
 
 
 local function showPage(cat)
