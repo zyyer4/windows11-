@@ -2753,6 +2753,17 @@ _G.EmpireBuildKillingControls=function()
         Size=UDim2.new(1,-32,0,36),
         BackgroundTransparency=1,
     },speedCard)
+
+    local speedVerifyLabel=create("TextLabel",{
+        Position=UDim2.new(0,16,1,-20),
+        Size=UDim2.new(1,-32,0,14),
+        BackgroundTransparency=1,
+        Text="Verified: checking active speed...",
+        TextColor3=COLORS.muted,
+        TextSize=8,
+        Font=Enum.Font.GothamSemibold,
+        TextXAlignment=Enum.TextXAlignment.Left,
+    },speedCard)
     create("UIListLayout",{
         FillDirection=Enum.FillDirection.Horizontal,
         Padding=UDim.new(0,6),
@@ -2766,12 +2777,60 @@ _G.EmpireBuildKillingControls=function()
         {name="Faster",interval=0.08},
         {name="Max",interval=0.05},
     }
+
+    -- Verified speed state: exactly ONE preset is true at a time.
+    state.SpeedModes=state.SpeedModes or {
+        Normal=false,
+        Fast=false,
+        Faster=false,
+        Max=false,
+    }
+
+    local function setVerifiedSpeed(name)
+        for _,preset in ipairs(speedPresets) do
+            state.SpeedModes[preset.name]=(preset.name==name)
+        end
+        state.SpeedName=name
+    end
+
+    -- Repair any stale/ambiguous state left by an older version.
+    do
+        local valid=false
+        for _,preset in ipairs(speedPresets) do
+            if state.SpeedModes[preset.name]==true then
+                if not valid then
+                    valid=true
+                    state.SpeedName=preset.name
+                else
+                    state.SpeedModes[preset.name]=false
+                end
+            end
+        end
+        if not valid then
+            setVerifiedSpeed(state.SpeedName or "Normal")
+        end
+    end
+
+    local function getVerifiedSpeed()
+        for _,preset in ipairs(speedPresets) do
+            if state.SpeedModes[preset.name]==true then
+                return preset.name,preset.interval
+            end
+        end
+        setVerifiedSpeed("Normal")
+        return "Normal",0.20
+    end
+
     local function updateSpeedButtons()
+        local activeName,activeInterval=getVerifiedSpeed()
         for _,entry in ipairs(speedButtons) do
-            local active=entry.name==state.SpeedName
+            local active=(entry.name==activeName and state.SpeedModes[entry.name]==true)
             entry.button.BackgroundColor3=active and Color3.fromRGB(47,65,99) or Color3.fromRGB(28,42,68)
             entry.button.TextColor3=active and COLORS.text or COLORS.muted
+            entry.button.Text=entry.name..(active and "  ✓ TRUE" or "  • false")
         end
+        speedVerifyLabel.Text="Verified: "..activeName.." = true   •   interval = "..string.format("%.2fs",activeInterval)
+        speedVerifyLabel.TextColor3=COLORS.green
     end
     for i,preset in ipairs(speedPresets) do
         local b=create("TextButton",{
@@ -2789,10 +2848,14 @@ _G.EmpireBuildKillingControls=function()
         corner(b,7); stroke(b,Color3.fromRGB(255,98,108),.64,1); hoverScale(b,1.01)
         speedButtons[#speedButtons+1]={button=b,name=preset.name}
         b.Activated:Connect(function()
-            state.Interval=preset.interval
-            state.SpeedName=preset.name
+            -- Selecting a preset explicitly flips every other preset false.
+            setVerifiedSpeed(preset.name)
+            local activeName,activeInterval=getVerifiedSpeed()
+            state.Interval=activeInterval
             updateSpeedButtons()
             if refresh then refresh() end
+            speedVerifyLabel.Text="Verified: "..activeName.." = true   •   Normal="..tostring(state.SpeedModes.Normal).."  Fast="..tostring(state.SpeedModes.Fast).."  Faster="..tostring(state.SpeedModes.Faster).."  Max="..tostring(state.SpeedModes.Max)
+            speedVerifyLabel.TextColor3=COLORS.green
         end)
     end
 
@@ -2887,7 +2950,10 @@ _G.EmpireBuildKillingControls=function()
         toggle.BackgroundColor3=state.PackSpamEnabled and Color3.fromRGB(45,120,83) or Color3.fromRGB(28,42,68)
         status.Text="Status: "..(state.PackSpamEnabled and "Enabled" or "Disabled")
         status.TextColor3=state.PackSpamEnabled and COLORS.green or COLORS.muted
-        detail.Text="Mighty Monster → Wild Wizard → repeat   •   Speed: "..state.SpeedName.."   •   Interval: "..string.format("%.2fs",state.Interval)
+        local activeName,activeInterval=getVerifiedSpeed()
+        state.SpeedName=activeName
+        state.Interval=activeInterval
+        detail.Text="Mighty Monster → Wild Wizard → repeat   •   Speed: "..activeName.." = true   •   Interval: "..string.format("%.2fs",activeInterval)
     end
 
     local function getPetReferences()
@@ -2970,7 +3036,16 @@ _G.EmpireBuildKillingControls=function()
                 resultLabel.TextColor3=ok and COLORS.text or Color3.fromRGB(255,120,128)
 
                 petName=(petName=="Mighty Monster") and "Wild Wizard" or "Mighty Monster"
-                task.wait(state.Interval)
+
+                -- Re-verify the selected speed before every cycle. If an
+                -- invalid/stale state appears, fall back to Normal.
+                local activeName,activeInterval=getVerifiedSpeed()
+                state.SpeedName=activeName
+                state.Interval=activeInterval
+                if resultLabel and resultLabel.Parent then
+                    resultLabel.Text="Verified speed: "..activeName.." = true   •   Interval: "..string.format("%.2fs",activeInterval)
+                end
+                task.wait(activeInterval)
             end
         end)
     end
