@@ -1443,7 +1443,12 @@ buildPlayerTools()
 --========================================================--
 local function makePerformanceControls()
     clearCards()
-    grid.CellSize=UDim2.new(1,-7,0,58)
+    grid.Parent=nil
+    cardArea.Active=true
+    cardArea.ScrollingEnabled=true
+    cardArea.ScrollingDirection=Enum.ScrollingDirection.Y
+    cardArea.AutomaticCanvasSize=Enum.AutomaticSize.Y
+    cardArea.CanvasSize=UDim2.fromOffset(0,0)
 
     _G.EmpirePerformanceSettings=_G.EmpirePerformanceSettings or {
         accessories=false,
@@ -2423,9 +2428,13 @@ _G.EmpireBuildPetsControls()
 
 
 _G.EmpireBuildStatsControls = function()
-    -- The Stats page is intentionally built inside one scoped function so the
-    -- large Empire script does not consume additional top-level Luau locals.
+    -- Dedicated vertical layout keeps the Stats page independent of the default grid.
     grid.Parent=nil
+    cardArea.Active=true
+    cardArea.ScrollingEnabled=true
+    cardArea.ScrollingDirection=Enum.ScrollingDirection.Y
+    cardArea.AutomaticCanvasSize=Enum.AutomaticSize.Y
+    cardArea.CanvasSize=UDim2.fromOffset(0,0)
 
     local statsRoot=create("Frame",{
         Name="EmpireStatsRoot",
@@ -2730,7 +2739,7 @@ _G.EmpireBuildKillingControls=function()
         -- Max is the fastest client-friendly preset: only the currently
         -- equipped collection is cleared, requests are sent in small batches,
         -- and the loop yields often enough to keep movement/rendering alive.
-        {name="Max",interval=0.06,clear=0,equip=0.002,yieldEvery=3},
+        {name="Max",interval=0.05,clear=0,equip=0,yieldEvery=1},
     }
 
     local speedCard=create("Frame",{
@@ -2920,13 +2929,7 @@ _G.EmpireBuildKillingControls=function()
         if equippedFolder and equippedFolder:IsA("Folder") then
             foldersToClear={equippedFolder}
         else
-            -- Fallback for games without a dedicated Equipped folder: clear
-            -- non-Unique folders only, never the inventory itself.
-            for _,folder in ipairs(petsFolder:GetChildren()) do
-                if folder:IsA("Folder") and folder~=uniquePets then
-                    foldersToClear[#foldersToClear+1]=folder
-                end
-            end
+            return false,"Status: Equipped pet folder unavailable"
         end
 
         local remoteCount=0
@@ -2997,11 +3000,7 @@ _G.EmpireBuildKillingControls=function()
                     resultOk=false
                     resultMsg="Status: Pack swap error"
                 end
-                if toggle.Parent then
-                    status.Text=tostring(resultMsg or (resultOk and "Status: Loadout equipped" or "Status: Pack swap failed"))
-                    status.TextColor3=resultOk and COLORS.green or Color3.fromRGB(255,130,130)
-                end
-                            if not (state.PackSpamEnabled and state.LoopToken==token) then break end
+                if not (state.PackSpamEnabled and state.LoopToken==token) then break end
                 petName=(petName=="Mighty Monster") and "Wild Wizard" or "Mighty Monster"
                 -- Keep the cycle extremely fast, but always yield between full
                 -- loadouts so movement/rendering is not starved by the loop.
