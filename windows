@@ -2538,12 +2538,23 @@ _G.EmpireBuildStatsControls = function()
         Size=UDim2.new(1,-24,1,-63),
         BackgroundTransparency=1,
         BorderSizePixel=0,
-        CanvasSize=UDim2.new(),
-        AutomaticCanvasSize=Enum.AutomaticSize.Y,
-        ScrollBarThickness=3,
+        Active=true,
+        ScrollingEnabled=true,
+        ScrollingDirection=Enum.ScrollingDirection.Y,
+        CanvasSize=UDim2.fromOffset(0,0),
+        AutomaticCanvasSize=Enum.AutomaticSize.None,
+        ScrollBarThickness=5,
         ScrollBarImageColor3=COLORS.line,
+        ElasticBehavior=Enum.ElasticBehavior.Always,
     },serverCard)
     local playerLayout=create("UIListLayout",{Padding=UDim.new(0,6),SortOrder=Enum.SortOrder.LayoutOrder},playerList)
+
+    local function updatePlayerCanvas()
+        local height=playerLayout.AbsoluteContentSize.Y
+        playerList.CanvasSize=UDim2.fromOffset(0,math.max(height+8,playerList.AbsoluteWindowSize.Y+1))
+    end
+    playerLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updatePlayerCanvas)
+    playerList:GetPropertyChangedSignal("AbsoluteWindowSize"):Connect(updatePlayerCanvas)
 
     local function readValue(container,names)
         if not container then return nil end
@@ -2606,6 +2617,8 @@ _G.EmpireBuildStatsControls = function()
             create("TextLabel",{Position=UDim2.new(0,10,0,29),Size=UDim2.new(1,-20,0,17),BackgroundTransparency=1,Text="Strength  "..formatStatNumber(strength or 0).."   •   Durability  "..formatStatNumber(durability or 0),TextColor3=COLORS.text,TextSize=8,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Left,TextTruncate=Enum.TextTruncate.AtEnd},row)
             create("TextLabel",{Position=UDim2.new(0,10,0,46),Size=UDim2.new(1,-20,0,12),BackgroundTransparency=1,Text="Rebirths  "..formatRebirthNumber(rebirths or 0).."   •   UserId  "..tostring(otherPlayer.UserId),TextColor3=COLORS.muted,TextSize=7,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Left,TextTruncate=Enum.TextTruncate.AtEnd},row)
         end
+        updatePlayerCanvas()
+        playerList.CanvasPosition=Vector2.new(0,math.min(playerList.CanvasPosition.Y,math.max(0,playerList.CanvasSize.Y.Offset-playerList.AbsoluteWindowSize.Y)))
     end
 
     refreshPlayers.Activated:Connect(refreshServerPlayers)
