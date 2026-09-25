@@ -2403,10 +2403,18 @@ _G.EmpireBuildPetsControls=function()
     )
 
     group(
+        "P2W · Newer Premium Loadouts",
+        "Equip every matching newer premium pet copy from your Unique collection.",
+        Color3.fromRGB(255,198,110),
+        2,
+        {"Rideable Dragon Mount","Omega Overlord","Titanium Hydra","Powercore Hound","Inferno Unicorn"}
+    )
+
+    group(
         "F2P · Boss Pet Loadouts",
         "Equip every matching boss pet copy from your Unique collection.",
         Color3.fromRGB(103,170,255),
-        2,
+        3,
         {"Common Boss Pet","Rare Boss Pet","Epic Boss Pet","Legendary Boss Pet","Mythic Boss Pet","Rainbow Boss Pet"}
     )
 end
@@ -2675,6 +2683,142 @@ _G.EmpireBuildStatsControls = function()
     end)
 end
 
+
+_G.EmpireBuildKillingControls=function()
+    grid.Parent=nil
+    local listLayout=create("UIListLayout",{
+        Padding=UDim.new(0,10),
+        SortOrder=Enum.SortOrder.LayoutOrder,
+    },cardArea)
+
+    _G.EmpireKillingState=_G.EmpireKillingState or {
+        PackSpamEnabled=false,
+        LoopToken=0,
+        Interval=0.20,
+    }
+    local state=_G.EmpireKillingState
+
+    local card=create("Frame",{
+        LayoutOrder=1,
+        Size=UDim2.new(1,-4,0,214),
+        BackgroundColor3=COLORS.panel,
+        BackgroundTransparency=.12,
+        BorderSizePixel=0,
+    },cardArea)
+    card:SetAttribute("EmpireThemeRole","panel")
+    corner(card,12); stroke(card,Color3.fromRGB(255,98,108),.58,1)
+
+    create("TextLabel",{
+        Position=UDim2.new(0,16,0,12),
+        Size=UDim2.new(1,-32,0,22),
+        BackgroundTransparency=1,
+        Text="⚔  Pack Spam",
+        TextColor3=COLORS.text,
+        TextSize=15,
+        Font=Enum.Font.GothamSemibold,
+        TextXAlignment=Enum.TextXAlignment.Left,
+    },card)
+
+    create("TextLabel",{
+        Position=UDim2.new(0,16,0,38),
+        Size=UDim2.new(1,-32,0,42),
+        BackgroundTransparency=1,
+        Text="Continuously cycles between all Mighty Monster copies and all Wild Wizard copies. Use the toggle to start or stop the cycle.",
+        TextColor3=COLORS.muted,
+        TextSize=10,
+        TextWrapped=true,
+        Font=Enum.Font.Gotham,
+        TextXAlignment=Enum.TextXAlignment.Left,
+        TextYAlignment=Enum.TextYAlignment.Top,
+    },card)
+
+    local status=create("TextLabel",{
+        Position=UDim2.new(0,16,0,84),
+        Size=UDim2.new(1,-32,0,20),
+        BackgroundTransparency=1,
+        Text="Status: "..(state.PackSpamEnabled and "Enabled" or "Disabled"),
+        TextColor3=state.PackSpamEnabled and COLORS.green or COLORS.muted,
+        TextSize=10,
+        Font=Enum.Font.GothamMedium,
+        TextXAlignment=Enum.TextXAlignment.Left,
+    },card)
+
+    local toggle=create("TextButton",{
+        Position=UDim2.new(0,16,0,118),
+        Size=UDim2.new(1,-32,0,36),
+        BackgroundColor3=state.PackSpamEnabled and Color3.fromRGB(45,120,83) or Color3.fromRGB(28,42,68),
+        BackgroundTransparency=.06,
+        Text=state.PackSpamEnabled and "Disable Pack Spam" or "Enable Pack Spam",
+        TextColor3=COLORS.text,
+        TextSize=11,
+        Font=Enum.Font.GothamSemibold,
+        AutoButtonColor=false,
+    },card)
+    toggle:SetAttribute("EmpireThemeRole","button")
+    corner(toggle,8); stroke(toggle,Color3.fromRGB(255,98,108),.55,1); hoverScale(toggle,1.012)
+
+    local detail=create("TextLabel",{
+        Position=UDim2.new(0,16,0,163),
+        Size=UDim2.new(1,-32,0,34),
+        BackgroundTransparency=1,
+        Text="Cycle: Mighty Monster → Wild Wizard   •   Interval: "..string.format("%.2fs",state.Interval),
+        TextColor3=COLORS.muted,
+        TextSize=9,
+        Font=Enum.Font.Gotham,
+        TextWrapped=true,
+        TextXAlignment=Enum.TextXAlignment.Left,
+    },card)
+
+    local function refreshButton()
+        if not toggle.Parent then return end
+        toggle.Text=state.PackSpamEnabled and "Disable Pack Spam" or "Enable Pack Spam"
+        toggle.BackgroundColor3=state.PackSpamEnabled and Color3.fromRGB(45,120,83) or Color3.fromRGB(28,42,68)
+        status.Text="Status: "..(state.PackSpamEnabled and "Enabled" or "Disabled")
+        status.TextColor3=state.PackSpamEnabled and COLORS.green or COLORS.muted
+        detail.Text="Cycle: Mighty Monster → Wild Wizard   •   Interval: "..string.format("%.2fs",state.Interval)
+    end
+
+    local function startPackSpam()
+        if state.PackSpamEnabled then return end
+        state.PackSpamEnabled=true
+        state.LoopToken+=1
+        local token=state.LoopToken
+        refreshButton()
+
+        task.spawn(function()
+            while state.PackSpamEnabled
+                and state.LoopToken==token
+                and not _G.JohnnyScriptDestroyed do
+                pcall(function() equipPetByName("Mighty Monster") end)
+                task.wait(state.Interval)
+                if not (state.PackSpamEnabled and state.LoopToken==token) then break end
+                pcall(function() equipPetByName("Wild Wizard") end)
+                task.wait(state.Interval)
+            end
+        end)
+    end
+
+    local function stopPackSpam()
+        if not state.PackSpamEnabled then return end
+        state.PackSpamEnabled=false
+        state.LoopToken+=1
+        refreshButton()
+    end
+
+    toggle.Activated:Connect(function()
+        if state.PackSpamEnabled then
+            stopPackSpam()
+        else
+            startPackSpam()
+        end
+    end)
+
+    -- Rebuilds of the Killing page keep the feature state in sync with the UI.
+    if state.PackSpamEnabled then
+        task.defer(refreshButton)
+    end
+end
+
 local function showPage(cat)
     breadcrumb.Text="Empire / "..cat.name
     pageTitle.Text=cat.emoji.."  "..cat.name
@@ -2692,7 +2836,7 @@ local function showPage(cat)
     elseif cat.name=="Rebirth" then cardArea.Visible=false; rebirthArea.Visible=true
     elseif cat.name=="Pets" then cardArea.Visible=false; _G.EmpirePetsArea.Visible=true
     elseif cat.name=="Player" then cardArea.Visible=false; playerArea.Visible=true
-    elseif cat.name=="Killing" then makeCard("⚔  Category panel","Visual placeholder only. No combat or targeting functionality.","Preview",1,cat.color)
+    elseif cat.name=="Killing" then cardArea.Visible=true; _G.EmpireBuildKillingControls()
     elseif cat.name=="Stats" then cardArea.Visible=true; _G.EmpireBuildStatsControls()
     elseif cat.name=="Perf" then makePerformanceControls()
     else makeCard("⚙  Miscellaneous","General interface options.","Open options",1,cat.color); makeCard("ⓘ  About Empire","Modern macOS-inspired interface concept.","About",2,cat.color) end
