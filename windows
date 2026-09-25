@@ -2694,7 +2694,7 @@ _G.EmpireBuildKillingControls=function()
     _G.EmpireKillingState=_G.EmpireKillingState or {
         PackSpamEnabled=false,
         LoopToken=0,
-        Interval=0.20,
+        Interval=0.12,
     }
     local state=_G.EmpireKillingState
 
@@ -2723,7 +2723,7 @@ _G.EmpireBuildKillingControls=function()
         Position=UDim2.new(0,16,0,38),
         Size=UDim2.new(1,-32,0,42),
         BackgroundTransparency=1,
-        Text="Continuously cycles between all Mighty Monster copies and all Wild Wizard copies. Use the toggle to start or stop the cycle.",
+        Text="Continuously swaps the full equipped set between all Mighty Monster copies and all Wild Wizard copies.",
         TextColor3=COLORS.muted,
         TextSize=10,
         TextWrapped=true,
@@ -2761,7 +2761,7 @@ _G.EmpireBuildKillingControls=function()
         Position=UDim2.new(0,16,0,163),
         Size=UDim2.new(1,-32,0,34),
         BackgroundTransparency=1,
-        Text="Cycle: Mighty Monster → Wild Wizard   •   Interval: "..string.format("%.2fs",state.Interval),
+        Text="Mighty Monster → Wild Wizard → repeat   •   Swap interval: "..string.format("%.2fs",state.Interval),
         TextColor3=COLORS.muted,
         TextSize=9,
         Font=Enum.Font.Gotham,
@@ -2769,13 +2769,58 @@ _G.EmpireBuildKillingControls=function()
         TextXAlignment=Enum.TextXAlignment.Left,
     },card)
 
-    local function refreshButton()
+    local function refreshButton(message)
         if not toggle.Parent then return end
         toggle.Text=state.PackSpamEnabled and "Disable Pack Spam" or "Enable Pack Spam"
         toggle.BackgroundColor3=state.PackSpamEnabled and Color3.fromRGB(45,120,83) or Color3.fromRGB(28,42,68)
-        status.Text="Status: "..(state.PackSpamEnabled and "Enabled" or "Disabled")
+        status.Text=message or ("Status: "..(state.PackSpamEnabled and "Enabled" or "Disabled"))
         status.TextColor3=state.PackSpamEnabled and COLORS.green or COLORS.muted
-        detail.Text="Cycle: Mighty Monster → Wild Wizard   •   Interval: "..string.format("%.2fs",state.Interval)
+        detail.Text="Mighty Monster → Wild Wizard → repeat   •   Swap interval: "..string.format("%.2fs",state.Interval)
+    end
+
+    local function getPackPetsFolder()
+        local petsFolder=Player:FindFirstChild("petsFolder")
+        local uniquePets=petsFolder and petsFolder:FindFirstChild("Unique")
+        return petsFolder,uniquePets
+    end
+
+    local function equipWholeLoadout(petName)
+        local petsFolder,uniquePets=getPackPetsFolder()
+        if not petsFolder or not uniquePets or not equipPetEvent then
+            return false,"Status: Pet storage/event unavailable"
+        end
+
+        -- Fully clear the current equipped set so each pass replaces the
+        -- previous pack instead of stacking both packs together.
+        for _,folder in ipairs(petsFolder:GetChildren()) do
+            if folder:IsA("Folder") then
+                for _,pet in ipairs(folder:GetChildren()) do
+                    pcall(function()
+                        equipPetEvent:FireServer("unequipPet",pet)
+                    end)
+                end
+            end
+        end
+
+        task.wait(0.08)
+
+        local wanted=string.lower(petName)
+        local found=0
+        for _,pet in ipairs(uniquePets:GetChildren()) do
+            if string.lower(pet.Name)==wanted then
+                pcall(function()
+                    equipPetEvent:FireServer("equipPet",pet)
+                    found+=1
+                end)
+                task.wait(0.02)
+            end
+        end
+
+        if found==0 then
+            return false,"Status: No "..petName.." copies found"
+        end
+
+        return true,"Status: Equipped "..tostring(found).." "..petName
     end
 
     local function startPackSpam()
@@ -2786,14 +2831,31 @@ _G.EmpireBuildKillingControls=function()
         refreshButton()
 
         task.spawn(function()
+            local petName="Mighty Monster"
             while state.PackSpamEnabled
                 and state.LoopToken==token
                 and not _G.JohnnyScriptDestroyed do
-                pcall(function() equipPetByName("Mighty Monster") end)
+
+                local callOk,resultOk,resultMsg=pcall(function()
+                    return equipWholeLoadout(petName)
+                end)
+                if not callOk then
+                    resultOk=false
+                    resultMsg="Status: Pack swap error"
+                end
+
+                if not state.PackSpamEnabled or state.LoopToken~=token then
+                    break
+                end
+
+                if toggle.Parent then
+                    status.Text=tostring(resultMsg or (resultOk and "Status: Loadout equipped" or "Status: Pack swap failed"))
+                    status.TextColor3=resultOk and COLORS.green or Color3.fromRGB(255,130,130)
+                end
+
                 task.wait(state.Interval)
-                if not (state.PackSpamEnabled and state.LoopToken==token) then break end
-                pcall(function() equipPetByName("Wild Wizard") end)
-                task.wait(state.Interval)
+
+                petName=(petName=="Mighty Monster") and "Wild Wizard" or "Mighty Monster"
             end
         end)
     end
@@ -2813,11 +2875,11 @@ _G.EmpireBuildKillingControls=function()
         end
     end)
 
-    -- Rebuilds of the Killing page keep the feature state in sync with the UI.
     if state.PackSpamEnabled then
         task.defer(refreshButton)
     end
 end
+
 
 local function showPage(cat)
     breadcrumb.Text="Empire / "..cat.name
