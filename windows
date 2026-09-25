@@ -2701,29 +2701,17 @@ _G.EmpireBuildKillingControls=function()
         SortOrder=Enum.SortOrder.LayoutOrder,
     },cardArea)
 
-    _G.EmpireKillingState=_G.EmpireKillingState or {
-        PackSpamEnabled=false,
-        LoopToken=0,
-        Interval=0.20,
-        SpeedName="Normal",
-    }
+    _G.EmpireKillingState=_G.EmpireKillingState or {}
     local state=_G.EmpireKillingState
+    state.PackSpamEnabled=false
+    state.LoopToken=(tonumber(state.LoopToken) or 0)+1
+    state.Interval=tonumber(state.Interval) or 0.20
+    state.SpeedName=state.SpeedName or "Normal"
 
     local function updateCanvas()
         local height=listLayout.AbsoluteContentSize.Y
-        cardArea.CanvasSize=UDim2.fromOffset(
-            0,
-            math.max(height+10,cardArea.AbsoluteWindowSize.Y+1)
-        )
-        cardArea.CanvasPosition=Vector2.new(
-            0,
-            math.min(
-                cardArea.CanvasPosition.Y,
-                math.max(0,height+10-cardArea.AbsoluteWindowSize.Y)
-            )
-        )
+        cardArea.CanvasSize=UDim2.fromOffset(0,math.max(height+10,cardArea.AbsoluteWindowSize.Y+1))
     end
-
     listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateCanvas)
     cardArea:GetPropertyChangedSignal("AbsoluteWindowSize"):Connect(updateCanvas)
 
@@ -2735,8 +2723,7 @@ _G.EmpireBuildKillingControls=function()
         BorderSizePixel=0,
     },cardArea)
     speedCard:SetAttribute("EmpireThemeRole","panel")
-    corner(speedCard,12)
-    stroke(speedCard,Color3.fromRGB(255,98,108),.58,1)
+    corner(speedCard,12); stroke(speedCard,Color3.fromRGB(255,98,108),.58,1)
 
     create("TextLabel",{
         Position=UDim2.new(0,16,0,10),
@@ -2748,12 +2735,11 @@ _G.EmpireBuildKillingControls=function()
         Font=Enum.Font.GothamSemibold,
         TextXAlignment=Enum.TextXAlignment.Left,
     },speedCard)
-
     create("TextLabel",{
         Position=UDim2.new(0,16,0,33),
         Size=UDim2.new(1,-32,0,22),
         BackgroundTransparency=1,
-        Text="Set the delay between each full Mighty Monster ↔ Wild Wizard loadout swap.",
+        Text="Delay between each completed Mighty Monster ↔ Wild Wizard swap.",
         TextColor3=COLORS.muted,
         TextSize=9,
         TextWrapped=true,
@@ -2774,23 +2760,19 @@ _G.EmpireBuildKillingControls=function()
     },speedFrame)
 
     local speedButtons={}
-    local refresh
-
-    local function updateSpeedButtons()
-        for _,entry in ipairs(speedButtons) do
-            local active=entry.preset.name==state.SpeedName
-            entry.button.BackgroundColor3=active and Color3.fromRGB(47,65,99) or Color3.fromRGB(28,42,68)
-            entry.button.TextColor3=active and COLORS.text or COLORS.muted
-        end
-    end
-
     local speedPresets={
         {name="Normal",interval=0.20},
         {name="Fast",interval=0.12},
         {name="Faster",interval=0.08},
         {name="Max",interval=0.05},
     }
-
+    local function updateSpeedButtons()
+        for _,entry in ipairs(speedButtons) do
+            local active=entry.name==state.SpeedName
+            entry.button.BackgroundColor3=active and Color3.fromRGB(47,65,99) or Color3.fromRGB(28,42,68)
+            entry.button.TextColor3=active and COLORS.text or COLORS.muted
+        end
+    end
     for i,preset in ipairs(speedPresets) do
         local b=create("TextButton",{
             LayoutOrder=i,
@@ -2804,11 +2786,8 @@ _G.EmpireBuildKillingControls=function()
             AutoButtonColor=false,
         },speedFrame)
         b:SetAttribute("EmpireThemeRole","button")
-        corner(b,7)
-        stroke(b,Color3.fromRGB(255,98,108),.64,1)
-        hoverScale(b,1.01)
-        local entry={button=b,preset=preset}
-        speedButtons[#speedButtons+1]=entry
+        corner(b,7); stroke(b,Color3.fromRGB(255,98,108),.64,1); hoverScale(b,1.01)
+        speedButtons[#speedButtons+1]={button=b,name=preset.name}
         b.Activated:Connect(function()
             state.Interval=preset.interval
             state.SpeedName=preset.name
@@ -2816,18 +2795,16 @@ _G.EmpireBuildKillingControls=function()
             if refresh then refresh() end
         end)
     end
-    updateSpeedButtons()
 
     local card=create("Frame",{
         LayoutOrder=2,
-        Size=UDim2.new(1,-4,0,226),
+        Size=UDim2.new(1,-4,0,250),
         BackgroundColor3=COLORS.panel,
         BackgroundTransparency=.12,
         BorderSizePixel=0,
     },cardArea)
     card:SetAttribute("EmpireThemeRole","panel")
-    corner(card,12)
-    stroke(card,Color3.fromRGB(255,98,108),.58,1)
+    corner(card,12); stroke(card,Color3.fromRGB(255,98,108),.58,1)
 
     create("TextLabel",{
         Position=UDim2.new(0,16,0,12),
@@ -2839,12 +2816,11 @@ _G.EmpireBuildKillingControls=function()
         Font=Enum.Font.GothamSemibold,
         TextXAlignment=Enum.TextXAlignment.Left,
     },card)
-
     create("TextLabel",{
         Position=UDim2.new(0,16,0,39),
-        Size=UDim2.new(1,-32,0,44),
+        Size=UDim2.new(1,-32,0,42),
         BackgroundTransparency=1,
-        Text="Continuously swaps between all Mighty Monster copies and all Wild Wizard copies.",
+        Text="Uses the same pet equip method as the working Pets controls: clear the current equipped set, then equip every matching copy from petsFolder.Unique.",
         TextColor3=COLORS.muted,
         TextSize=10,
         TextWrapped=true,
@@ -2854,7 +2830,7 @@ _G.EmpireBuildKillingControls=function()
     },card)
 
     local status=create("TextLabel",{
-        Position=UDim2.new(0,16,0,85),
+        Position=UDim2.new(0,16,0,84),
         Size=UDim2.new(1,-32,0,20),
         BackgroundTransparency=1,
         Text="Status: Disabled",
@@ -2864,8 +2840,21 @@ _G.EmpireBuildKillingControls=function()
         TextXAlignment=Enum.TextXAlignment.Left,
     },card)
 
+    local resultLabel=create("TextLabel",{
+        Position=UDim2.new(0,16,0,106),
+        Size=UDim2.new(1,-32,0,30),
+        BackgroundTransparency=1,
+        Text="Ready — waiting for Pack Spam",
+        TextColor3=COLORS.muted,
+        TextSize=9,
+        TextWrapped=true,
+        Font=Enum.Font.Gotham,
+        TextXAlignment=Enum.TextXAlignment.Left,
+        TextYAlignment=Enum.TextYAlignment.Top,
+    },card)
+
     local toggle=create("TextButton",{
-        Position=UDim2.new(0,16,0,116),
+        Position=UDim2.new(0,16,0,143),
         Size=UDim2.new(1,-32,0,36),
         BackgroundColor3=Color3.fromRGB(28,42,68),
         BackgroundTransparency=.06,
@@ -2876,143 +2865,110 @@ _G.EmpireBuildKillingControls=function()
         AutoButtonColor=false,
     },card)
     toggle:SetAttribute("EmpireThemeRole","button")
-    corner(toggle,8)
-    stroke(toggle,Color3.fromRGB(255,98,108),.55,1)
-    hoverScale(toggle,1.012)
+    corner(toggle,8); stroke(toggle,Color3.fromRGB(255,98,108),.55,1); hoverScale(toggle,1.012)
 
     local detail=create("TextLabel",{
-        Position=UDim2.new(0,16,0,162),
-        Size=UDim2.new(1,-32,0,48),
+        Position=UDim2.new(0,16,0,188),
+        Size=UDim2.new(1,-32,0,42),
         BackgroundTransparency=1,
         Text="Mighty Monster → Wild Wizard → repeat   •   Speed: "..state.SpeedName.."   •   Interval: "..string.format("%.2fs",state.Interval),
         TextColor3=COLORS.muted,
         TextSize=9,
-        Font=Enum.Font.Gotham,
         TextWrapped=true,
+        Font=Enum.Font.Gotham,
         TextXAlignment=Enum.TextXAlignment.Left,
         TextYAlignment=Enum.TextYAlignment.Top,
     },card)
 
+    local refresh
     refresh=function()
         if not toggle.Parent then return end
         toggle.Text=state.PackSpamEnabled and "Disable Pack Spam" or "Enable Pack Spam"
-        toggle.BackgroundColor3=state.PackSpamEnabled
-            and Color3.fromRGB(45,120,83)
-            or Color3.fromRGB(28,42,68)
+        toggle.BackgroundColor3=state.PackSpamEnabled and Color3.fromRGB(45,120,83) or Color3.fromRGB(28,42,68)
         status.Text="Status: "..(state.PackSpamEnabled and "Enabled" or "Disabled")
         status.TextColor3=state.PackSpamEnabled and COLORS.green or COLORS.muted
         detail.Text="Mighty Monster → Wild Wizard → repeat   •   Speed: "..state.SpeedName.."   •   Interval: "..string.format("%.2fs",state.Interval)
     end
 
-    local function getPackPetsFolder()
+    local function getPetReferences()
         local petsFolder=Player:FindFirstChild("petsFolder")
         local uniquePets=petsFolder and petsFolder:FindFirstChild("Unique")
-        return petsFolder,uniquePets
-    end
-
-    -- Resolve the pet remote again when Pack Spam runs. This keeps the
-    -- feature working even when rEvents/equipPetEvent is created after
-    -- the UI script starts.
-    local function getPackEquipPetEvent()
-        local events=Player:FindFirstChild("rEvents") or ReplicatedStorage:FindFirstChild("rEvents")
+        local events=ReplicatedStorage:FindFirstChild("rEvents")
         local event=events and events:FindFirstChild("equipPetEvent")
-        if event then
-            equipPetEvent=event
-        end
-        return event or equipPetEvent
+        if event then equipPetEvent=event end
+        return petsFolder,uniquePets,event or equipPetEvent
     end
 
-    local function unequipCurrentPets(petsFolder,event)
-        if not petsFolder or not event then
-            return false,0
+    local function equipAllNamedForPack(petName)
+        local petsFolder,uniquePets,event=getPetReferences()
+        if not petsFolder then
+            return false,"petsFolder not found"
+        end
+        if not uniquePets then
+            return false,"petsFolder.Unique not found"
+        end
+        if not event or not event:IsA("RemoteEvent") then
+            return false,"equipPetEvent not found in ReplicatedStorage.rEvents"
         end
 
-        local sent=0
-        -- Match the known-working Pets page behavior: walk every pet folder
-        -- and send the normal unequip request before loading the target set.
+        -- Exact pattern used by the known-working Pets manual controls.
         for _,folder in ipairs(petsFolder:GetChildren()) do
             if folder:IsA("Folder") then
                 for _,pet in ipairs(folder:GetChildren()) do
-                    local ok=pcall(function()
+                    pcall(function()
                         event:FireServer("unequipPet",pet)
                     end)
-                    if ok then
-                        sent+=1
-                    end
                 end
             end
         end
-        return true,sent
-    end
+        task.wait(0.10)
 
-    local function equipWholeLoadout(petName)
-        local petsFolder,uniquePets=getPackPetsFolder()
-        local event=getPackEquipPetEvent()
-        if not petsFolder or not uniquePets or not event then
-            return false,"Pet storage/event unavailable"
-        end
-
-        local okUnequip=unequipCurrentPets(petsFolder,event)
-        if not okUnequip then
-            return false,"Unable to send pet unequip requests"
-        end
-
-        -- Give the game a small amount of time to process the clear before
-        -- sending the new loadout, just like the working Pets controls.
-        task.wait(.05)
-
-        local found=0
+        local count=0
         for _,pet in ipairs(uniquePets:GetChildren()) do
             if pet.Name==petName then
                 local ok=pcall(function()
                     event:FireServer("equipPet",pet)
                 end)
-                if ok then
-                    found+=1
-                end
-                task.wait(.025)
+                if ok then count+=1 end
+                task.wait(0.025)
             end
         end
-
-        if found==0 then
-            return false,"No "..petName.." copies found"
+        if count==0 then
+            return false,"No "..petName.." copies found in Unique"
         end
-
-        return true,"Equipped "..tostring(found).." "..petName
+        return true,"Equipped "..tostring(count).." "..petName
     end
 
     local function stopPackSpam()
         state.PackSpamEnabled=false
-        state.LoopToken+=1
+        state.LoopToken=(tonumber(state.LoopToken) or 0)+1
         refresh()
     end
 
     local function startPackSpam()
-        if state.PackSpamEnabled then return end
         state.PackSpamEnabled=true
-        state.LoopToken+=1
+        state.LoopToken=(tonumber(state.LoopToken) or 0)+1
         local token=state.LoopToken
         refresh()
 
         task.spawn(function()
             local petName="Mighty Monster"
-            while state.PackSpamEnabled
-                and state.LoopToken==token
-                and not _G.JohnnyScriptDestroyed do
-
+            while state.PackSpamEnabled and state.LoopToken==token and not _G.JohnnyScriptDestroyed do
                 local ok,result=pcall(function()
-                    return equipWholeLoadout(petName)
+                    return equipAllNamedForPack(petName)
                 end)
-
                 if not ok then
-                    result="Pack swap error"
+                    result="Pack swap error: "..tostring(result)
+                    ok=false
                 end
 
-                if not (state.PackSpamEnabled and state.LoopToken==token) then
+                if not state.PackSpamEnabled or state.LoopToken~=token then
                     break
                 end
 
-                detail.Text=tostring(result and ("Last: "..result) or ("Mighty Monster → Wild Wizard → repeat   •   Speed: "..state.SpeedName.."   •   Interval: "..string.format("%.2fs",state.Interval)))
+                resultLabel.Text=ok and ("Last: "..tostring(result)) or ("Error: "..tostring(result))
+                resultLabel.TextColor3=ok and COLORS.text or Color3.fromRGB(255,120,128)
+
                 petName=(petName=="Mighty Monster") and "Wild Wizard" or "Mighty Monster"
                 task.wait(state.Interval)
             end
@@ -3020,16 +2976,14 @@ _G.EmpireBuildKillingControls=function()
     end
 
     toggle.Activated:Connect(function()
-        if state.PackSpamEnabled then
-            stopPackSpam()
-        else
-            startPackSpam()
-        end
+        if state.PackSpamEnabled then stopPackSpam() else startPackSpam() end
     end)
 
     refresh()
+    updateSpeedButtons()
     task.defer(updateCanvas)
 end
+
 
 local function showPage(cat)
     breadcrumb.Text="Empire / "..cat.name
