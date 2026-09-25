@@ -9,7 +9,22 @@ local UserInputService = game:GetService("UserInputService")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
-local old = playerGui:FindFirstChild("EmpireUI")
+local function getEmpireGuiParent()
+    local parent = playerGui
+    pcall(function()
+        if type(gethui) == "function" then
+            local h = gethui()
+            if h then parent = h end
+        else
+            local core = game:GetService("CoreGui")
+            if core then parent = core end
+        end
+    end)
+    return parent
+end
+
+local empireGuiParent = getEmpireGuiParent()
+local old = empireGuiParent:FindFirstChild("EmpireUI")
 if old then old:Destroy() end
 
 local COLORS = {
@@ -154,11 +169,18 @@ local function icon(parent, kind, color, size)
 end
 
 local gui=create("ScreenGui", {
-    Name="EmpireUI", ResetOnSpawn=false, ZIndexBehavior=Enum.ZIndexBehavior.Sibling,
-}, playerGui)
+    Name="EmpireUI", ResetOnSpawn=false, IgnoreGuiInset=true,
+    ZIndexBehavior=Enum.ZIndexBehavior.Sibling, DisplayOrder=999999,
+}, empireGuiParent)
+
+gui.Enabled=true
+-- Keep a PlayerGui fallback when an environment refuses CoreGui/gethui parenting.
+if not gui.Parent then
+    gui.Parent=playerGui
+end
 
 local windowFrame=create("Frame", {
-    Name="Window", AnchorPoint=Vector2.new(.5,.5), Position=UDim2.fromScale(.5,.5),
+    Name="Window", Visible=true, Active=true, AnchorPoint=Vector2.new(.5,.5), Position=UDim2.fromScale(.5,.5),
     Size=UDim2.new(.86,0,.82,0), BackgroundColor3=COLORS.bg, BackgroundTransparency=.24,
     BorderSizePixel=0, ClipsDescendants=true,
 }, gui)
@@ -3149,6 +3171,7 @@ function WindowController.new(opts)
     self.window = opts.window
     self.windowScale = opts.window:FindFirstChildOfClass("UIScale")
     self.pill = opts.pill
+    self.pillScale = opts.pill:FindFirstChildOfClass("UIScale") or create("UIScale", {Scale=1}, opts.pill)
     self._normalPosition = UDim2.fromScale(.5,.5)
     self._normalSize = UDim2.new(.86,0,.82,0)
     self._maximizedSize = UDim2.new(.96,0,.92,0)
@@ -3336,6 +3359,7 @@ end)
 makeDraggable(pill, pill)
 
 -- FULL USER-SUPPLIED FAST FARM / EMPIRE SOURCE
+task.spawn(function()
 -- The source is included in full below; UI calls are bridged into the modern shell.
 -- ========================================================
 --========================================================--
@@ -6052,3 +6076,5 @@ windowFrame.BackgroundTransparency = 1
 windowFrame:FindFirstChildOfClass("UIScale").Scale = .92
 tween(windowFrame:FindFirstChildOfClass("UIScale"), TweenInfo.new(.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1})
 tween(windowFrame, TweenInfo.new(.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {BackgroundTransparency = .24})
+
+end)
