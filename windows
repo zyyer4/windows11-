@@ -707,9 +707,9 @@ create("UIPadding",{PaddingBottom=UDim.new(0,18)},rebirthArea)
 
 -- Dedicated Pets page.  Kept separate from the feature-source code below so
 -- the page is available as soon as the Empire shell is built.
-local petsArea=create("ScrollingFrame",{Position=UDim2.new(0,0,0,69),Size=UDim2.new(1,0,1,-69),BackgroundTransparency=1,BorderSizePixel=0,ScrollBarThickness=5,ScrollingDirection=Enum.ScrollingDirection.Y,CanvasSize=UDim2.new(),AutomaticCanvasSize=Enum.AutomaticSize.Y,Visible=false,ScrollBarImageColor3=Color3.fromRGB(82,99,133)},content)
-local petsLayout=create("UIListLayout",{Padding=UDim.new(0,10),SortOrder=Enum.SortOrder.LayoutOrder},petsArea)
-create("UIPadding",{PaddingBottom=UDim.new(0,18)},petsArea)
+_G.EmpirePetsArea=create("ScrollingFrame",{Position=UDim2.new(0,0,0,69),Size=UDim2.new(1,0,1,-69),BackgroundTransparency=1,BorderSizePixel=0,ScrollBarThickness=5,ScrollingDirection=Enum.ScrollingDirection.Y,CanvasSize=UDim2.new(),AutomaticCanvasSize=Enum.AutomaticSize.Y,Visible=false,ScrollBarImageColor3=Color3.fromRGB(82,99,133)},content)
+create("UIListLayout",{Padding=UDim.new(0,10),SortOrder=Enum.SortOrder.LayoutOrder},_G.EmpirePetsArea)
+create("UIPadding",{PaddingBottom=UDim.new(0,18)},_G.EmpirePetsArea)
 
 local playerArea=create("ScrollingFrame",{Position=UDim2.new(0,0,0,69),Size=UDim2.new(1,0,1,-69),BackgroundTransparency=1,BorderSizePixel=0,ScrollBarThickness=5,ScrollingDirection=Enum.ScrollingDirection.Y,CanvasSize=UDim2.new(),AutomaticCanvasSize=Enum.AutomaticSize.Y,Visible=false,ScrollBarImageColor3=Color3.fromRGB(82,99,133)},content)
 create("UIListLayout",{Padding=UDim.new(0,10),SortOrder=Enum.SortOrder.LayoutOrder},playerArea)
@@ -2290,7 +2290,7 @@ do
     end)
 end
 
-local function buildPetsControls()
+_G.EmpireBuildPetsControls=function()
     local function equipAllPetMatches(petName)
         local petsFolder=Player:FindFirstChild("petsFolder")
         local uniquePets=petsFolder and petsFolder:FindFirstChild("Unique")
@@ -2329,7 +2329,7 @@ local function buildPetsControls()
             BackgroundColor3=COLORS.panel,
             BackgroundTransparency=.12,
             BorderSizePixel=0,
-        },petsArea)
+        },_G.EmpirePetsArea)
         card:SetAttribute("EmpireThemeRole","panel")
         corner(card,12); stroke(card,accent,.58,1)
 
@@ -2411,14 +2411,14 @@ local function buildPetsControls()
     )
 end
 
-buildPetsControls()
+_G.EmpireBuildPetsControls()
 
 local function showPage(cat)
     breadcrumb.Text="Empire / "..cat.name
     pageTitle.Text=cat.emoji.."  "..cat.name
     pageSubtitle.Text=cat.name.." panel · modernized workspace"
     clearCards()
-    farmArea.Visible=false; miscArea.Visible=false; _G.EmpireInfoArea.Visible=false; rebirthArea.Visible=false; petsArea.Visible=false; playerArea.Visible=false; _G.EmpireAdminArea.Visible=false; cardArea.Visible=true
+    farmArea.Visible=false; miscArea.Visible=false; _G.EmpireInfoArea.Visible=false; rebirthArea.Visible=false; _G.EmpirePetsArea.Visible=false; playerArea.Visible=false; _G.EmpireAdminArea.Visible=false; cardArea.Visible=true
     grid.CellSize=UDim2.new(.5,-7,0,150)
     content.Position=UDim2.new(0,27,0,75)
     tween(content,TweenInfo.new(.24,Enum.EasingStyle.Quint,Enum.EasingDirection.Out),{Position=UDim2.new(0,22,0,75)})
@@ -2428,7 +2428,7 @@ local function showPage(cat)
     elseif cat.name=="Info" then cardArea.Visible=false; _G.EmpireInfoArea.Visible=true
     elseif cat.name=="Admin" then cardArea.Visible=false; _G.EmpireAdminArea.Visible=true
     elseif cat.name=="Rebirth" then cardArea.Visible=false; rebirthArea.Visible=true
-    elseif cat.name=="Pets" then cardArea.Visible=false; petsArea.Visible=true
+    elseif cat.name=="Pets" then cardArea.Visible=false; _G.EmpirePetsArea.Visible=true
     elseif cat.name=="Player" then cardArea.Visible=false; playerArea.Visible=true
     elseif cat.name=="Killing" then makeCard("⚔  Category panel","Visual placeholder only. No combat or targeting functionality.","Preview",1,cat.color)
     elseif cat.name=="Stats" then makeCard("▥  Session stats","Compact statistic presentation.","View",1,cat.color); makeCard("▥  Overview","Clean overview card for connected data.","View",2,cat.color)
