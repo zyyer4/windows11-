@@ -286,6 +286,57 @@ local function hoverScale(button, scaleValue)
     end)
 end
 
+-- Generic click-and-drag helper: `handle` is the GuiObject that listens for the
+-- input, `target` is the GuiObject that actually gets repositioned. Works for
+-- both mouse and touch, and preserves whatever AnchorPoint `target` already has.
+local function makeDraggable(handle, target, onDragEnd)
+    local dragging = false
+    local dragInput
+    local dragStart
+    local startPos
+
+    local function update(input)
+        local delta = input.Position - dragStart
+        target.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + delta.X,
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+        )
+    end
+
+    handle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = target.Position
+
+            local conn
+            conn = input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    if dragging and onDragEnd then
+                        pcall(onDragEnd, target.Position)
+                    end
+                    dragging = false
+                    conn:Disconnect()
+                end
+            end)
+        end
+    end)
+
+    handle.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input == dragInput then
+            update(input)
+        end
+    end)
+end
+
 local function clearCards()
     for _,child in ipairs(cardArea:GetChildren()) do
         if not child:IsA("UIGridLayout") then child:Destroy() end
@@ -399,7 +450,7 @@ end
 local window={}
 function window:AddTab(name)
     if name=="Fast Farm" then return makeSourceTab(farmArea) end
-    if name=="Fast Rebirth" then return makeSourceTab(rebirthArea) end
+    if name=="Fast Rebirth" or name=="Rebirth" then return makeSourceTab(rebirthArea) end
     return makeSourceTab(miscArea)
 end
 
@@ -767,6 +818,28 @@ windowController:_track(UserInputService.InputBegan:Connect(function(input,proce
         windowController:ToggleMinimized()
     end
 end))
+
+--========================================================--
+-- DRAGGING
+-- The main window drags from its topbar or the sidebar's brand header (both
+-- otherwise-empty chrome), and the restore pill drags freely on its own.
+-- Dragging the window updates windowController's "normal" position so a
+-- minimize/maximize round-trip returns it to where it was left, not center.
+--========================================================--
+
+topbar.Active = true
+brand.Active = true
+pill.Active = true
+
+makeDraggable(topbar, windowFrame, function(newPos)
+    windowController._normalPosition = newPos
+end)
+
+makeDraggable(brand, windowFrame, function(newPos)
+    windowController._normalPosition = newPos
+end)
+
+makeDraggable(pill, pill)
 
 -- FULL USER-SUPPLIED FAST FARM / EMPIRE SOURCE
 -- The source is included in full below; UI calls are bridged into the modern shell.
@@ -2813,6 +2886,157 @@ FastRebTab:AddButton(
 
     end
 )
+
+--========================================================--
+-- REBIRTH TAB
+--========================================================--
+
+local RebirthTab =
+    window:AddTab("Rebirth")
+
+--========================================================--
+-- REBIRTH OPTIONS
+--========================================================--
+
+RebirthTab:AddLabel("").TextSize = 10
+RebirthTab:AddLabel("Rebirth Options").TextSize = 20
+
+local rebirthTarget = 1
+
+local targetRebirthActive = false
+local infiniteRebirthActive = false
+
+local targetToggle
+local infiniteToggle
+
+RebirthTab:AddTextBox(
+    "Rebirth Target",
+    function(value)
+
+        local number =
+            tonumber(value)
+
+        if number and number > 0 then
+
+            rebirthTarget =
+                math.floor(number)
+
+        end
+    end
+)
+
+targetToggle =
+    RebirthTab:AddSwitch(
+        "Auto Rebirth Target",
+        function(state)
+
+            targetRebirthActive =
+                state
+
+            if not state then
+                return
+            end
+
+            infiniteRebirthActive =
+                false
+
+            if infiniteToggle then
+
+                pcall(function()
+                    infiniteToggle:Set(false)
+                end)
+
+            end
+
+            task.spawn(function()
+
+                while targetRebirthActive do
+
+                    local statsFolder =
+                        Player:FindFirstChild(
+                            "leaderstats"
+                        )
+
+                    local rebirths =
+                        statsFolder
+                        and
+                        statsFolder:
+                        FindFirstChild(
+                            "Rebirths"
+                        )
+
+                    if
+                        rebirths
+                        and
+                        rebirths.Value >=
+                        rebirthTarget
+                    then
+
+                        targetRebirthActive =
+                            false
+
+                        pcall(function()
+                            targetToggle:Set(
+                                false
+                            )
+                        end)
+
+                        break
+                    end
+
+                    pcall(function()
+                        rebirthRemote:
+                        InvokeServer(
+                            "rebirthRequest"
+                        )
+                    end)
+
+                    task.wait(0.1)
+                end
+            end)
+        end
+    )
+
+infiniteToggle =
+    RebirthTab:AddSwitch(
+        "Auto Rebirth (Infinitely)",
+        function(state)
+
+            infiniteRebirthActive =
+                state
+
+            if not state then
+                return
+            end
+
+            targetRebirthActive =
+                false
+
+            if targetToggle then
+
+                pcall(function()
+                    targetToggle:Set(false)
+                end)
+
+            end
+
+            task.spawn(function()
+
+                while infiniteRebirthActive do
+
+                    pcall(function()
+                        rebirthRemote:
+                        InvokeServer(
+                            "rebirthRequest"
+                        )
+                    end)
+
+                    task.wait(0.1)
+                end
+
+            end)
+        end
+    )
 
 
 MainTab:AddLabel("Settings").TextSize = 30
