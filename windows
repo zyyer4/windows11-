@@ -2705,8 +2705,72 @@ _G.EmpireBuildKillingControls=function()
     local state=_G.EmpireKillingState
     state.PackSpamEnabled=false
     state.LoopToken=(tonumber(state.LoopToken) or 0)+1
-    state.Interval=tonumber(state.Interval) or 0.20
+
+    local speedProfiles={
+        Normal={
+            clearDelay=0.20,
+            equipDelay=0.050,
+            swapDelay=0.25,
+            label="Normal",
+        },
+        Fast={
+            clearDelay=0.10,
+            equipDelay=0.025,
+            swapDelay=0.12,
+            label="Fast",
+        },
+        Faster={
+            clearDelay=0.04,
+            equipDelay=0.010,
+            swapDelay=0.05,
+            label="Faster",
+        },
+        Max={
+            clearDelay=0.015,
+            equipDelay=0,
+            swapDelay=0.012,
+            label="Max",
+        },
+    }
+
+    state.SpeedModes=state.SpeedModes or {
+        Normal=false,
+        Fast=false,
+        Faster=false,
+        Max=false,
+    }
     state.SpeedName=state.SpeedName or "Normal"
+
+    local function setVerifiedSpeed(name)
+        if not speedProfiles[name] then name="Normal" end
+        for profileName in pairs(speedProfiles) do
+            state.SpeedModes[profileName]=(profileName==name)
+        end
+        state.SpeedName=name
+    end
+
+    local function getVerifiedSpeedProfile()
+        local found=nil
+        for _,name in ipairs({"Normal","Fast","Faster","Max"}) do
+            if state.SpeedModes[name] == true then
+                if not found then
+                    found=name
+                else
+                    state.SpeedModes[name]=false
+                end
+            end
+        end
+        if not found then
+            found=speedProfiles[state.SpeedName] and state.SpeedName or "Normal"
+            for profileName in pairs(speedProfiles) do
+                state.SpeedModes[profileName]=(profileName==found)
+            end
+        end
+        state.SpeedName=found
+        return found,speedProfiles[found]
+    end
+
+    setVerifiedSpeed((state.SpeedName and speedProfiles[state.SpeedName]) and state.SpeedName or "Normal")
 
     local function updateCanvas()
         local height=listLayout.AbsoluteContentSize.Y
@@ -2717,7 +2781,7 @@ _G.EmpireBuildKillingControls=function()
 
     local speedCard=create("Frame",{
         LayoutOrder=1,
-        Size=UDim2.new(1,-4,0,126),
+        Size=UDim2.new(1,-4,0,142),
         BackgroundColor3=COLORS.panel,
         BackgroundTransparency=.12,
         BorderSizePixel=0,
@@ -2739,30 +2803,18 @@ _G.EmpireBuildKillingControls=function()
         Position=UDim2.new(0,16,0,33),
         Size=UDim2.new(1,-32,0,22),
         BackgroundTransparency=1,
-        Text="Delay between each completed Mighty Monster ↔ Wild Wizard swap.",
+        Text="Each preset now changes the actual clear, per-pet, and swap delays.",
         TextColor3=COLORS.muted,
         TextSize=9,
         TextWrapped=true,
         Font=Enum.Font.Gotham,
         TextXAlignment=Enum.TextXAlignment.Left,
-        TextYAlignment=Enum.TextYAlignment.Top,
     },speedCard)
 
     local speedFrame=create("Frame",{
-        Position=UDim2.new(0,16,0,64),
+        Position=UDim2.new(0,16,0,62),
         Size=UDim2.new(1,-32,0,36),
         BackgroundTransparency=1,
-    },speedCard)
-
-    local speedVerifyLabel=create("TextLabel",{
-        Position=UDim2.new(0,16,1,-20),
-        Size=UDim2.new(1,-32,0,14),
-        BackgroundTransparency=1,
-        Text="Verified: checking active speed...",
-        TextColor3=COLORS.muted,
-        TextSize=8,
-        Font=Enum.Font.GothamSemibold,
-        TextXAlignment=Enum.TextXAlignment.Left,
     },speedCard)
     create("UIListLayout",{
         FillDirection=Enum.FillDirection.Horizontal,
@@ -2770,75 +2822,39 @@ _G.EmpireBuildKillingControls=function()
         SortOrder=Enum.SortOrder.LayoutOrder,
     },speedFrame)
 
+    local speedVerifyLabel=create("TextLabel",{
+        Position=UDim2.new(0,16,1,-20),
+        Size=UDim2.new(1,-32,0,14),
+        BackgroundTransparency=1,
+        Text="Verified: checking...",
+        TextColor3=COLORS.green,
+        TextSize=8,
+        Font=Enum.Font.GothamSemibold,
+        TextXAlignment=Enum.TextXAlignment.Left,
+    },speedCard)
+
     local speedButtons={}
-    local speedPresets={
-        {name="Normal",interval=0.20},
-        {name="Fast",interval=0.12},
-        {name="Faster",interval=0.08},
-        {name="Max",interval=0.05},
-    }
-
-    -- Verified speed state: exactly ONE preset is true at a time.
-    state.SpeedModes=state.SpeedModes or {
-        Normal=false,
-        Fast=false,
-        Faster=false,
-        Max=false,
-    }
-
-    local function setVerifiedSpeed(name)
-        for _,preset in ipairs(speedPresets) do
-            state.SpeedModes[preset.name]=(preset.name==name)
-        end
-        state.SpeedName=name
-    end
-
-    -- Repair any stale/ambiguous state left by an older version.
-    do
-        local valid=false
-        for _,preset in ipairs(speedPresets) do
-            if state.SpeedModes[preset.name]==true then
-                if not valid then
-                    valid=true
-                    state.SpeedName=preset.name
-                else
-                    state.SpeedModes[preset.name]=false
-                end
-            end
-        end
-        if not valid then
-            setVerifiedSpeed(state.SpeedName or "Normal")
-        end
-    end
-
-    local function getVerifiedSpeed()
-        for _,preset in ipairs(speedPresets) do
-            if state.SpeedModes[preset.name]==true then
-                return preset.name,preset.interval
-            end
-        end
-        setVerifiedSpeed("Normal")
-        return "Normal",0.20
-    end
-
     local function updateSpeedButtons()
-        local activeName,activeInterval=getVerifiedSpeed()
+        local activeName,profile=getVerifiedSpeedProfile()
         for _,entry in ipairs(speedButtons) do
-            local active=(entry.name==activeName and state.SpeedModes[entry.name]==true)
+            local active=(entry.name==activeName and state.SpeedModes[entry.name] == true)
             entry.button.BackgroundColor3=active and Color3.fromRGB(47,65,99) or Color3.fromRGB(28,42,68)
             entry.button.TextColor3=active and COLORS.text or COLORS.muted
             entry.button.Text=entry.name..(active and "  ✓ TRUE" or "  • false")
         end
-        speedVerifyLabel.Text="Verified: "..activeName.." = true   •   interval = "..string.format("%.2fs",activeInterval)
-        speedVerifyLabel.TextColor3=COLORS.green
+        speedVerifyLabel.Text=string.format(
+            "Verified: %s = true   •   clear %.3fs   •   pet %.3fs   •   swap %.3fs",
+            activeName,profile.clearDelay,profile.equipDelay,profile.swapDelay
+        )
     end
-    for i,preset in ipairs(speedPresets) do
+
+    for i,name in ipairs({"Normal","Fast","Faster","Max"}) do
         local b=create("TextButton",{
             LayoutOrder=i,
             Size=UDim2.new(.25,-5,0,34),
             BackgroundColor3=Color3.fromRGB(28,42,68),
             BackgroundTransparency=.06,
-            Text=preset.name,
+            Text=name,
             TextColor3=COLORS.muted,
             TextSize=10,
             Font=Enum.Font.GothamSemibold,
@@ -2846,16 +2862,11 @@ _G.EmpireBuildKillingControls=function()
         },speedFrame)
         b:SetAttribute("EmpireThemeRole","button")
         corner(b,7); stroke(b,Color3.fromRGB(255,98,108),.64,1); hoverScale(b,1.01)
-        speedButtons[#speedButtons+1]={button=b,name=preset.name}
+        speedButtons[#speedButtons+1]={button=b,name=name}
         b.Activated:Connect(function()
-            -- Selecting a preset explicitly flips every other preset false.
-            setVerifiedSpeed(preset.name)
-            local activeName,activeInterval=getVerifiedSpeed()
-            state.Interval=activeInterval
+            setVerifiedSpeed(name)
             updateSpeedButtons()
             if refresh then refresh() end
-            speedVerifyLabel.Text="Verified: "..activeName.." = true   •   Normal="..tostring(state.SpeedModes.Normal).."  Fast="..tostring(state.SpeedModes.Fast).."  Faster="..tostring(state.SpeedModes.Faster).."  Max="..tostring(state.SpeedModes.Max)
-            speedVerifyLabel.TextColor3=COLORS.green
         end)
     end
 
@@ -2883,7 +2894,7 @@ _G.EmpireBuildKillingControls=function()
         Position=UDim2.new(0,16,0,39),
         Size=UDim2.new(1,-32,0,42),
         BackgroundTransparency=1,
-        Text="Uses the same pet equip method as the working Pets controls: clear the current equipped set, then equip every matching copy from petsFolder.Unique.",
+        Text="Swaps between every Mighty Monster copy and every Wild Wizard copy using the active speed profile.",
         TextColor3=COLORS.muted,
         TextSize=10,
         TextWrapped=true,
@@ -2934,7 +2945,7 @@ _G.EmpireBuildKillingControls=function()
         Position=UDim2.new(0,16,0,188),
         Size=UDim2.new(1,-32,0,42),
         BackgroundTransparency=1,
-        Text="Mighty Monster → Wild Wizard → repeat   •   Speed: "..state.SpeedName.."   •   Interval: "..string.format("%.2fs",state.Interval),
+        Text="Mighty Monster → Wild Wizard → repeat",
         TextColor3=COLORS.muted,
         TextSize=9,
         TextWrapped=true,
@@ -2950,10 +2961,11 @@ _G.EmpireBuildKillingControls=function()
         toggle.BackgroundColor3=state.PackSpamEnabled and Color3.fromRGB(45,120,83) or Color3.fromRGB(28,42,68)
         status.Text="Status: "..(state.PackSpamEnabled and "Enabled" or "Disabled")
         status.TextColor3=state.PackSpamEnabled and COLORS.green or COLORS.muted
-        local activeName,activeInterval=getVerifiedSpeed()
-        state.SpeedName=activeName
-        state.Interval=activeInterval
-        detail.Text="Mighty Monster → Wild Wizard → repeat   •   Speed: "..activeName.." = true   •   Interval: "..string.format("%.2fs",activeInterval)
+        local activeName,profile=getVerifiedSpeedProfile()
+        detail.Text=string.format(
+            "Mighty Monster → Wild Wizard → repeat   •   Speed: %s = true\nClear %.3fs • Pet %.3fs • Swap %.3fs",
+            activeName,profile.clearDelay,profile.equipDelay,profile.swapDelay
+        )
     end
 
     local function getPetReferences()
@@ -2967,41 +2979,32 @@ _G.EmpireBuildKillingControls=function()
 
     local function equipAllNamedForPack(petName)
         local petsFolder,uniquePets,event=getPetReferences()
-        if not petsFolder then
-            return false,"petsFolder not found"
-        end
-        if not uniquePets then
-            return false,"petsFolder.Unique not found"
-        end
+        if not petsFolder then return false,"petsFolder not found" end
+        if not uniquePets then return false,"petsFolder.Unique not found" end
         if not event or not event:IsA("RemoteEvent") then
-            return false,"equipPetEvent not found in ReplicatedStorage.rEvents"
+            return false,"equipPetEvent not found"
         end
 
-        -- Exact pattern used by the known-working Pets manual controls.
+        local _,profile=getVerifiedSpeedProfile()
+
         for _,folder in ipairs(petsFolder:GetChildren()) do
             if folder:IsA("Folder") then
                 for _,pet in ipairs(folder:GetChildren()) do
-                    pcall(function()
-                        event:FireServer("unequipPet",pet)
-                    end)
+                    pcall(function() event:FireServer("unequipPet",pet) end)
                 end
             end
         end
-        task.wait(0.10)
+        if profile.clearDelay > 0 then task.wait(profile.clearDelay) end
 
         local count=0
         for _,pet in ipairs(uniquePets:GetChildren()) do
             if pet.Name==petName then
-                local ok=pcall(function()
-                    event:FireServer("equipPet",pet)
-                end)
+                local ok=pcall(function() event:FireServer("equipPet",pet) end)
                 if ok then count+=1 end
-                task.wait(0.025)
+                if profile.equipDelay > 0 then task.wait(profile.equipDelay) end
             end
         end
-        if count==0 then
-            return false,"No "..petName.." copies found in Unique"
-        end
+        if count==0 then return false,"No "..petName.." copies found in Unique" end
         return true,"Equipped "..tostring(count).." "..petName
     end
 
@@ -3012,6 +3015,7 @@ _G.EmpireBuildKillingControls=function()
     end
 
     local function startPackSpam()
+        if state.PackSpamEnabled then return end
         state.PackSpamEnabled=true
         state.LoopToken=(tonumber(state.LoopToken) or 0)+1
         local token=state.LoopToken
@@ -3020,6 +3024,10 @@ _G.EmpireBuildKillingControls=function()
         task.spawn(function()
             local petName="Mighty Monster"
             while state.PackSpamEnabled and state.LoopToken==token and not _G.JohnnyScriptDestroyed do
+                local activeName,profile=getVerifiedSpeedProfile()
+                resultLabel.Text=string.format("Verified speed: %s = true • %.3fs clear / %.3fs pet / %.3fs swap",activeName,profile.clearDelay,profile.equipDelay,profile.swapDelay)
+                resultLabel.TextColor3=COLORS.green
+
                 local ok,result=pcall(function()
                     return equipAllNamedForPack(petName)
                 end)
@@ -3028,24 +3036,24 @@ _G.EmpireBuildKillingControls=function()
                     ok=false
                 end
 
-                if not state.PackSpamEnabled or state.LoopToken~=token then
-                    break
-                end
-
+                if not state.PackSpamEnabled or state.LoopToken~=token then break end
                 resultLabel.Text=ok and ("Last: "..tostring(result)) or ("Error: "..tostring(result))
                 resultLabel.TextColor3=ok and COLORS.text or Color3.fromRGB(255,120,128)
 
                 petName=(petName=="Mighty Monster") and "Wild Wizard" or "Mighty Monster"
 
-                -- Re-verify the selected speed before every cycle. If an
-                -- invalid/stale state appears, fall back to Normal.
-                local activeName,activeInterval=getVerifiedSpeed()
-                state.SpeedName=activeName
-                state.Interval=activeInterval
-                if resultLabel and resultLabel.Parent then
-                    resultLabel.Text="Verified speed: "..activeName.." = true   •   Interval: "..string.format("%.2fs",activeInterval)
+                -- Re-read the boolean state after every completed swap so a
+                -- speed change takes effect on the very next cycle.
+                local verifiedName,verifiedProfile=getVerifiedSpeedProfile()
+                if state.SpeedModes[verifiedName] ~= true then
+                    setVerifiedSpeed("Normal")
+                    verifiedName,verifiedProfile=getVerifiedSpeedProfile()
                 end
-                task.wait(activeInterval)
+                detail.Text=string.format(
+                    "Mighty Monster → Wild Wizard → repeat   •   Speed: %s = true\nClear %.3fs • Pet %.3fs • Swap %.3fs",
+                    verifiedName,verifiedProfile.clearDelay,verifiedProfile.equipDelay,verifiedProfile.swapDelay
+                )
+                if verifiedProfile.swapDelay > 0 then task.wait(verifiedProfile.swapDelay) end
             end
         end)
     end
@@ -3058,6 +3066,7 @@ _G.EmpireBuildKillingControls=function()
     updateSpeedButtons()
     task.defer(updateCanvas)
 end
+
 
 
 local function showPage(cat)
@@ -3122,8 +3131,95 @@ local sd=create("Frame",{Position=UDim2.new(0,10,.5,-4),Size=UDim2.fromOffset(8,
 create("TextLabel",{Position=UDim2.new(0,26,0,0),Size=UDim2.new(1,-34,.5,0),BackgroundTransparency=1,Text="Ready",TextColor3=COLORS.text,TextSize=10,Font=Enum.Font.GothamSemibold,TextXAlignment=Enum.TextXAlignment.Left},sideStatus)
 create("TextLabel",{Position=UDim2.new(0,26,.5,0),Size=UDim2.new(1,-34,.5,0),BackgroundTransparency=1,Text="Local UI preview",TextColor3=COLORS.muted,TextSize=9,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Left},sideStatus)
 
-local pill=create("TextButton",{Name="EmpireRestorePill",AnchorPoint=Vector2.new(.5,0),Position=UDim2.new(.5,0,0,-64),Size=UDim2.fromOffset(176,44),BackgroundColor3=Color3.fromRGB(13,18,30),BackgroundTransparency=.08,Text="E   Empire   Restore",TextColor3=COLORS.text,TextSize=13,Font=Enum.Font.GothamSemibold,Visible=false,AutoButtonColor=false},gui)
-corner(pill,18); stroke(pill,Color3.fromRGB(146,170,219),.58,1)
+local pill=create("TextButton",{
+    Name="EmpireRestorePill",
+    AnchorPoint=Vector2.new(.5,0),
+    Position=UDim2.new(.5,0,0,-64),
+    Size=UDim2.fromOffset(246,54),
+    BackgroundColor3=Color3.fromRGB(13,18,30),
+    BackgroundTransparency=.08,
+    Text="",
+    TextColor3=COLORS.text,
+    AutoButtonColor=false,
+    Visible=false,
+    ZIndex=50,
+},gui)
+corner(pill,27); stroke(pill,Color3.fromRGB(146,170,219),.46,1)
+local pillGradient=create("UIGradient",{
+    Rotation=90,
+    Color=ColorSequence.new({
+        ColorSequenceKeypoint.new(0,Color3.fromRGB(31,42,67)),
+        ColorSequenceKeypoint.new(1,Color3.fromRGB(10,15,26)),
+    }),
+    Transparency=NumberSequence.new({
+        NumberSequenceKeypoint.new(0,.02),
+        NumberSequenceKeypoint.new(1,.08),
+    }),
+},pill)
+local pillIcon=create("Frame",{
+    Position=UDim2.new(0,10,.5,-17),
+    Size=UDim2.fromOffset(34,34),
+    BackgroundColor3=Color3.fromRGB(70,125,255),
+    BackgroundTransparency=.78,
+    BorderSizePixel=0,
+    ZIndex=51,
+},pill)
+corner(pillIcon,12); stroke(pillIcon,Color3.fromRGB(115,154,255),.36,1)
+create("TextLabel",{
+    Size=UDim2.fromScale(1,1),
+    BackgroundTransparency=1,
+    Text="E",
+    TextColor3=COLORS.text,
+    TextSize=15,
+    Font=Enum.Font.GothamBold,
+    TextXAlignment=Enum.TextXAlignment.Center,
+    TextYAlignment=Enum.TextYAlignment.Center,
+    ZIndex=52,
+},pillIcon)
+local pillDot=create("Frame",{
+    Position=UDim2.new(0,54,.5,-4),
+    Size=UDim2.fromOffset(8,8),
+    BackgroundColor3=COLORS.green,
+    BorderSizePixel=0,
+    ZIndex=51,
+},pill)
+corner(pillDot,99)
+create("TextLabel",{
+    Position=UDim2.new(0,70,0,8),
+    Size=UDim2.new(1,-90,0,20),
+    BackgroundTransparency=1,
+    Text="Empire",
+    TextColor3=COLORS.text,
+    TextSize=13,
+    Font=Enum.Font.GothamSemibold,
+    TextXAlignment=Enum.TextXAlignment.Left,
+    ZIndex=51,
+},pill)
+create("TextLabel",{
+    Position=UDim2.new(0,70,0,28),
+    Size=UDim2.new(1,-90,0,16),
+    BackgroundTransparency=1,
+    Text="Window minimized  •  click to restore",
+    TextColor3=COLORS.muted,
+    TextSize=8,
+    Font=Enum.Font.Gotham,
+    TextXAlignment=Enum.TextXAlignment.Left,
+    ZIndex=51,
+},pill)
+local pillRestore=create("TextLabel",{
+    AnchorPoint=Vector2.new(1,.5),
+    Position=UDim2.new(1,-12,.5,0),
+    Size=UDim2.fromOffset(18,18),
+    BackgroundTransparency=1,
+    Text="↗",
+    TextColor3=COLORS.text,
+    TextSize=15,
+    Font=Enum.Font.GothamSemibold,
+    TextXAlignment=Enum.TextXAlignment.Center,
+    TextYAlignment=Enum.TextYAlignment.Center,
+    ZIndex=51,
+},pill)
+local pillScale=create("UIScale",{Scale=.82},pill)
 
 --========================================================--
 -- WINDOW CONTROLLER
@@ -3198,10 +3294,11 @@ function WindowController:SetMinimized(value)
         end)
 
         self.pill.Visible = true
-        self.pill.Position = UDim2.new(.5,0,0,-30)
+        self.pill.Position = UDim2.new(.5,0,0,-42)
         self.pill.BackgroundTransparency = 1
-        self.pill.TextTransparency = 1
-        tween(self.pill, TweenInfo.new(.26, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Position = UDim2.new(.5,0,0,14), BackgroundTransparency = .08, TextTransparency = 0})
+        self.pillScale.Scale = .82
+        tween(self.pill, TweenInfo.new(.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Position = UDim2.new(.5,0,0,14), BackgroundTransparency = .08})
+        tween(self.pillScale, TweenInfo.new(.34, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1})
         return
     end
 
@@ -3214,8 +3311,9 @@ function WindowController:SetMinimized(value)
     tween(self.windowScale, TweenInfo.new(.24, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Scale = 1})
     tween(self.window, TweenInfo.new(.24, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {BackgroundTransparency = .24})
 
-    tween(self.pill, TweenInfo.new(.18, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {Position = UDim2.new(.5,0,0,-30), BackgroundTransparency = 1, TextTransparency = 1})
-    task.delay(.18, function()
+    tween(self.pill, TweenInfo.new(.20, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {Position = UDim2.new(.5,0,0,-42), BackgroundTransparency = 1})
+    tween(self.pillScale, TweenInfo.new(.18, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {Scale = .82})
+    task.delay(.20, function()
         if self._minimized == false then
             self.pill.Visible = false
         end
