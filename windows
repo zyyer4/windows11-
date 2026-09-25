@@ -2413,6 +2413,255 @@ end
 
 _G.EmpireBuildPetsControls()
 
+
+_G.EmpireBuildStatsControls = function()
+    -- The Stats page is intentionally built inside one scoped function so the
+    -- large Empire script does not consume additional top-level Luau locals.
+    grid.Parent=nil
+
+    local statsRoot=create("Frame",{
+        Name="EmpireStatsRoot",
+        Size=UDim2.new(1,-8,0,0),
+        AutomaticSize=Enum.AutomaticSize.Y,
+        BackgroundTransparency=1,
+        BorderSizePixel=0,
+    },cardArea)
+
+    local statsLayout=create("UIListLayout",{
+        Padding=UDim.new(0,8),
+        SortOrder=Enum.SortOrder.LayoutOrder,
+    },statsRoot)
+
+    local function statCard(title,subtitle,height,accentColor,order)
+        local card=create("Frame",{
+            LayoutOrder=order,
+            Size=UDim2.new(1,0,0,height),
+            BackgroundColor3=COLORS.panel,
+            BackgroundTransparency=.10,
+            BorderSizePixel=0,
+        },statsRoot)
+        corner(card,11)
+        stroke(card,accentColor or COLORS.line,.58,1)
+        local titleLabel=create("TextLabel",{
+            Position=UDim2.new(0,14,0,9),
+            Size=UDim2.new(1,-28,0,18),
+            BackgroundTransparency=1,
+            Text=title,
+            TextColor3=COLORS.text,
+            TextSize=13,
+            Font=Enum.Font.GothamSemibold,
+            TextXAlignment=Enum.TextXAlignment.Left,
+        },card)
+        create("TextLabel",{
+            Position=UDim2.new(0,14,0,29),
+            Size=UDim2.new(1,-28,0,14),
+            BackgroundTransparency=1,
+            Text=subtitle,
+            TextColor3=COLORS.muted,
+            TextSize=9,
+            Font=Enum.Font.Gotham,
+            TextXAlignment=Enum.TextXAlignment.Left,
+        },card)
+        return card,titleLabel
+    end
+
+    local overview,overviewTitle=statCard(
+        "▥  Session Overview",
+        "Combined live values and gains from the current Empire session.",
+        118,
+        Color3.fromRGB(86,166,255),
+        1
+    )
+
+    local overviewValues={
+        runtime=create("TextLabel",{BackgroundTransparency=1,Text="Runtime: --",TextColor3=COLORS.text,TextSize=10,Font=Enum.Font.GothamMedium,TextXAlignment=Enum.TextXAlignment.Left},overview),
+        strength=create("TextLabel",{BackgroundTransparency=1,Text="Strength: --",TextColor3=COLORS.text,TextSize=10,Font=Enum.Font.GothamMedium,TextXAlignment=Enum.TextXAlignment.Left},overview),
+        durability=create("TextLabel",{BackgroundTransparency=1,Text="Durability: --",TextColor3=COLORS.text,TextSize=10,Font=Enum.Font.GothamMedium,TextXAlignment=Enum.TextXAlignment.Left},overview),
+        rebirths=create("TextLabel",{BackgroundTransparency=1,Text="Rebirths: --",TextColor3=COLORS.text,TextSize=10,Font=Enum.Font.GothamMedium,TextXAlignment=Enum.TextXAlignment.Left},overview),
+        gained=create("TextLabel",{BackgroundTransparency=1,Text="Gained: --",TextColor3=COLORS.muted,TextSize=9,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Left},overview),
+    }
+    overviewValues.runtime.Position=UDim2.new(0,14,0,53); overviewValues.runtime.Size=UDim2.new(.48,-18,0,18)
+    overviewValues.strength.Position=UDim2.new(.50,0,0,53); overviewValues.strength.Size=UDim2.new(.48,-14,0,18)
+    overviewValues.durability.Position=UDim2.new(0,14,0,78); overviewValues.durability.Size=UDim2.new(.48,-18,0,18)
+    overviewValues.rebirths.Position=UDim2.new(.50,0,0,78); overviewValues.rebirths.Size=UDim2.new(.48,-14,0,18)
+    overviewValues.gained.Position=UDim2.new(0,14,0,98); overviewValues.gained.Size=UDim2.new(1,-28,0,14)
+
+    local farmCard=statCard(
+        "🟩  Fast Farm Tracking",
+        "Tracking, gained values, active time, and live pace.",
+        175,
+        Color3.fromRGB(84,214,137),
+        2
+    )
+
+    local farmStatus=create("TextLabel",{Position=UDim2.new(0,14,0,51),Size=UDim2.new(1,-28,0,18),BackgroundTransparency=1,Text="Status: --",TextColor3=COLORS.text,TextSize=10,Font=Enum.Font.GothamSemibold,TextXAlignment=Enum.TextXAlignment.Left},farmCard)
+    local farmTime=create("TextLabel",{Position=UDim2.new(0,14,0,72),Size=UDim2.new(1,-28,0,17),BackgroundTransparency=1,Text="Active Time: --",TextColor3=COLORS.text,TextSize=9,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Left},farmCard)
+    local farmGain=create("TextLabel",{Position=UDim2.new(0,14,0,92),Size=UDim2.new(1,-28,0,17),BackgroundTransparency=1,Text="Gained: --",TextColor3=COLORS.text,TextSize=9,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Left},farmCard)
+    local farmPace=create("TextLabel",{Position=UDim2.new(0,14,0,116),Size=UDim2.new(1,-28,0,44),BackgroundTransparency=1,Text="Pace: --",TextColor3=COLORS.muted,TextSize=9,TextWrapped=true,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Left,TextYAlignment=Enum.TextYAlignment.Top},farmCard)
+
+    local rebCard=statCard(
+        "🟠  Rebirth Tracking",
+        "Current rebirth count, gained rebirths, and pace history.",
+        160,
+        Color3.fromRGB(255,156,66),
+        3
+    )
+
+    local rebStatus=create("TextLabel",{Position=UDim2.new(0,14,0,51),Size=UDim2.new(1,-28,0,18),BackgroundTransparency=1,Text="Status: --",TextColor3=COLORS.text,TextSize=10,Font=Enum.Font.GothamSemibold,TextXAlignment=Enum.TextXAlignment.Left},rebCard)
+    local rebCurrent=create("TextLabel",{Position=UDim2.new(0,14,0,72),Size=UDim2.new(1,-28,0,18),BackgroundTransparency=1,Text="Current: --   •   Gained: --",TextColor3=COLORS.text,TextSize=9,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Left},rebCard)
+    local rebPace=create("TextLabel",{Position=UDim2.new(0,14,0,94),Size=UDim2.new(1,-28,0,42),BackgroundTransparency=1,Text="Current Pace: --",TextColor3=COLORS.muted,TextSize=9,TextWrapped=true,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Left,TextYAlignment=Enum.TextYAlignment.Top},rebCard)
+
+    local serverCard=statCard(
+        "👥  Server Players",
+        "Live public stats for every player currently in this server.",
+        360,
+        Color3.fromRGB(155,128,255),
+        4
+    )
+
+    local refreshPlayers=create("TextButton",{
+        AnchorPoint=Vector2.new(1,0),
+        Position=UDim2.new(1,-14,0,9),
+        Size=UDim2.fromOffset(78,26),
+        BackgroundColor3=Color3.fromRGB(32,44,68),
+        BackgroundTransparency=.08,
+        Text="Refresh",
+        TextColor3=COLORS.text,
+        TextSize=9,
+        Font=Enum.Font.GothamSemibold,
+        AutoButtonColor=false,
+    },serverCard)
+    corner(refreshPlayers,8); stroke(refreshPlayers,COLORS.line,.55,1); hoverScale(refreshPlayers,1.012)
+
+    local playerList=create("ScrollingFrame",{
+        Position=UDim2.new(0,12,0,51),
+        Size=UDim2.new(1,-24,1,-63),
+        BackgroundTransparency=1,
+        BorderSizePixel=0,
+        CanvasSize=UDim2.new(),
+        AutomaticCanvasSize=Enum.AutomaticSize.Y,
+        ScrollBarThickness=3,
+        ScrollBarImageColor3=COLORS.line,
+    },serverCard)
+    local playerLayout=create("UIListLayout",{Padding=UDim.new(0,6),SortOrder=Enum.SortOrder.LayoutOrder},playerList)
+
+    local function readValue(container,names)
+        if not container then return nil end
+        for _,name in ipairs(names) do
+            local value=container:FindFirstChild(name)
+            if value and value:IsA("ValueBase") then return value.Value end
+        end
+        return nil
+    end
+
+    local function readPlayerStats(otherPlayer)
+        local statsFolder=otherPlayer and otherPlayer:FindFirstChild("leaderstats")
+        local strength=readValue(statsFolder,{"Strength","strength"})
+        local rebirths=readValue(statsFolder,{"Rebirths","rebirths"})
+        local durability=readValue(otherPlayer,{"Durability","durability"})
+
+        if durability==nil then
+            local aliases={"Durability","durability","Defense","defense"}
+            for _,containerName in ipairs({"Stats","Data","PlayerData"}) do
+                local container=otherPlayer:FindFirstChild(containerName)
+                durability=readValue(container,aliases)
+                if durability~=nil then break end
+            end
+        end
+
+        if strength==nil then strength=otherPlayer:GetAttribute("Strength") end
+        if rebirths==nil then rebirths=otherPlayer:GetAttribute("Rebirths") end
+        if durability==nil then durability=otherPlayer:GetAttribute("Durability") or otherPlayer:GetAttribute("Defense") end
+        return strength,durability,rebirths
+    end
+
+    local function clearPlayerList()
+        for _,child in ipairs(playerList:GetChildren()) do
+            if child:IsA("Frame") then child:Destroy() end
+        end
+    end
+
+    local function refreshServerPlayers()
+        clearPlayerList()
+        local list=Players:GetPlayers()
+        table.sort(list,function(a,b)
+            return string.lower(a.Name)<string.lower(b.Name)
+        end)
+
+        for index,otherPlayer in ipairs(list) do
+            local strength,durability,rebirths=readPlayerStats(otherPlayer)
+            local row=create("Frame",{
+                LayoutOrder=index,
+                Size=UDim2.new(1,-2,0,62),
+                BackgroundColor3=COLORS.panel2,
+                BackgroundTransparency=.08,
+                BorderSizePixel=0,
+            },playerList)
+            corner(row,8); stroke(row,COLORS.line,.72,1)
+
+            local nameText=otherPlayer.DisplayName
+            if nameText~=otherPlayer.Name then nameText=nameText.."  @"..otherPlayer.Name end
+            create("TextLabel",{Position=UDim2.new(0,10,0,7),Size=UDim2.new(.52,0,0,18),BackgroundTransparency=1,Text=nameText,TextColor3=COLORS.text,TextSize=10,Font=Enum.Font.GothamSemibold,TextXAlignment=Enum.TextXAlignment.Left,TextTruncate=Enum.TextTruncate.AtEnd},row)
+            create("TextLabel",{Position=UDim2.new(.52,0,0,7),Size=UDim2.new(.48,-12,0,18),BackgroundTransparency=1,Text=otherPlayer==player and "YOU" or "SERVER",TextColor3=otherPlayer==player and COLORS.blue or COLORS.muted,TextSize=8,Font=Enum.Font.GothamSemibold,TextXAlignment=Enum.TextXAlignment.Right},row)
+            create("TextLabel",{Position=UDim2.new(0,10,0,29),Size=UDim2.new(1,-20,0,17),BackgroundTransparency=1,Text="Strength  "..formatStatNumber(strength or 0).."   •   Durability  "..formatStatNumber(durability or 0),TextColor3=COLORS.text,TextSize=8,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Left,TextTruncate=Enum.TextTruncate.AtEnd},row)
+            create("TextLabel",{Position=UDim2.new(0,10,0,46),Size=UDim2.new(1,-20,0,12),BackgroundTransparency=1,Text="Rebirths  "..formatRebirthNumber(rebirths or 0).."   •   UserId  "..tostring(otherPlayer.UserId),TextColor3=COLORS.muted,TextSize=7,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Left,TextTruncate=Enum.TextTruncate.AtEnd},row)
+        end
+    end
+
+    refreshPlayers.Activated:Connect(refreshServerPlayers)
+    refreshServerPlayers()
+
+    local startTick=tick()
+    local function elapsedText(seconds)
+        seconds=math.max(0,seconds or 0)
+        return string.format("%dd %dh %dm %ds",math.floor(seconds/86400),math.floor((seconds%86400)/3600),math.floor((seconds%3600)/60),math.floor(seconds%60))
+    end
+
+    local updateToken=tick()
+    task.spawn(function()
+        while statsRoot.Parent and not _G.JohnnyScriptDestroyed  do
+            pcall(function()
+                local now=tick()
+                local scriptRuntime=now-startTick
+                overviewValues.runtime.Text="Runtime: "..elapsedText(scriptRuntime)
+                overviewValues.strength.Text="Strength: "..formatStatNumber(strengthStat.Value)
+                overviewValues.durability.Text="Durability: "..formatStatNumber(durabilityStat.Value)
+                overviewValues.rebirths.Text="Rebirths: "..formatRebirthNumber(rebirthsStat.Value)
+                overviewValues.gained.Text="Gained  •  Strength +"..formatStatNumber(strengthStat.Value-initialStrength).."   •   Durability +"..formatStatNumber(durabilityStat.Value-initialDurability).."   •   Rebirths +"..formatRebirthNumber(rebirthsStat.Value-initialRebirths)
+
+                local farmElapsed=farmPausedElapsed
+                if trackingStarted and farmStartTime>0 then farmElapsed += now-farmStartTime end
+                farmStatus.Text="Status: "..(fastRepRunning and "Running" or (trackingStarted or farmPausedElapsed>0 and "Stopped / Retained" or "Not started"))
+                farmTime.Text="Active Time: "..elapsedText(farmElapsed)
+                farmGain.Text="Gained: Strength +"..formatStatNumber(strengthStat.Value-initialStrength).."   •   Durability +"..formatStatNumber(durabilityStat.Value-initialDurability)
+
+                local farmStrengthRate=farmElapsed>0 and ((strengthStat.Value-initialStrength)/farmElapsed) or 0
+                local farmDurabilityRate=farmElapsed>0 and ((durabilityStat.Value-initialDurability)/farmElapsed) or 0
+                farmPace.Text=string.format("Strength pace  %s /h   %s /d   %s /w\nDurability pace  %s /h   %s /d   %s /w",formatStatNumber(farmStrengthRate*3600),formatStatNumber(farmStrengthRate*86400),formatStatNumber(farmStrengthRate*604800),formatStatNumber(farmDurabilityRate*3600),formatStatNumber(farmDurabilityRate*86400),formatStatNumber(farmDurabilityRate*604800))
+
+                local currentRebirthPace=0
+                local rebirthElapsed=math.max(0,now-lastRebirthTime)
+                local rebirthDelta=rebirthsStat.Value-lastRebirthValue
+                if rebirthElapsed>0 and rebirthDelta>0 then currentRebirthPace=(rebirthDelta/rebirthElapsed) end
+                local avgH=averageTable(paceHistoryHour)
+                local avgD=averageTable(paceHistoryDay)
+                local avgW=averageTable(paceHistoryWeek)
+                rebStatus.Text="Status: "..(isFastRebirthRunning and "Running" or "Idle")
+                rebCurrent.Text="Current: "..formatRebirthNumber(rebirthsStat.Value).."   •   Gained: +"..formatRebirthNumber(rebirthsStat.Value-initialRebirths)
+                rebPace.Text=string.format("Current pace  %s /h   %s /d   %s /w\nAverage pace  %s /h   %s /d   %s /w",formatRebirthNumber(currentRebirthPace*3600),formatRebirthNumber(currentRebirthPace*86400),formatRebirthNumber(currentRebirthPace*604800),formatRebirthNumber(avgH),formatRebirthNumber(avgD),formatRebirthNumber(avgW))
+            end)
+            task.wait(.5)
+        end
+    end)
+
+    task.spawn(function()
+        while statsRoot.Parent and not _G.JohnnyScriptDestroyed do
+            pcall(refreshServerPlayers)
+            task.wait(2)
+        end
+    end)
+end
+
 local function showPage(cat)
     breadcrumb.Text="Empire / "..cat.name
     pageTitle.Text=cat.emoji.."  "..cat.name
@@ -2431,7 +2680,7 @@ local function showPage(cat)
     elseif cat.name=="Pets" then cardArea.Visible=false; _G.EmpirePetsArea.Visible=true
     elseif cat.name=="Player" then cardArea.Visible=false; playerArea.Visible=true
     elseif cat.name=="Killing" then makeCard("⚔  Category panel","Visual placeholder only. No combat or targeting functionality.","Preview",1,cat.color)
-    elseif cat.name=="Stats" then makeCard("▥  Session stats","Compact statistic presentation.","View",1,cat.color); makeCard("▥  Overview","Clean overview card for connected data.","View",2,cat.color)
+    elseif cat.name=="Stats" then cardArea.Visible=true; _G.EmpireBuildStatsControls()
     elseif cat.name=="Perf" then makePerformanceControls()
     else makeCard("⚙  Miscellaneous","General interface options.","Open options",1,cat.color); makeCard("ⓘ  About Empire","Modern macOS-inspired interface concept.","About",2,cat.color) end
 end
