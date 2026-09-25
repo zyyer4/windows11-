@@ -2073,21 +2073,33 @@ do
 
         local flattened={}
         if type(entries)=="table" then
-            for key,value in pairs(entries) do
-                if type(value)=="table" then
-                    local record={}
-                    for field,fieldValue in pairs(value) do record[field]=fieldValue end
-                    if record.JobId==nil and record.Server==nil and type(key)~="number" then
-                        record.JobId=tostring(key)
-                        record.Server=tostring(key)
+            -- Accept a single execution object as well as an array/map of records.
+            if entries.Username~=nil or entries.UserId~=nil or entries.Game~=nil or entries.JobId~=nil or entries.Executor~=nil then
+                table.insert(flattened,entries)
+            else
+                for key,value in pairs(entries) do
+                    if type(value)=="table" then
+                        local record={}
+                        for field,fieldValue in pairs(value) do record[field]=fieldValue end
+                        if record.JobId==nil and record.Server==nil and type(key)~="number" then
+                            record.JobId=tostring(key)
+                            record.Server=tostring(key)
+                        end
+                        table.insert(flattened,record)
                     end
-                    table.insert(flattened,record)
                 end
             end
         end
-        self:SetAdminExecutions(flattened)
+
+        -- Do not wipe the locally visible execution when the remote endpoint
+        -- answers successfully but has no records to return.
+        if #flattened>0 then
+            self:SetAdminExecutions(flattened)
+        else
+            self:render()
+        end
         logger.LastError=nil
-        return true,flattened
+        return true,(#flattened>0 and flattened or self.Executions)
     end
 
     function adminState:StartGlobalExecutionFeed()
@@ -2107,6 +2119,9 @@ do
 
     function adminState:LogExecution(record)
         record=normaliseRecord(record)
+        -- Keep the current session visible in Admin immediately.
+        -- The remote feed, when available, can replace this local fallback later.
+        self:AddExecution(record)
         if self.ExecutionLogger.Enabled then
             task.spawn(function()
                 pcall(function()
@@ -2238,6 +2253,15 @@ do
             passwordBox.Text=""
             dash.Visible=true
             render()
+
+            -- Load the remote current feed immediately when Admin is opened.
+            -- Local fallback records remain visible if the backend returns nothing.
+            task.spawn(function()
+                if adminState.ExecutionLogger.Enabled and adminState.ExecutionLogger.PollEndpoint~="" then
+                    local ok=adminState:FetchGlobalExecutions()
+                    if ok then render() end
+                end
+            end)
         else
             gateStatus.Text="Status: Incorrect password"
             gateStatus.TextColor3=Color3.fromRGB(255,105,112)
