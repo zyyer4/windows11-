@@ -243,23 +243,20 @@ local logoE=create("TextLabel",{Size=UDim2.fromScale(1,1),BackgroundTransparency
 create("TextLabel",{Position=UDim2.new(0,59,0,0),Size=UDim2.new(1,-104,0,27),BackgroundTransparency=1,Text="Empire",TextColor3=COLORS.text,TextSize=20,Font=Enum.Font.GothamSemibold,TextXAlignment=Enum.TextXAlignment.Left},brand)
 create("TextLabel",{Position=UDim2.new(0,59,0,29),Size=UDim2.new(1,-104,0,20),BackgroundTransparency=1,Text="Logged in as "..player.Name,TextColor3=COLORS.muted,TextSize=9,Font=Enum.Font.Gotham,TextXAlignment=Enum.TextXAlignment.Left,TextTruncate=Enum.TextTruncate.AtEnd},brand)
 
--- Supplied Empire emblem. In environments that support custom local assets,
--- the uploaded PNG is used directly; the original E remains as the fallback.
+-- Empire emblem, pulled straight from the Roblox Game Pass thumbnail
+-- (https://www.roblox.com/game-pass/176453407/20) via rbxthumb — no local
+-- asset drop needed, it loads from Roblox's own CDN like any other thumbnail.
 do
-    local emblemAsset=nil
-    pcall(function()
-        if type(getcustomasset)=="function" then
-            emblemAsset=getcustomasset("Empire_Emblem.png")
-        elseif type(getsynasset)=="function" then
-            emblemAsset=getsynasset("Empire_Emblem.png")
-        end
-    end)
-    if type(emblemAsset)=="string" and emblemAsset~="" then
-        logo.BackgroundTransparency=1
-        logoE.Visible=false
-        local emblemImage=create("ImageLabel",{Size=UDim2.fromScale(1,1),BackgroundTransparency=1,Image=emblemAsset,ScaleType=Enum.ScaleType.Fit},logo)
-        corner(emblemImage,12)
-    end
+    local EMBLEM_GAMEPASS_ID = 176453407
+    logo.BackgroundTransparency=1
+    logoE.Visible=false
+    local emblemImage=create("ImageLabel",{
+        Size=UDim2.fromScale(1,1),
+        BackgroundTransparency=1,
+        Image="rbxthumb://type=GamePass&id="..tostring(EMBLEM_GAMEPASS_ID).."&w=420&h=420",
+        ScaleType=Enum.ScaleType.Fit,
+    },logo)
+    corner(emblemImage,12)
 
     local avatarImage=create("ImageLabel",{
         AnchorPoint=Vector2.new(1,0),
@@ -2725,74 +2722,41 @@ _G.EmpireBuildKillingControls=function()
 
     _G.EmpireKillingState=_G.EmpireKillingState or {}
     local state=_G.EmpireKillingState
+
+    -- Rebuilding this page (e.g. leaving the Killing tab and coming back)
+    -- throws away the old card/button instances but must NOT silently kill
+    -- an already-running Pack Spam loop. Remember whether it was on, tear
+    -- down the old loop (it's bound to now-dead UI anyway), and restart a
+    -- fresh one against the new UI further down if it was running.
+    local wasRunning = state.PackSpamEnabled == true
     state.PackSpamEnabled=false
     state.LoopToken=(tonumber(state.LoopToken) or 0)+1
 
     local speedProfiles={
-        Normal={
-            clearDelay=0.20,
-            equipDelay=0.050,
-            swapDelay=0.25,
-            label="Normal",
-        },
-        Fast={
-            clearDelay=0.10,
-            equipDelay=0.025,
-            swapDelay=0.12,
-            label="Fast",
-        },
-        Faster={
-            clearDelay=0.04,
-            equipDelay=0.010,
-            swapDelay=0.05,
-            label="Faster",
-        },
-        Max={
-            clearDelay=0.015,
-            equipDelay=0,
-            swapDelay=0.012,
-            label="Max",
-        },
+        Normal={clearDelay=0.20,equipDelay=0.050,swapDelay=0.25},
+        Fast={clearDelay=0.10,equipDelay=0.025,swapDelay=0.12},
+        Faster={clearDelay=0.04,equipDelay=0.010,swapDelay=0.05},
+        Max={clearDelay=0.015,equipDelay=0,swapDelay=0.012},
     }
+    local speedOrder={"Normal","Fast","Faster","Max"}
 
-    state.SpeedModes=state.SpeedModes or {
-        Normal=false,
-        Fast=false,
-        Faster=false,
-        Max=false,
-    }
-    state.SpeedName=state.SpeedName or "Normal"
+    if not speedProfiles[state.SpeedName] then
+        state.SpeedName="Normal"
+    end
 
-    local function setVerifiedSpeed(name)
+    -- Single source of truth for the active preset — the previous version
+    -- tracked a separate boolean per preset ("SpeedModes") that had to be
+    -- kept in sync with state.SpeedName by hand, which is exactly the kind
+    -- of double-bookkeeping that silently drifts out of sync. One string,
+    -- one lookup.
+    local function getSpeedProfile()
+        return state.SpeedName, speedProfiles[state.SpeedName]
+    end
+
+    local function setSpeed(name)
         if not speedProfiles[name] then name="Normal" end
-        for profileName in pairs(speedProfiles) do
-            state.SpeedModes[profileName]=(profileName==name)
-        end
         state.SpeedName=name
     end
-
-    local function getVerifiedSpeedProfile()
-        local found=nil
-        for _,name in ipairs({"Normal","Fast","Faster","Max"}) do
-            if state.SpeedModes[name] == true then
-                if not found then
-                    found=name
-                else
-                    state.SpeedModes[name]=false
-                end
-            end
-        end
-        if not found then
-            found=speedProfiles[state.SpeedName] and state.SpeedName or "Normal"
-            for profileName in pairs(speedProfiles) do
-                state.SpeedModes[profileName]=(profileName==found)
-            end
-        end
-        state.SpeedName=found
-        return found,speedProfiles[found]
-    end
-
-    setVerifiedSpeed((state.SpeedName and speedProfiles[state.SpeedName]) and state.SpeedName or "Normal")
 
     local function updateCanvas()
         local height=listLayout.AbsoluteContentSize.Y
@@ -2844,33 +2808,41 @@ _G.EmpireBuildKillingControls=function()
         SortOrder=Enum.SortOrder.LayoutOrder,
     },speedFrame)
 
-    local speedVerifyLabel=create("TextLabel",{
+    local speedInfoLabel=create("TextLabel",{
         Position=UDim2.new(0,16,1,-20),
         Size=UDim2.new(1,-32,0,14),
         BackgroundTransparency=1,
-        Text="Verified: checking...",
+        Text="",
         TextColor3=COLORS.green,
         TextSize=8,
         Font=Enum.Font.GothamSemibold,
         TextXAlignment=Enum.TextXAlignment.Left,
     },speedCard)
 
+    -- Declared here (before it's assigned below) so the preset buttons and
+    -- the toggle can both call it regardless of definition order. The old
+    -- code referenced `refresh` from this loop before the `local refresh`
+    -- line further down existed yet, which — per normal Lua scoping —
+    -- silently bound it to an undeclared global instead of this function,
+    -- so `if refresh then refresh() end` never actually ran.
+    local refresh
+
     local speedButtons={}
     local function updateSpeedButtons()
-        local activeName,profile=getVerifiedSpeedProfile()
+        local activeName,profile=getSpeedProfile()
         for _,entry in ipairs(speedButtons) do
-            local active=(entry.name==activeName and state.SpeedModes[entry.name] == true)
+            local active=(entry.name==activeName)
             entry.button.BackgroundColor3=active and Color3.fromRGB(47,65,99) or Color3.fromRGB(28,42,68)
             entry.button.TextColor3=active and COLORS.text or COLORS.muted
-            entry.button.Text=entry.name..(active and "  ✓ TRUE" or "  • false")
+            entry.button.Text=entry.name
         end
-        speedVerifyLabel.Text=string.format(
-            "Verified: %s = true   •   clear %.3fs   •   pet %.3fs   •   swap %.3fs",
+        speedInfoLabel.Text=string.format(
+            "%s selected   •   clear %.3fs   •   pet %.3fs   •   swap %.3fs",
             activeName,profile.clearDelay,profile.equipDelay,profile.swapDelay
         )
     end
 
-    for i,name in ipairs({"Normal","Fast","Faster","Max"}) do
+    for i,name in ipairs(speedOrder) do
         local b=create("TextButton",{
             LayoutOrder=i,
             Size=UDim2.new(.25,-5,0,34),
@@ -2886,7 +2858,7 @@ _G.EmpireBuildKillingControls=function()
         corner(b,7); stroke(b,Color3.fromRGB(255,98,108),.64,1); hoverScale(b,1.01)
         speedButtons[#speedButtons+1]={button=b,name=name}
         b.Activated:Connect(function()
-            setVerifiedSpeed(name)
+            setSpeed(name)
             updateSpeedButtons()
             if refresh then refresh() end
         end)
@@ -2976,16 +2948,15 @@ _G.EmpireBuildKillingControls=function()
         TextYAlignment=Enum.TextYAlignment.Top,
     },card)
 
-    local refresh
     refresh=function()
         if not toggle.Parent then return end
         toggle.Text=state.PackSpamEnabled and "Disable Pack Spam" or "Enable Pack Spam"
         toggle.BackgroundColor3=state.PackSpamEnabled and Color3.fromRGB(45,120,83) or Color3.fromRGB(28,42,68)
         status.Text="Status: "..(state.PackSpamEnabled and "Enabled" or "Disabled")
         status.TextColor3=state.PackSpamEnabled and COLORS.green or COLORS.muted
-        local activeName,profile=getVerifiedSpeedProfile()
+        local activeName,profile=getSpeedProfile()
         detail.Text=string.format(
-            "Mighty Monster → Wild Wizard → repeat   •   Speed: %s = true\nClear %.3fs • Pet %.3fs • Swap %.3fs",
+            "Mighty Monster → Wild Wizard → repeat   •   Speed: %s\nClear %.3fs • Pet %.3fs • Swap %.3fs",
             activeName,profile.clearDelay,profile.equipDelay,profile.swapDelay
         )
     end
@@ -3007,7 +2978,7 @@ _G.EmpireBuildKillingControls=function()
             return false,"equipPetEvent not found"
         end
 
-        local _,profile=getVerifiedSpeedProfile()
+        local _,profile=getSpeedProfile()
 
         for _,folder in ipairs(petsFolder:GetChildren()) do
             if folder:IsA("Folder") then
@@ -3046,8 +3017,8 @@ _G.EmpireBuildKillingControls=function()
         task.spawn(function()
             local petName="Mighty Monster"
             while state.PackSpamEnabled and state.LoopToken==token and not _G.JohnnyScriptDestroyed do
-                local activeName,profile=getVerifiedSpeedProfile()
-                resultLabel.Text=string.format("Verified speed: %s = true • %.3fs clear / %.3fs pet / %.3fs swap",activeName,profile.clearDelay,profile.equipDelay,profile.swapDelay)
+                local activeName,profile=getSpeedProfile()
+                resultLabel.Text=string.format("%s speed • %.3fs clear / %.3fs pet / %.3fs swap",activeName,profile.clearDelay,profile.equipDelay,profile.swapDelay)
                 resultLabel.TextColor3=COLORS.green
 
                 local ok,result=pcall(function()
@@ -3064,18 +3035,14 @@ _G.EmpireBuildKillingControls=function()
 
                 petName=(petName=="Mighty Monster") and "Wild Wizard" or "Mighty Monster"
 
-                -- Re-read the boolean state after every completed swap so a
-                -- speed change takes effect on the very next cycle.
-                local verifiedName,verifiedProfile=getVerifiedSpeedProfile()
-                if state.SpeedModes[verifiedName] ~= true then
-                    setVerifiedSpeed("Normal")
-                    verifiedName,verifiedProfile=getVerifiedSpeedProfile()
-                end
+                -- Re-read the speed every cycle so a change made mid-spam
+                -- takes effect on the very next swap, not just at the start.
+                local nextName,nextProfile=getSpeedProfile()
                 detail.Text=string.format(
-                    "Mighty Monster → Wild Wizard → repeat   •   Speed: %s = true\nClear %.3fs • Pet %.3fs • Swap %.3fs",
-                    verifiedName,verifiedProfile.clearDelay,verifiedProfile.equipDelay,verifiedProfile.swapDelay
+                    "Mighty Monster → Wild Wizard → repeat   •   Speed: %s\nClear %.3fs • Pet %.3fs • Swap %.3fs",
+                    nextName,nextProfile.clearDelay,nextProfile.equipDelay,nextProfile.swapDelay
                 )
-                if verifiedProfile.swapDelay > 0 then task.wait(verifiedProfile.swapDelay) end
+                if nextProfile.swapDelay > 0 then task.wait(nextProfile.swapDelay) end
             end
         end)
     end
@@ -3087,6 +3054,10 @@ _G.EmpireBuildKillingControls=function()
     refresh()
     updateSpeedButtons()
     task.defer(updateCanvas)
+
+    if wasRunning then
+        startPackSpam()
+    end
 end
 
 
