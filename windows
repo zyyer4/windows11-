@@ -248,12 +248,19 @@ create("TextLabel",{Position=UDim2.new(0,59,0,29),Size=UDim2.new(1,-104,0,20),Ba
 -- asset drop needed, it loads from Roblox's own CDN like any other thumbnail.
 do
     local EMBLEM_GAMEPASS_ID = 176453407
-    logo.BackgroundTransparency=1
-    logoE.Visible=false
+    -- Layered on top of the gradient/"E" fallback rather than replacing it:
+    -- if the thumbnail ever fails to load (bad id, Roblox CDN hiccup, a
+    -- size rbxthumb doesn't support for this type), ImageLabel.Image just
+    -- renders nothing and the "E" mark shows through underneath instead of
+    -- leaving an empty box. Once the thumbnail actually loads it visually
+    -- covers the fallback completely.
     local emblemImage=create("ImageLabel",{
         Size=UDim2.fromScale(1,1),
         BackgroundTransparency=1,
-        Image="rbxthumb://type=GamePass&id="..tostring(EMBLEM_GAMEPASS_ID).."&w=420&h=420",
+        ZIndex=logoE.ZIndex+1,
+        -- rbxthumb only serves GamePass icons at 150x150 — any other size
+        -- (420x420 included) silently returns a blank image.
+        Image="rbxthumb://type=GamePass&id="..tostring(EMBLEM_GAMEPASS_ID).."&w=150&h=150",
         ScaleType=Enum.ScaleType.Fit,
     },logo)
     corner(emblemImage,12)
